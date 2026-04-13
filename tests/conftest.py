@@ -2,11 +2,16 @@ from __future__ import annotations
 
 import pytest
 
-from valocoach.core.config import clear_settings_cache
+from valocoach.core.config import Settings
 
 
-@pytest.fixture(autouse=True)
-def _clear_settings_cache() -> None:
-    clear_settings_cache()
-    yield
-    clear_settings_cache()
+@pytest.fixture
+def settings() -> Settings:
+    return Settings(
+        riot_name="TestUser",
+        riot_tag="TEST",
+        riot_region="na",
+        henrikdev_api_key="fake",
+        ollama_model="qwen3:8b",
+        ollama_host="http://localhost:11434",
+    )

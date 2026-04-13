@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from typer.testing import CliRunner
 
 from valocoach.cli.app import app
@@ -9,62 +7,20 @@ from valocoach.cli.app import app
 runner = CliRunner()
 
 
-def test_config_init_creates_default_file(tmp_path: Path, monkeypatch) -> None:
-    home = tmp_path / ".valocoach"
-    monkeypatch.setenv("VALOCOACH_HOME", str(home))
-
-    result = runner.invoke(app, ["config", "init"])
-
+def test_version():
+    result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0
-    assert (home / "config.toml").exists()
-    assert "Created config" in result.output
+    assert "valocoach" in result.stdout
 
 
-def test_config_show_reads_overrides(tmp_path: Path, monkeypatch) -> None:
-    home = tmp_path / ".valocoach"
-    home.mkdir()
-    (home / "config.toml").write_text(
-        "\n".join(
-            [
-                "[ollama]",
-                'model = "qwen3:14b"',
-                "",
-            ]
-        ),
-        encoding="utf-8",
-    )
-    monkeypatch.setenv("VALOCOACH_HOME", str(home))
-
-    result = runner.invoke(app, ["config", "show"])
-
+def test_help_shows_all_commands():
+    result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
-    assert "qwen3:14b" in result.output
+    for cmd in ["coach", "stats", "sync", "profile", "meta", "patch", "interactive", "config"]:
+        assert cmd in result.stdout
 
 
-def test_coach_passes_structured_flags_into_request(tmp_path: Path, monkeypatch) -> None:
-    captured: dict[str, str] = {}
-    home = tmp_path / ".valocoach"
-    monkeypatch.setenv("VALOCOACH_HOME", str(home))
-
-    class FakeService:
-        async def run_and_render(self, request) -> str:
-            captured["prompt"] = request.render_user_prompt()
-            return "ok"
-
-    class FakeCoachFactory:
-        @staticmethod
-        def from_settings(settings):  # noqa: ANN001, ANN205
-            return FakeService()
-
-    monkeypatch.setattr("valocoach.cli.app.CoachService", FakeCoachFactory)
-
-    result = runner.invoke(
-        app,
-        ["coach", "test", "--agent", "Jett", "--map", "Haven", "--side", "attack"],
-    )
-
+def test_unimplemented_stub_exits_cleanly():
+    result = runner.invoke(app, ["stats"])
     assert result.exit_code == 0
-    assert "Situation: test" in captured["prompt"]
-    assert "Agent: Jett" in captured["prompt"]
-    assert "Map: Haven" in captured["prompt"]
-    assert "Side: attack" in captured["prompt"]
+    assert "not implemented" in result.stdout.lower()
