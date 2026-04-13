@@ -1,0 +1,118 @@
+from __future__ import annotations
+
+import typer
+
+from valocoach import __version__
+from valocoach.cli import display
+
+app = typer.Typer(
+    name="valocoach",
+    help="Valorant tactical coaching CLI",
+    no_args_is_help=True,
+    add_completion=True,
+)
+
+
+def _version_callback(value: bool) -> None:
+    if value:
+        display.console.print(f"valocoach v{__version__}")
+        raise typer.Exit()
+
+
+@app.callback()
+def main(
+    version: bool = typer.Option(
+        False,
+        "--version",
+        "-v",
+        callback=_version_callback,
+        is_eager=True,
+        help="Show version and exit.",
+    ),
+) -> None:
+    """Valorant tactical coaching CLI."""
+
+
+@app.command()
+def coach(
+    situation: str = typer.Argument(..., help="Describe the match situation"),
+    agent: str | None = typer.Option(None, "--agent", "-a"),
+    map_: str | None = typer.Option(None, "--map", "-m", help="Map name"),
+    side: str | None = typer.Option(None, "--side", "-s", help="attack or defense"),
+) -> None:
+    """Get tactical coaching for a match situation."""
+    from valocoach.cli.commands.coach import run_coach
+
+    run_coach(situation=situation, agent=agent, map_=map_, side=side)
+
+
+@app.command()
+def stats(
+    agent: str | None = typer.Option(None, "--agent", "-a"),
+    map_: str | None = typer.Option(None, "--map", "-m"),
+    period: str = typer.Option("30d", "--period", "-p"),
+) -> None:
+    """Show your performance stats. (stub — week 3)"""
+    display.warn("stats: not implemented yet (week 3)")
+
+
+@app.command()
+def sync(
+    full: bool = typer.Option(False, "--full"),
+    limit: int = typer.Option(20, "--limit"),
+) -> None:
+    """Sync match history from HenrikDev API. (stub — week 2)"""
+    display.warn("sync: not implemented yet (week 2)")
+
+
+@app.command()
+def profile() -> None:
+    """Show player profile summary. (stub — week 2)"""
+    display.warn("profile: not implemented yet (week 2)")
+
+
+@app.command()
+def meta(
+    agent: str | None = typer.Option(None, "--agent", "-a"),
+    map_: str | None = typer.Option(None, "--map", "-m"),
+) -> None:
+    """Show current Valorant meta. (stub — week 4)"""
+    display.warn("meta: not implemented yet (week 4)")
+
+
+@app.command()
+def patch() -> None:
+    """Show current patch info. (stub — week 4)"""
+    display.warn("patch: not implemented yet (week 4)")
+
+
+@app.command()
+def interactive() -> None:
+    """Start interactive coaching REPL. (stub — week 5)"""
+    display.warn("interactive: not implemented yet (week 5)")
+
+
+config_app = typer.Typer(help="Manage configuration")
+app.add_typer(config_app, name="config")
+
+
+@config_app.command("init")
+def config_init() -> None:
+    """Create a default config file at ~/.valocoach/config.toml."""
+    from valocoach.core.config import write_default_config
+
+    path = write_default_config()
+    display.success(f"Config written to {path}")
+
+
+@config_app.command("show")
+def config_show() -> None:
+    """Display current effective settings."""
+    from valocoach.core.config import load_settings
+
+    s = load_settings()
+    display.console.print(s.model_dump())
+
+
+if __name__ == "__main__":
+    app()
