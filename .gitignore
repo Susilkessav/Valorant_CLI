@@ -13,3 +13,6 @@ build/
 *.egg-info/
 .idea/
 .vscode/
+.claude/
+AGENTS.md
+BUILD_PLAN.md
