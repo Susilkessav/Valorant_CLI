@@ -1,1 +1,81 @@
+"""valocoach.data — data layer public API.
+
+Import from here; internal module structure is an implementation detail.
+
+Typical startup sequence:
+    from valocoach.data import init_engine, Base
+    engine = init_engine(settings.data_dir / "valocoach.db")
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+Fetching and storing data:
+    from valocoach.data import HenrikClient, session_scope
+    from valocoach.data import upsert_player, upsert_match, get_recent_matches
+    async with session_scope() as session:
+        await upsert_match(session, match_data)
+
+Name note:
+    MatchPlayer here refers to the ORM table class (valocoach.data.orm_models).
+    The Pydantic API shape is valocoach.data.models.MatchPlayer — import it
+    directly from that module to avoid ambiguity.
+"""
+
 from __future__ import annotations
+
+# Database setup
+from valocoach.data.database import Base, get_engine, init_engine, session_scope
+
+# HTTP client + exceptions
+from valocoach.data.henrik_client import HenrikAPIError, HenrikClient
+
+# Pydantic API models (MatchPlayer intentionally NOT re-exported here
+# to avoid collision with the ORM MatchPlayer — import from .models directly)
+from valocoach.data.models import AccountData, MatchData, MMRData
+
+# ORM models
+from valocoach.data.orm_models import Kill, Match, MatchPlayer, Player, Round, SyncLog
+
+# Repository functions
+from valocoach.data.repository import (
+    complete_sync,
+    get_match,
+    get_player,
+    get_player_by_name,
+    get_recent_matches,
+    match_exists,
+    start_sync,
+    upsert_match,
+    upsert_player,
+)
+
+__all__ = [
+    # database
+    "Base",
+    "init_engine",
+    "get_engine",
+    "session_scope",
+    # client
+    "HenrikClient",
+    "HenrikAPIError",
+    # pydantic models
+    "AccountData",
+    "MMRData",
+    "MatchData",
+    # orm models  (MatchPlayer = ORM table class)
+    "Player",
+    "Match",
+    "MatchPlayer",
+    "Round",
+    "Kill",
+    "SyncLog",
+    # repository
+    "upsert_player",
+    "upsert_match",
+    "match_exists",
+    "get_player",
+    "get_player_by_name",
+    "get_recent_matches",
+    "get_match",
+    "start_sync",
+    "complete_sync",
+]
