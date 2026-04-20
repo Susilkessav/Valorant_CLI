@@ -11,6 +11,7 @@ Typical startup sequence:
 Fetching and storing data:
     from valocoach.data import HenrikClient, session_scope
     from valocoach.data import upsert_player, upsert_match, get_recent_matches
+    # API errors live in valocoach.core.exceptions: APIError, RateLimitError, ServerError
     async with session_scope() as session:
         await upsert_match(session, match_data)
 
@@ -22,11 +23,11 @@ Name note:
 
 from __future__ import annotations
 
+# HTTP client (Settings-based; raises APIError/RateLimitError/ServerError from core.exceptions)
+from valocoach.data.api_client import HenrikClient
+
 # Database setup
 from valocoach.data.database import Base, get_engine, init_engine, session_scope
-
-# HTTP client + exceptions
-from valocoach.data.henrik_client import HenrikAPIError, HenrikClient
 
 # Mapper functions (API shape → ORM shape — update mapper.py when schema changes)
 from valocoach.data.mapper import match_from_details, player_from_account_mmr
@@ -60,7 +61,6 @@ __all__ = [
     "session_scope",
     # client
     "HenrikClient",
-    "HenrikAPIError",
     # pydantic models
     "AccountData",
     "MMRData",
