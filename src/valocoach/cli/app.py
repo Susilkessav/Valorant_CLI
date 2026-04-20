@@ -58,11 +58,58 @@ def stats(
 
 @app.command()
 def sync(
-    full: bool = typer.Option(False, "--full"),
-    limit: int = typer.Option(20, "--limit"),
+    full: bool = typer.Option(
+        False,
+        "--full",
+        help="Inspect all --limit matches instead of stopping at the first already-stored one.",
+    ),
+    limit: int = typer.Option(
+        20,
+        "--limit",
+        help="Maximum stored-matches to inspect per run.",
+    ),
+    mode: str = typer.Option(
+        "competitive",
+        "--mode",
+        help="Game-mode filter (competitive / unrated / …).",
+    ),
 ) -> None:
-    """Sync match history from HenrikDev API. (stub — week 2)"""
-    display.warn("sync: not implemented yet (week 2)")
+    """Sync match history from the HenrikDev API into the local database."""
+    import asyncio
+
+    from valocoach.core.config import load_settings
+    from valocoach.core.exceptions import ConfigError, SyncError
+    from valocoach.data.database import Base, init_engine
+    from valocoach.data.sync import sync_player_matches
+
+    settings = load_settings()
+
+    async def _run() -> None:
+        engine = init_engine(settings.data_dir / "valocoach.db")
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+
+        try:
+            result = await sync_player_matches(settings, limit=limit, full=full, mode=mode)
+        except (SyncError, ConfigError) as exc:
+            display.error(str(exc))
+            raise typer.Exit(1) from exc
+
+        if result.matches_new == 0 and not result.errors:
+            display.info("Already up to date — no new matches to store.")
+        else:
+            display.success(
+                f"Sync complete: [bold]{result.matches_new}[/bold] new match(es) stored  "
+                f"({result.matches_skipped} already in DB)"
+            )
+
+        for err in result.errors:
+            display.warn(err)
+
+        if not result.ok:
+            display.warn(f"Sync finished with errors: {result.error}")
+
+    asyncio.run(_run())
 
 
 @app.command()

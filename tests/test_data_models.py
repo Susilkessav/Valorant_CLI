@@ -143,10 +143,11 @@ def test_match_player_nested_behavior_accepts_henrik_camel_case():
 
 def test_match_metadata_fields(match_data):
     meta = match_data.metadata
-    assert meta.map == "Lotus"
+    assert meta.map_name == "Lotus"
+    assert meta.queue_id == "competitive"
     assert meta.mode == "Competitive"
     assert meta.rounds_played == 17
-    assert meta.game_length == 1462
+    assert meta.game_length_secs == 1462
 
 
 def test_player_by_puuid_found(match_data, account_data):

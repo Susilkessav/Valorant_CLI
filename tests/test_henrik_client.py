@@ -191,8 +191,8 @@ async def test_get_matches_returns_list(httpx_mock):
         matches = await client.get_matches("na", "Yoursaviour01", "SK04", size=3)
 
     assert len(matches) == 1
-    assert matches[0].metadata.map == "Lotus"
-    assert matches[0].metadata.matchid == "match-abc"
+    assert matches[0].metadata.map_name == "Lotus"
+    assert matches[0].metadata.match_id == "match-abc"
 
 
 @pytest.mark.asyncio
@@ -242,3 +242,102 @@ async def test_get_matches_retries_on_429(httpx_mock):
             await client.get_matches("na", "Yoursaviour01", "SK04", size=5)
 
     assert exc_info.value.status_code == 429
+
+
+# ---------------------------------------------------------------------------
+# get_account — force refresh
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_account_force_refresh(httpx_mock):
+    """force=True should append ?force=true to the request URL."""
+    httpx_mock.add_response(
+        url=f"{BASE}/valorant/v2/account/Yoursaviour01/SK04?force=true",
+        json=_account_payload("force-puuid"),
+    )
+    async with HenrikClient(API_KEY) as client:
+        account = await client.get_account("Yoursaviour01", "SK04", force=True)
+
+    assert account.puuid == "force-puuid"
+
+
+# ---------------------------------------------------------------------------
+# get_mmr_history
+# ---------------------------------------------------------------------------
+
+
+def _mmr_history_payload() -> dict:
+    return {
+        "status": 200,
+        "data": [
+            {
+                "currenttier": 12,
+                "currenttierpatched": "Gold 1",
+                "ranking_in_tier": 45,
+                "mmr_change_to_last_game": -13,
+                "elo": 945,
+                "date": "2026-04-15T20:00:00.000Z",
+                "date_raw": 1744747200,
+                "match_id": "hist-match-001",
+            },
+            {
+                "currenttier": 12,
+                "currenttierpatched": "Gold 1",
+                "ranking_in_tier": 58,
+                "mmr_change_to_last_game": 20,
+                "elo": 958,
+                "date": "2026-04-14T19:00:00.000Z",
+                "date_raw": 1744657200,
+                "match_id": "hist-match-002",
+            },
+        ],
+    }
+
+
+@pytest.mark.asyncio
+async def test_get_mmr_history_returns_list(httpx_mock):
+    httpx_mock.add_response(
+        url=f"{BASE}/valorant/v2/mmr-history/na/Yoursaviour01/SK04",
+        json=_mmr_history_payload(),
+    )
+    async with HenrikClient(API_KEY) as client:
+        history = await client.get_mmr_history("na", "Yoursaviour01", "SK04")
+
+    assert len(history) == 2
+    assert history[0].currenttierpatched == "Gold 1"
+    assert history[0].ranking_in_tier == 45
+    assert history[0].mmr_change_to_last_game == -13
+    assert history[0].match_id == "hist-match-001"
+    assert history[1].elo == 958
+
+
+# ---------------------------------------------------------------------------
+# fetch_player_snapshot
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_fetch_player_snapshot_concurrent(httpx_mock):
+    """fetch_player_snapshot should return (AccountData, MMRData, list[MatchData])
+    gathered from three concurrent requests."""
+    httpx_mock.add_response(
+        url=f"{BASE}/valorant/v2/account/Yoursaviour01/SK04",
+        json=_account_payload("snap-puuid"),
+    )
+    httpx_mock.add_response(
+        url=f"{BASE}/valorant/v2/mmr/na/Yoursaviour01/SK04",
+        json=_mmr_payload(),
+    )
+    httpx_mock.add_response(
+        url=f"{BASE}/valorant/v3/matches/na/Yoursaviour01/SK04?size=10&mode=competitive",
+        json=_match_payload("snap-match-001"),
+    )
+
+    async with HenrikClient(API_KEY) as client:
+        account, mmr, matches = await client.fetch_player_snapshot("na", "Yoursaviour01", "SK04")
+
+    assert account.puuid == "snap-puuid"
+    assert mmr.current_data.currenttierpatched == "Gold 1"
+    assert len(matches) == 1
+    assert matches[0].metadata.match_id == "snap-match-001"

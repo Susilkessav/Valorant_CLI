@@ -28,14 +28,17 @@ from valocoach.data.database import Base, get_engine, init_engine, session_scope
 # HTTP client + exceptions
 from valocoach.data.henrik_client import HenrikAPIError, HenrikClient
 
+# Mapper functions (API shape → ORM shape — update mapper.py when schema changes)
+from valocoach.data.mapper import match_from_details, player_from_account_mmr
+
 # Pydantic API models (MatchPlayer intentionally NOT re-exported here
 # to avoid collision with the ORM MatchPlayer — import from .models directly)
-from valocoach.data.models import AccountData, MatchData, MMRData
+from valocoach.data.models import AccountData, MatchData, MMRData, MMRHistoryEntry
 
 # ORM models
 from valocoach.data.orm_models import Kill, Match, MatchPlayer, Player, Round, SyncLog
 
-# Repository functions
+# Repository functions (DB operations only — no API-shape knowledge)
 from valocoach.data.repository import (
     complete_sync,
     get_match,
@@ -45,6 +48,7 @@ from valocoach.data.repository import (
     match_exists,
     start_sync,
     upsert_match,
+    upsert_match_details,
     upsert_player,
 )
 
@@ -60,6 +64,7 @@ __all__ = [
     # pydantic models
     "AccountData",
     "MMRData",
+    "MMRHistoryEntry",
     "MatchData",
     # orm models  (MatchPlayer = ORM table class)
     "Player",
@@ -68,9 +73,13 @@ __all__ = [
     "Round",
     "Kill",
     "SyncLog",
-    # repository
+    # mapper (API shape → ORM shape)
+    "match_from_details",
+    "player_from_account_mmr",
+    # repository (DB operations)
     "upsert_player",
     "upsert_match",
+    "upsert_match_details",
     "match_exists",
     "get_player",
     "get_player_by_name",

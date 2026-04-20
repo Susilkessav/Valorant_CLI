@@ -1,11 +1,15 @@
-"""Repository layer — converts Pydantic API models to ORM rows and back.
+"""Repository layer — DB operations only.  No API-shape knowledge lives here.
 
 All functions take an open SQLAlchemy AsyncSession. Callers are responsible for
 wrapping calls in session_scope() from database.py.
 
+API-shape-to-ORM mapping is in mapper.py.  Update that file when HenrikDev
+changes their schema; this file stays stable.
+
 Public API:
     await upsert_player(session, account, mmr)                -> Player
     await upsert_match(session, match_data)                   -> Match | None
+    await upsert_match_details(session, details)              -> Match | None  (v4)
     await get_player(session, puuid)                          -> Player | None
     await get_player_by_name(session, name, tag)              -> Player | None
     await get_recent_matches(session, puuid, limit, queue_id) -> list[MatchPlayer]
@@ -25,6 +29,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from valocoach.data.api_models import MatchDetails
+from valocoach.data.mapper import match_from_details, player_from_account_mmr
 from valocoach.data.models import AccountData, MatchData, MMRData
 from valocoach.data.orm_models import Match, MatchPlayer, Player, SyncLog
 
@@ -55,22 +61,12 @@ async def upsert_player(
 ) -> Player:
     """Insert or update a Player row from fresh account + MMR data.
 
-    Uses session.merge() - safe to call repeatedly; second call updates
+    Uses session.merge() — safe to call repeatedly; the second call updates
     rank/level without creating a duplicate row.
+
+    Mapping from API shapes to the ORM row is handled by mapper.player_from_account_mmr.
     """
-    player = Player(
-        puuid=account.puuid,
-        riot_name=account.name,
-        riot_tag=account.tag,
-        region=account.region,
-        account_level=account.account_level,
-        current_tier=mmr.current_data.currenttier,
-        current_tier_patched=mmr.current_data.currenttierpatched,
-        current_rr=mmr.current_data.ranking_in_tier,
-        elo=mmr.current_data.elo,
-        peak_tier=mmr.highest_rank.tier,
-        peak_tier_patched=mmr.highest_rank.patched_tier,
-    )
+    player = player_from_account_mmr(account, mmr)
     merged = await session.merge(player)
     logger.debug(
         "upsert_player %s#%s tier=%s elo=%d",
@@ -129,8 +125,8 @@ async def upsert_match(session: AsyncSession, match_data: MatchData) -> Match | 
         return None
 
     meta = match_data.metadata
-    if await session.get(Match, meta.matchid) is not None:
-        logger.debug("match %s already stored - skip", meta.matchid[:8])
+    if await session.get(Match, meta.match_id) is not None:
+        logger.debug("match %s already stored - skip", meta.match_id[:8])
         return None
 
     red_won = match_data.teams.red.has_won
@@ -139,12 +135,12 @@ async def upsert_match(session: AsyncSession, match_data: MatchData) -> Match | 
     started_at = _unix_to_iso(meta.game_start)
 
     match = Match(
-        match_id=meta.matchid,
-        map_name=meta.map,
-        queue_id=meta.mode_id,
-        is_ranked=meta.mode_id.lower() == "competitive",
+        match_id=meta.match_id,
+        map_name=meta.map_name,
+        queue_id=meta.queue_id,
+        is_ranked=meta.queue_id.lower() == "competitive",
         game_version=meta.game_version,
-        game_length_secs=meta.game_length,
+        game_length_secs=meta.game_length_secs,
         season_short=meta.season_id,
         region=meta.region,
         rounds_played=meta.rounds_played,
@@ -157,7 +153,7 @@ async def upsert_match(session: AsyncSession, match_data: MatchData) -> Match | 
     for player in match_data.players.all_players:
         won = red_won if player.team.lower() == "red" else blue_won
         mp = MatchPlayer(
-            match_id=meta.matchid,
+            match_id=meta.match_id,
             puuid=player.puuid or None,
             agent_name=player.character,
             team=player.team,
@@ -170,6 +166,8 @@ async def upsert_match(session: AsyncSession, match_data: MatchData) -> Match | 
             headshots=player.stats.headshots,
             bodyshots=player.stats.bodyshots,
             legshots=player.stats.legshots,
+            damage_dealt=player.stats.damage_dealt,
+            damage_received=player.stats.damage_received,
             afk_rounds=player.behavior.afk_rounds,
             rounds_in_spawn=player.behavior.rounds_in_spawn,
             competitive_tier=player.currenttier or None,
@@ -182,15 +180,55 @@ async def upsert_match(session: AsyncSession, match_data: MatchData) -> Match | 
             session.add(match)
             await session.flush()
     except IntegrityError:
-        logger.debug("match %s already stored - skip (IntegrityError)", meta.matchid[:8])
+        logger.debug("match %s already stored - skip (IntegrityError)", meta.match_id[:8])
         return None
 
     logger.debug(
         "stored match %s  %s  %s  players=%d",
-        meta.matchid[:8],
-        meta.map,
-        meta.mode_id,
+        meta.match_id[:8],
+        meta.map_name,
+        meta.queue_id,
         len(match_data.players.all_players),
+    )
+    return match
+
+
+async def upsert_match_details(
+    session: AsyncSession,
+    details: MatchDetails,
+) -> Match | None:
+    """Persist a v4 MatchDetails (full match + players + rounds + kills) to the DB.
+
+    Idempotent — returns None silently if the match is already stored.
+
+    All API-to-ORM field mapping is handled by mapper.match_from_details.
+    This function only handles DB-level concerns: existence check, add, flush,
+    and IntegrityError guard for concurrency safety.
+    """
+    match_id = details.metadata.match_id
+
+    if await session.get(Match, match_id) is not None:
+        logger.debug("match %s already stored — skip", match_id[:8])
+        return None
+
+    match = match_from_details(details)
+
+    try:
+        async with session.begin_nested():  # SAVEPOINT — rolls back only this insert on conflict
+            session.add(match)
+            await session.flush()
+    except IntegrityError:
+        logger.debug("match %s already stored — skip (IntegrityError)", match_id[:8])
+        return None
+
+    logger.debug(
+        "stored v4 match %s  %s  %s  players=%d rounds=%d kills=%d",
+        match_id[:8],
+        details.metadata.map.name or "",
+        details.metadata.queue.id,
+        len(details.players),
+        len(details.rounds),
+        len(details.kills),
     )
     return match
 

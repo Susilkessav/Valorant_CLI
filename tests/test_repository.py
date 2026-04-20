@@ -25,11 +25,13 @@ from valocoach.data.repository import (
     match_exists,
     start_sync,
     upsert_match,
+    upsert_match_details,
     upsert_player,
 )
 
 PUUID = "20905543-1b42-5f6f-8435-ab284a0094f8"
 MATCH_ID = "b0c012f7-9a68-46d1-a527-32783a190a5c"
+ENEMY_PUUID = "enemy-puuid-0001"
 
 
 async def _all_players(db_session, match_id: str) -> list[MatchPlayer]:
@@ -212,12 +214,12 @@ async def test_get_recent_matches_ordered_newest_first(db_session, account_data,
     def _make_match(match_id: str, game_start: int) -> MatchData:
         return MatchData(
             metadata=MatchMetadata(
-                matchid=match_id,
-                map="Ascent",
+                match_id=match_id,
+                map_name="Ascent",
                 mode="Competitive",
-                mode_id="competitive",
+                queue_id="competitive",
                 rounds_played=13,
-                game_length=1200,
+                game_length_secs=1200,
                 game_start=game_start,
                 region="na",
             ),
@@ -303,3 +305,175 @@ async def test_sync_log_records_error(db_session):
 
     row = await db_session.get(SyncLog, log.id)
     assert row.error == "timeout"
+
+
+# ---------------------------------------------------------------------------
+# upsert_match_details (v4)
+# ---------------------------------------------------------------------------
+
+
+async def test_upsert_match_details_creates_match(db_session, match_details):
+    result = await upsert_match_details(db_session, match_details)
+    await db_session.flush()
+
+    assert result is not None
+    assert isinstance(result, Match)
+    assert result.match_id == MATCH_ID
+    assert result.map_name == "Lotus"
+    assert result.queue_id == "competitive"
+    assert result.is_ranked is True
+    assert result.game_length_secs == 1462
+    assert result.rounds_played == 2
+    assert result.red_score == 9
+    assert result.blue_score == 8
+    assert result.winning_team == "Red"
+    assert result.started_at == "2026-04-19T18:00:00+00:00"
+    assert result.season_short == "EPISODE 9 ACT 1"
+    assert result.region == "na"
+
+
+async def test_upsert_match_details_player_stats(db_session, match_details):
+    await upsert_match_details(db_session, match_details)
+    await db_session.flush()
+
+    me = await _match_player(db_session, match_id=MATCH_ID, puuid=PUUID)
+
+    assert me.agent_name == "Jett"
+    assert me.agent_id == "jett-id"
+    assert me.team == "Blue"
+    assert me.won is False
+    assert me.score == 3811
+    assert me.kills == 14
+    assert me.deaths == 12
+    assert me.assists == 2
+    assert me.headshots == 16
+    assert me.bodyshots == 40
+    assert me.legshots == 1
+    assert me.damage_dealt == 2400
+    assert me.damage_received == 1800
+    assert me.rounds_played == 2
+    assert me.competitive_tier == 12
+    assert me.afk_rounds == 0
+    assert me.rounds_in_spawn == 1
+
+
+async def test_upsert_match_details_enemy_won(db_session, match_details):
+    await upsert_match_details(db_session, match_details)
+    await db_session.flush()
+
+    enemy = await _match_player(db_session, match_id=MATCH_ID, puuid=ENEMY_PUUID)
+    assert enemy.won is True
+    assert enemy.agent_name == "Neon"
+    assert enemy.competitive_tier == 13
+
+
+async def test_upsert_match_details_first_bloods(db_session, match_details):
+    """dipp gets FB in round 0; Yoursaviour01 gets FB in round 1."""
+    await upsert_match_details(db_session, match_details)
+    await db_session.flush()
+
+    me = await _match_player(db_session, match_id=MATCH_ID, puuid=PUUID)
+    enemy = await _match_player(db_session, match_id=MATCH_ID, puuid=ENEMY_PUUID)
+
+    # dipp: 1 first_blood (round 0), 1 first_death (round 1)
+    assert enemy.first_bloods == 1
+    assert enemy.first_deaths == 1
+    # Yoursaviour01: 1 first_blood (round 1), 1 first_death (round 0)
+    assert me.first_bloods == 1
+    assert me.first_deaths == 1
+
+
+async def test_upsert_match_details_plants_and_defuses(db_session, match_details):
+    """dipp plants in round 0; Yoursaviour01 defuses in round 1."""
+    await upsert_match_details(db_session, match_details)
+    await db_session.flush()
+
+    me = await _match_player(db_session, match_id=MATCH_ID, puuid=PUUID)
+    enemy = await _match_player(db_session, match_id=MATCH_ID, puuid=ENEMY_PUUID)
+
+    assert enemy.plants == 1
+    assert enemy.defuses == 0
+    assert me.plants == 0
+    assert me.defuses == 1
+
+
+async def test_upsert_match_details_rounds_stored(db_session, match_details):
+    from sqlalchemy import select
+
+    from valocoach.data.orm_models import Round
+
+    await upsert_match_details(db_session, match_details)
+    await db_session.flush()
+
+    result = await db_session.scalars(
+        select(Round).where(Round.match_id == MATCH_ID).order_by(Round.round_number)
+    )
+    rounds = list(result.all())
+
+    assert len(rounds) == 2
+    assert rounds[0].round_number == 0
+    assert rounds[0].winning_team == "Red"
+    assert rounds[0].bomb_planted is True
+    assert rounds[0].plant_site == "A"
+    assert rounds[0].bomb_defused is False
+
+    assert rounds[1].round_number == 1
+    assert rounds[1].winning_team == "Blue"
+    assert rounds[1].bomb_planted is False
+    assert rounds[1].bomb_defused is True
+
+
+async def test_upsert_match_details_kills_stored(db_session, match_details):
+    import json
+
+    from sqlalchemy import select
+
+    from valocoach.data.orm_models import Kill
+
+    await upsert_match_details(db_session, match_details)
+    await db_session.flush()
+
+    result = await db_session.scalars(
+        select(Kill)
+        .where(Kill.match_id == MATCH_ID)
+        .order_by(Kill.round_number, Kill.time_in_round_ms)
+    )
+    kills = list(result.all())
+
+    assert len(kills) == 3
+
+    # First kill in round 0 (10 000 ms): dipp kills Yoursaviour01
+    first = kills[0]
+    assert first.round_number == 0
+    assert first.killer_puuid == ENEMY_PUUID
+    assert first.victim_puuid == PUUID
+    assert first.weapon_name == "Vandal"
+    assert first.is_headshot is False
+    assert json.loads(first.assistants_json) == []
+
+    # First kill in round 1 has an assistant
+    third = kills[2]
+    assert third.round_number == 1
+    assert third.killer_puuid == PUUID
+    assistants = json.loads(third.assistants_json)
+    assert "ally-puuid" in assistants
+
+
+async def test_upsert_match_details_is_idempotent(db_session, match_details):
+    first = await upsert_match_details(db_session, match_details)
+    await db_session.flush()
+
+    second = await upsert_match_details(db_session, match_details)
+
+    assert first is not None
+    assert second is None
+
+    result = await db_session.scalars(select(Match).where(Match.match_id == MATCH_ID))
+    assert len(list(result.all())) == 1
+
+
+async def test_upsert_match_details_match_exists(db_session, match_details):
+    assert await match_exists(db_session, MATCH_ID) is False
+    await upsert_match_details(db_session, match_details)
+    await db_session.flush()
+    assert await match_exists(db_session, MATCH_ID) is True
