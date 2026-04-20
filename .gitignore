@@ -4,7 +4,7 @@ __pycache__/
 .env
 .ruff_cache/
 .pytest_cache/
-data/
+/data/
 *.db
 *.db-journal
 .coverage
@@ -13,6 +13,7 @@ build/
 *.egg-info/
 .idea/
 .vscode/
+*.code-workspace
 .claude/
 AGENTS.md
 BUILD_PLAN.md
