@@ -68,9 +68,7 @@ def _period_to_cutoff_iso(period: str) -> str | None:
     if p == "all":
         return None
     if not p.endswith("d") or not p[:-1].isdigit():
-        raise typer.BadParameter(
-            f"--period must be 'Nd' (e.g. 7d, 30d) or 'all'; got {period!r}"
-        )
+        raise typer.BadParameter(f"--period must be 'Nd' (e.g. 7d, 30d) or 'all'; got {period!r}")
     days = int(p[:-1])
     if days <= 0:
         raise typer.BadParameter(f"--period must be positive; got {period!r}")
@@ -152,25 +150,34 @@ def _render_overall(console: Console, stats: PlayerStats) -> None:
     table.add_column("Value", justify="right")
 
     table.add_row(
-        "Matches", str(stats.matches),
-        "Win rate", f"{stats.wins}-{stats.losses}  ({_fmt_pct(stats.win_rate)})",
+        "Matches",
+        str(stats.matches),
+        "Win rate",
+        f"{stats.wins}-{stats.losses}  ({_fmt_pct(stats.win_rate)})",
     )
     table.add_row(
-        "Rounds", str(stats.rounds),
-        "ACS", f"{stats.acs:.1f}",
+        "Rounds",
+        str(stats.rounds),
+        "ACS",
+        f"{stats.acs:.1f}",
     )
     table.add_row(
         "K / D / A",
         f"{stats.kills} / {stats.deaths} / {stats.assists}",
-        "ADR", f"{stats.adr:.1f}",
+        "ADR",
+        f"{stats.adr:.1f}",
     )
     table.add_row(
-        "K/D", f"{stats.kd:.2f}",
-        "KDA", f"{stats.kda:.2f}",
+        "K/D",
+        f"{stats.kd:.2f}",
+        "KDA",
+        f"{stats.kda:.2f}",
     )
     table.add_row(
-        "HS%", _fmt_pct(stats.hs_pct),
-        "FB / FD (diff)", f"{stats.first_bloods} / {stats.first_deaths}  ({stats.fb_diff:+d})",
+        "HS%",
+        _fmt_pct(stats.hs_pct),
+        "FB / FD (diff)",
+        f"{stats.first_bloods} / {stats.first_deaths}  ({stats.fb_diff:+d})",
     )
     console.print(table)
 
@@ -305,9 +312,7 @@ def run_stats(
     # Skip per-agent breakdown when the user already filtered to one agent —
     # the single-row table would be redundant with the overall card.
     if agent is None:
-        _render_breakdown(
-            con, title="By agent", group_col="Agent", rows=per_agent, top_n=TOP_N
-        )
+        _render_breakdown(con, title="By agent", group_col="Agent", rows=per_agent, top_n=TOP_N)
         con.print()
     if map_ is None:
         _render_breakdown(con, title="By map", group_col="Map", rows=per_map, top_n=TOP_N)

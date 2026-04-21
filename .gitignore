@@ -17,3 +17,10 @@ build/
 .claude/
 AGENTS.md
 BUILD_PLAN.md
+
+# Editor swap files
+*.swp
+*.swo
+
+# One-off API validation dumps from scripts/validate_api_data.py
+validate_api_output.txt

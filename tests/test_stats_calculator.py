@@ -201,17 +201,13 @@ def test_adr_is_round_weighted() -> None:
 
 
 def test_zero_deaths_does_not_crash() -> None:
-    stats = compute_player_stats(
-        [_mp(kills=20, deaths=0, assists=3, rounds_played=13)]
-    )
+    stats = compute_player_stats([_mp(kills=20, deaths=0, assists=3, rounds_played=13)])
     assert stats.kd == 0.0
     assert stats.kda == 0.0
 
 
 def test_zero_shots_does_not_crash() -> None:
-    stats = compute_player_stats(
-        [_mp(headshots=0, bodyshots=0, legshots=0, rounds_played=13)]
-    )
+    stats = compute_player_stats([_mp(headshots=0, bodyshots=0, legshots=0, rounds_played=13)])
     assert stats.hs_pct == 0.0
 
 

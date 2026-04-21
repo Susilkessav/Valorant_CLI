@@ -1,3 +1,17 @@
+"""Application settings.
+
+Resolution order (highest precedence first):
+    1. Process environment variables
+    2. ``.env`` in the current working directory
+    3. ``~/.valocoach/config.toml``
+    4. Field defaults
+
+pydantic-settings does not read TOML out of the box — ``Settings`` wires a
+``TomlConfigSettingsSource`` below so ``valocoach config init`` + hand-edit
+works as users expect. Without this, the TOML written by
+``write_default_config`` is silently ignored.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -5,7 +19,12 @@ from typing import Literal
 
 import tomli_w
 from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+    TomlConfigSettingsSource,
+)
 
 CONFIG_DIR = Path.home() / ".valocoach"
 CONFIG_PATH = CONFIG_DIR / "config.toml"
@@ -18,6 +37,10 @@ class Settings(BaseSettings):
         env_file=".env",
         env_prefix="",
         extra="ignore",
+        # Point the TOML source at the user's config. pydantic-settings
+        # tolerates a missing file — TomlConfigSettingsSource simply yields
+        # an empty dict when the path doesn't exist, so first-run works.
+        toml_file=CONFIG_PATH,
     )
 
     # Riot identity
@@ -37,6 +60,29 @@ class Settings(BaseSettings):
     # Paths
     data_dir: Path = Field(default_factory=lambda: CONFIG_DIR / "data")
 
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """Inject the TOML source between dotenv and defaults.
+
+        Earlier sources in the returned tuple win — so process env beats
+        ``.env`` beats ``config.toml`` beats field defaults, which matches
+        the precedence users expect from a twelve-factor-ish CLI.
+        """
+        return (
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            TomlConfigSettingsSource(settings_cls),
+            file_secret_settings,
+        )
+
 
 def load_settings() -> Settings:
     """Load settings, ensuring data dir exists."""
@@ -46,7 +92,12 @@ def load_settings() -> Settings:
 
 
 def write_default_config() -> Path:
-    """Write a starter config.toml the user can edit."""
+    """Write a starter config.toml the user can edit.
+
+    Settings() reads this file on every load via TomlConfigSettingsSource,
+    so edits take effect on the next CLI invocation — no env-var juggling
+    required.
+    """
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     if CONFIG_PATH.exists():
         return CONFIG_PATH

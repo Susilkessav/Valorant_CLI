@@ -222,7 +222,9 @@ def compute_per_agent(match_players: Iterable[MatchPlayer]) -> list[AgentStats]:
     for mp in match_players:
         buckets[mp.agent_name].append(mp)
 
-    results = [AgentStats(agent=agent, stats=compute_player_stats(rows)) for agent, rows in buckets.items()]
+    results = [
+        AgentStats(agent=agent, stats=compute_player_stats(rows)) for agent, rows in buckets.items()
+    ]
     results.sort(key=lambda a: (-a.stats.matches, a.agent))
     return results
 
@@ -239,6 +241,8 @@ def compute_per_map(match_players: Iterable[MatchPlayer]) -> list[MapStats]:
         map_name = mp.match.map_name if mp.match is not None else "Unknown"
         buckets[map_name].append(mp)
 
-    results = [MapStats(map_name=name, stats=compute_player_stats(rows)) for name, rows in buckets.items()]
+    results = [
+        MapStats(map_name=name, stats=compute_player_stats(rows)) for name, rows in buckets.items()
+    ]
     results.sort(key=lambda m: (-m.stats.matches, m.map_name))
     return results

@@ -117,7 +117,7 @@ def _map_player(
         puuid=player.puuid or None,
         agent_name=player.agent.name or "",
         agent_id=player.agent.id or None,
-        team=player.team_id,                         # "Red" | "Blue"
+        team=player.team_id,  # "Red" | "Blue"
         won=team_won,
         score=player.stats.score,
         kills=player.stats.kills,
@@ -127,14 +127,14 @@ def _map_player(
         headshots=player.stats.headshots,
         bodyshots=player.stats.bodyshots,
         legshots=player.stats.legshots,
-        damage_dealt=player.stats.damage.dealt,      # nested {dealt, received}
+        damage_dealt=player.stats.damage.dealt,  # nested {dealt, received}
         damage_received=player.stats.damage.received,
         first_bloods=impact.first_bloods[player.puuid],
         first_deaths=impact.first_deaths[player.puuid],
         plants=impact.plants[player.puuid],
         defuses=impact.defuses[player.puuid],
-        afk_rounds=int(player.behavior.afk_rounds),          # float → int
-        rounds_in_spawn=int(player.behavior.rounds_in_spawn), # float → int
+        afk_rounds=int(player.behavior.afk_rounds),  # float → int
+        rounds_in_spawn=int(player.behavior.rounds_in_spawn),  # float → int
         competitive_tier=_tier_int(player.tier.id),  # int JSON → str → int
         started_at=started_at,
     )
@@ -181,8 +181,8 @@ def _build_round_tree(details: MatchDetails, match_id: str) -> list[Round]:
                 time_in_round_ms=kill.time_in_round_in_ms,
                 killer_puuid=kill.killer.puuid,
                 victim_puuid=kill.victim.puuid,
-                weapon_name=kill.weapon.name,               # None on ability kills
-                is_headshot=False,                          # not present in v4
+                weapon_name=kill.weapon.name,  # None on ability kills
+                is_headshot=False,  # not present in v4
                 assistants_json=json.dumps([a.puuid for a in kill.assistants]),
             )
         )

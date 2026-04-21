@@ -103,8 +103,7 @@ def _format_context(
         for m in per_map[:top_n]:
             s = m.stats
             lines.append(
-                f"- {m.map_name} ({s.matches}g): "
-                f"{_pct(s.win_rate)} WR · ACS {s.acs:.0f}"
+                f"- {m.map_name} ({s.matches}g): " f"{_pct(s.win_rate)} WR · ACS {s.acs:.0f}"
             )
 
     return "\n".join(lines)
@@ -133,9 +132,7 @@ async def _build_stats_context_async(
     await ensure_db(settings.data_dir / "valocoach.db")
 
     async with session_scope() as session:
-        player = await get_player_by_name(
-            session, settings.riot_name, settings.riot_tag
-        )
+        player = await get_player_by_name(session, settings.riot_name, settings.riot_tag)
         if player is None:
             return None
         rows = await get_recent_matches(session, player.puuid, limit=limit)
@@ -167,6 +164,4 @@ def build_stats_context(
     Designed to be safe to call unconditionally — the caller decides whether
     to enable it; this function just reports honestly on what data exists.
     """
-    return asyncio.run(
-        _build_stats_context_async(settings, limit=limit, top_n=top_n)
-    )
+    return asyncio.run(_build_stats_context_async(settings, limit=limit, top_n=top_n))

@@ -134,20 +134,28 @@ def _render_summary_card(
     table.add_column("Value", justify="right")
 
     table.add_row(
-        "Record", f"{stats.wins}-{stats.losses}  ({_fmt_pct(stats.win_rate)})",
-        "ACS", f"{stats.acs:.0f}",
+        "Record",
+        f"{stats.wins}-{stats.losses}  ({_fmt_pct(stats.win_rate)})",
+        "ACS",
+        f"{stats.acs:.0f}",
     )
     table.add_row(
-        "K/D", f"{stats.kd:.2f}",
-        "KDA", f"{stats.kda:.2f}",
+        "K/D",
+        f"{stats.kd:.2f}",
+        "KDA",
+        f"{stats.kda:.2f}",
     )
     table.add_row(
-        "HS%", _fmt_pct(stats.hs_pct),
-        "ADR", f"{stats.adr:.0f}",
+        "HS%",
+        _fmt_pct(stats.hs_pct),
+        "ADR",
+        f"{stats.adr:.0f}",
     )
     table.add_row(
-        "FB diff", f"{stats.fb_diff:+d}",
-        "Rounds", str(stats.rounds),
+        "FB diff",
+        f"{stats.fb_diff:+d}",
+        "Rounds",
+        str(stats.rounds),
     )
     console.print(table)
 

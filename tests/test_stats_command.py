@@ -167,10 +167,27 @@ def test_filter_by_map_is_case_insensitive() -> None:
 
 def test_filter_combines_all_three() -> None:
     rows = [
-        _mp(agent="Jett", map_name="Ascent", started_at="2026-04-01T00:00:00+00:00", match_id="keep"),
-        _mp(agent="Jett", map_name="Lotus", started_at="2026-04-01T00:00:00+00:00", match_id="wrong_map"),
-        _mp(agent="Reyna", map_name="Ascent", started_at="2026-04-01T00:00:00+00:00", match_id="wrong_agent"),
-        _mp(agent="Jett", map_name="Ascent", started_at="2020-01-01T00:00:00+00:00", match_id="too_old"),
+        _mp(
+            agent="Jett", map_name="Ascent", started_at="2026-04-01T00:00:00+00:00", match_id="keep"
+        ),
+        _mp(
+            agent="Jett",
+            map_name="Lotus",
+            started_at="2026-04-01T00:00:00+00:00",
+            match_id="wrong_map",
+        ),
+        _mp(
+            agent="Reyna",
+            map_name="Ascent",
+            started_at="2026-04-01T00:00:00+00:00",
+            match_id="wrong_agent",
+        ),
+        _mp(
+            agent="Jett",
+            map_name="Ascent",
+            started_at="2020-01-01T00:00:00+00:00",
+            match_id="too_old",
+        ),
     ]
     out = _filter_rows(
         rows,
@@ -210,9 +227,7 @@ def test_render_breakdown_top_n_limits_rows() -> None:
     rows = [_mp(agent=f"Agent{i}", match_id=f"m-{i}") for i in range(10)]
     per_agent = compute_per_agent(rows)
     con = _capture_console()
-    _render_breakdown(
-        con, title="By agent", group_col="Agent", rows=per_agent, top_n=3
-    )
+    _render_breakdown(con, title="By agent", group_col="Agent", rows=per_agent, top_n=3)
     out = con.file.getvalue()
     # Only 3 agents rendered
     assert out.count("Agent0") == 1
