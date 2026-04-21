@@ -154,9 +154,11 @@ def test_format_context_includes_agent_block_for_multi_agent() -> None:
     assert "Top agents:" in out
     assert "Jett" in out
     assert "Reyna" in out
-    # Jett has 2 games, Reyna 1 — Jett should come first (sorted by matches desc)
-    jett_idx = out.index("Jett (2g)")
-    reyna_idx = out.index("Reyna (1g)")
+    # Jett has 2 games, Reyna 1 — Jett should come first (sorted by matches desc).
+    # Both are thin (< 30 matches for a split) so "(thin sample)" appears after the
+    # game count — index on "Jett (" to stay robust to the appended annotation.
+    jett_idx = out.index("Jett (2g")
+    reyna_idx = out.index("Reyna (1g")
     assert jett_idx < reyna_idx
 
 
@@ -312,3 +314,81 @@ def test_run_coach_survives_context_builder_exception() -> None:
     assert "stats context" in warn_msg.lower() or "continuing" in warn_msg.lower()
     # No context injected when builder failed
     assert mock_stream.call_args.kwargs["system_prompt"] == SYSTEM_PROMPT_STUB
+
+
+# ---------------------------------------------------------------------------
+# Reliability tagging in the LLM context — Phase D
+# ---------------------------------------------------------------------------
+#
+# The key contract: thin data stays in the context (so the LLM knows what
+# agent/map the player actually plays) but is labelled so the LLM doesn't
+# treat a 3-game sample as reliable evidence of a tendency.
+
+
+def test_format_context_overall_low_sample_note() -> None:
+    """When the overall window is below the strictest threshold (30 for HS%),
+    the form header line gets a '(low sample)' annotation so the LLM knows
+    the entire block is indicative rather than reliable."""
+    rows = [_mp(match_id=f"m-{i}") for i in range(5)]
+    out = _format_context(_player(), rows)
+    assert "(low sample)" in out
+    # The note must be on the 'Recent form' line, not buried inside a metric.
+    form_line = next(line for line in out.splitlines() if "Recent form" in line)
+    assert "(low sample)" in form_line
+
+
+def test_format_context_no_overall_note_at_full_reliability() -> None:
+    """At 30 matches every threshold clears — no '(low sample)' on the form line."""
+    rows = [_mp(match_id=f"m-{i}") for i in range(30)]
+    out = _format_context(_player(), rows)
+    form_line = next(line for line in out.splitlines() if "Recent form" in line)
+    assert "(low sample)" not in form_line
+
+
+def test_format_context_thin_agent_split_is_tagged() -> None:
+    """A per-agent split below the 30-match split threshold gets '(thin sample)'
+    appended to its game-count marker so the LLM can discount it."""
+    # 27 Jett + 3 Reyna — Jett is thin for splits (< 30), Reyna even more so.
+    rows = [_mp(agent="Jett", match_id=f"j-{i}") for i in range(27)] + [
+        _mp(agent="Reyna", match_id=f"r-{i}") for i in range(3)
+    ]
+    out = _format_context(_player(), rows)
+    assert "Top agents:" in out
+    jett_line = next(line for line in out.splitlines() if "Jett" in line)
+    reyna_line = next(line for line in out.splitlines() if "Reyna" in line)
+    assert "(thin sample)" in jett_line, f"Jett (27g) should be thin: {jett_line!r}"
+    assert "(thin sample)" in reyna_line, f"Reyna (3g) should be thin: {reyna_line!r}"
+
+
+def test_format_context_reliable_agent_split_not_tagged() -> None:
+    """At 30+ games per agent, no '(thin sample)' annotation — the split
+    is reliable and the LLM should treat it as ground truth."""
+    rows = [_mp(agent="Jett", match_id=f"j-{i}") for i in range(30)]
+    # Need a second agent to trigger the block at all.
+    rows += [_mp(agent="Reyna", match_id=f"r-{i}") for i in range(30)]
+    out = _format_context(_player(), rows)
+    assert "Top agents:" in out
+    for line in out.splitlines():
+        if "Jett" in line or "Reyna" in line:
+            assert "(thin sample)" not in line, f"Unexpected thin tag: {line!r}"
+
+
+def test_format_context_thin_map_split_is_tagged() -> None:
+    """Same tagging applies to per-map splits — a 3-game Ascent sample
+    is as unreliable as a 3-game agent sample."""
+    rows = [_mp(map_name="Ascent", match_id=f"a-{i}") for i in range(3)] + [
+        _mp(map_name="Lotus", match_id=f"l-{i}") for i in range(3)
+    ]
+    out = _format_context(_player(), rows)
+    assert "Top maps:" in out
+    ascent_line = next(line for line in out.splitlines() if "Ascent" in line)
+    assert "(thin sample)" in ascent_line, f"Ascent (3g) should be thin: {ascent_line!r}"
+
+
+def test_format_context_compact_budget_still_holds_with_tags() -> None:
+    """Tags add a few bytes — verify the snippet stays under 700 chars.
+    (Budget was 600; +100 headroom for annotations is generous enough to
+    cover top_n=3 of thin splits while still being LLM-prompt-cheap.)"""
+    rows = [_mp(agent=f"A{i % 4}", map_name=f"M{i % 3}", match_id=f"m-{i}") for i in range(5)]
+    out = _format_context(_player(), rows)
+    assert len(out) < 700, f"context too long ({len(out)} chars):\n{out}"

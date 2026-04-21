@@ -28,7 +28,12 @@ from valocoach.core.config import Settings
 from valocoach.data.database import ensure_db, session_scope
 from valocoach.data.orm_models import MatchPlayer, Player
 from valocoach.data.repository import get_player_by_name, get_recent_matches
-from valocoach.stats import compute_per_agent, compute_per_map, compute_player_stats
+from valocoach.stats import (
+    compute_per_agent,
+    compute_per_map,
+    compute_player_stats,
+    reliability_flags,
+)
 
 # Default match window for the context snippet. Mirrors the profile card —
 # "at a glance" form, not a deep dive. Override per-call if needed.
@@ -60,10 +65,26 @@ def _format_context(
     Returns a multi-line string. The caller concatenates it to the system
     prompt — no surrounding fences or separators are added here so the
     caller owns the exact wire format.
+
+    Reliability tagging:
+        Metrics below their sample-size threshold (from calculator.py) are
+        annotated inline so the LLM knows not to treat them as ground truth.
+        The approach is (b) — keep thin data, tag it — rather than omitting:
+        a player who has played 3 Jett games still *plays* Jett, so silencing
+        the split strips real context. The LLM is instructed via the
+        SYSTEM_PROMPT_STUB not to dump stats back at the player; tagging the
+        thin ones tells it to use them loosely rather than as hard evidence.
     """
     overall = compute_player_stats(rows)
+    overall_flags = reliability_flags(overall)
     per_agent = compute_per_agent(rows)
     per_map = compute_per_map(rows)
+
+    # "(low sample)" appended when the overall window is below the strictest
+    # threshold — everything is shaky, warn once on the form line rather than
+    # individually per metric.
+    overall_thin = not all(overall_flags.values())
+    thin_note = " (low sample)" if overall_thin else ""
 
     header = (
         f"PLAYER CONTEXT — {player.riot_name}#{player.riot_tag} "
@@ -72,7 +93,7 @@ def _format_context(
 
     lines = [
         header,
-        f"Recent form ({overall.matches} competitive match(es)):",
+        f"Recent form ({overall.matches} competitive match(es)){thin_note}:",
         (
             f"- Record: {overall.wins}-{overall.losses} ({_pct(overall.win_rate)} WR) "
             f"· ACS {overall.acs:.0f} "
@@ -93,8 +114,10 @@ def _format_context(
         lines.append("Top agents:")
         for a in per_agent[:top_n]:
             s = a.stats
+            split_flags = reliability_flags(s, is_split=True)
+            split_thin = " (thin sample)" if not all(split_flags.values()) else ""
             lines.append(
-                f"- {a.agent} ({s.matches}g): "
+                f"- {a.agent} ({s.matches}g{split_thin}): "
                 f"{_pct(s.win_rate)} WR · ACS {s.acs:.0f} · K/D {s.kd:.2f}"
             )
 
@@ -102,8 +125,11 @@ def _format_context(
         lines.append("Top maps:")
         for m in per_map[:top_n]:
             s = m.stats
+            split_flags = reliability_flags(s, is_split=True)
+            split_thin = " (thin sample)" if not all(split_flags.values()) else ""
             lines.append(
-                f"- {m.map_name} ({s.matches}g): " f"{_pct(s.win_rate)} WR · ACS {s.acs:.0f}"
+                f"- {m.map_name} ({s.matches}g{split_thin}): "
+                f"{_pct(s.win_rate)} WR · ACS {s.acs:.0f}"
             )
 
     return "\n".join(lines)

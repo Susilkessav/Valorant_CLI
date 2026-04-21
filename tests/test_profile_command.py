@@ -8,6 +8,7 @@ settings fallback) and that the renderer surfaces the right numbers.
 from __future__ import annotations
 
 from io import StringIO
+from unittest.mock import patch
 
 import pytest
 import typer
@@ -17,7 +18,9 @@ from valocoach.cli.commands.profile import (
     _render_identity_panel,
     _render_summary_card,
     _resolve_identity,
+    run_profile,
 )
+from valocoach.cli.commands.stats import WARN_PREFIX
 from valocoach.data.orm_models import Match, MatchPlayer, Player
 
 # ---------------------------------------------------------------------------
@@ -244,3 +247,90 @@ def test_summary_card_includes_fb_diff_with_sign() -> None:
     _render_summary_card(con, rows, limit=20)
     out = con.file.getvalue()
     assert "+3" in out  # fb_diff with explicit sign
+
+
+# ---------------------------------------------------------------------------
+# Reliability warnings (⚠️) — Phase C
+# ---------------------------------------------------------------------------
+#
+# The profile card shares machinery with `valocoach stats`, but users interact
+# with the two differently: stats is a deep dive, profile is at-a-glance. The
+# ⚠️ signal matters *more* on profile because a glance is where small-sample
+# numbers are most likely to be taken at face value.
+
+
+def test_summary_card_warns_on_thin_sample() -> None:
+    """Default --limit is 20. HS% and FB rate both need 30 matches — at
+    20 the card should warn even though ACS (needs 15) and K/D (needs 20)
+    are reliable. This is the realistic first-weeks user experience."""
+    rows = [_mp(match_id=f"m-{i}") for i in range(20)]
+    con = _capture_console()
+    any_warn = _render_summary_card(con, rows, limit=20)
+    out = con.file.getvalue()
+    assert any_warn is True
+    assert WARN_PREFIX in out
+    # HS% row must be tagged; ACS row must NOT be (20 >= 15).
+    hs_line = next(line for line in out.splitlines() if "HS%" in line)
+    acs_line = next(line for line in out.splitlines() if "ACS" in line)
+    assert "⚠️" in hs_line, f"HS% should warn at 20 matches: {hs_line!r}"
+    assert "⚠️" not in acs_line, f"ACS should NOT warn at 20 matches: {acs_line!r}"
+
+
+def test_summary_card_no_warn_at_full_reliability() -> None:
+    """At 30+ matches every threshold clears — clean card, no ⚠️."""
+    rows = [_mp(match_id=f"m-{i}") for i in range(30)]
+    con = _capture_console()
+    any_warn = _render_summary_card(con, rows, limit=30)
+    assert any_warn is False
+    assert WARN_PREFIX not in con.file.getvalue()
+
+
+def test_summary_card_empty_returns_false() -> None:
+    """Empty-row branch returns False so the legend doesn't appear on an
+    otherwise-blank profile (no ⚠️ rendered → nothing to explain)."""
+    con = _capture_console()
+    assert _render_summary_card(con, [], limit=20) is False
+
+
+def test_run_profile_legend_only_when_warnings_fire(tmp_path) -> None:
+    """End-to-end: legend text appears iff any ⚠️ was rendered. Mirrors
+    the same contract as `valocoach stats` so users see consistent
+    behaviour across the two commands."""
+    from valocoach.core.config import Settings
+
+    fake_settings = Settings(
+        riot_name="Tester",
+        riot_tag="NA1",
+        riot_region="na",
+        henrikdev_api_key="fake",
+        data_dir=tmp_path,
+    )
+
+    thin_rows = [_mp(match_id=f"m-{i}") for i in range(5)]
+    thick_rows = [_mp(match_id=f"m-{i}") for i in range(30)]
+
+    async def _fetch_thin(**kwargs: object):
+        return _player(), thin_rows
+
+    async def _fetch_thick(**kwargs: object):
+        return _player(), thick_rows
+
+    for fetch, expect_legend in [(_fetch_thin, True), (_fetch_thick, False)]:
+        con = _capture_console()
+        with (
+            patch(
+                "valocoach.cli.commands.profile.load_settings",
+                return_value=fake_settings,
+            ),
+            patch(
+                "valocoach.cli.commands.profile._fetch_profile_data",
+                side_effect=fetch,
+            ),
+        ):
+            run_profile(name="Tester", tag="NA1", console=con)
+        out = con.file.getvalue()
+        has_legend = "sample-size threshold" in out
+        assert has_legend is expect_legend, (
+            f"profile legend mismatch (fetch={fetch.__name__}): "
+            f"got has_legend={has_legend}, expected {expect_legend}"
+        )

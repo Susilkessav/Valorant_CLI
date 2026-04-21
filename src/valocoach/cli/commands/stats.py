@@ -36,6 +36,7 @@ from valocoach.stats import (
     compute_per_agent,
     compute_per_map,
     compute_player_stats,
+    reliability_flags,
 )
 
 # Fetch plenty of rows — the period/agent/map filters narrow from here in Python.
@@ -117,6 +118,23 @@ def _fmt_pct(ratio: float) -> str:
     return f"{ratio * 100:.1f}%"
 
 
+# Sentinel prefix for unreliable metrics. Rendered before the value so the
+# warning is visible even if a narrow column truncates the right side.
+# Exposed as a constant so tests can assert on it without duplicating the
+# glyph literal (and so any future theming/locale swap stays consistent).
+WARN_PREFIX = "⚠️ "
+
+
+def _warn(value: str, reliable: bool) -> str:
+    """Prepend ⚠️ when ``reliable`` is False; pass through otherwise.
+
+    Kept trivial on purpose — presentation-layer concern only. The
+    truth-value for reliability comes from ``reliability_flags`` in
+    calculator.py, not from re-deriving thresholds here.
+    """
+    return value if reliable else f"{WARN_PREFIX}{value}"
+
+
 def _render_header(
     console: Console,
     *,
@@ -141,8 +159,18 @@ def _render_header(
     console.print(Panel(subtitle, title=title, border_style="cyan", padding=(0, 2)))
 
 
-def _render_overall(console: Console, stats: PlayerStats) -> None:
-    """Overall stats — two-column layout of the numbers that matter most."""
+def _render_overall(console: Console, stats: PlayerStats) -> bool:
+    """Overall stats — two-column layout of the numbers that matter most.
+
+    Returns ``True`` if any metric was tagged as unreliable (⚠️). Callers
+    roll that up to decide whether to show the footer legend.
+    """
+    flags = reliability_flags(stats)
+    # Raw counts (matches, rounds, kills/deaths/assists, raw FB/FD counts)
+    # have no threshold — they're facts, not inferences. Only tag derived
+    # rates and ratios.
+    any_warn = not all(flags.values())
+
     table = Table(title="Overall", show_header=False, box=None, pad_edge=False)
     table.add_column("Label", style="dim")
     table.add_column("Value", justify="right")
@@ -153,33 +181,42 @@ def _render_overall(console: Console, stats: PlayerStats) -> None:
         "Matches",
         str(stats.matches),
         "Win rate",
-        f"{stats.wins}-{stats.losses}  ({_fmt_pct(stats.win_rate)})",
+        _warn(
+            f"{stats.wins}-{stats.losses}  ({_fmt_pct(stats.win_rate)})",
+            flags["win_rate"],
+        ),
     )
     table.add_row(
         "Rounds",
         str(stats.rounds),
         "ACS",
-        f"{stats.acs:.1f}",
+        _warn(f"{stats.acs:.1f}", flags["acs"]),
     )
     table.add_row(
         "K / D / A",
         f"{stats.kills} / {stats.deaths} / {stats.assists}",
         "ADR",
-        f"{stats.adr:.1f}",
+        _warn(f"{stats.adr:.1f}", flags["adr"]),
     )
     table.add_row(
         "K/D",
-        f"{stats.kd:.2f}",
+        _warn(f"{stats.kd:.2f}", flags["kd"]),
         "KDA",
-        f"{stats.kda:.2f}",
+        _warn(f"{stats.kda:.2f}", flags["kda"]),
     )
     table.add_row(
         "HS%",
-        _fmt_pct(stats.hs_pct),
+        _warn(_fmt_pct(stats.hs_pct), flags["hs_pct"]),
         "FB / FD (diff)",
-        f"{stats.first_bloods} / {stats.first_deaths}  ({stats.fb_diff:+d})",
+        # FB and FD share a threshold (same rarity). Either being thin
+        # warrants a ⚠️ on the combined cell.
+        _warn(
+            f"{stats.first_bloods} / {stats.first_deaths}  ({stats.fb_diff:+d})",
+            flags["fb_rate"] and flags["fd_rate"],
+        ),
     )
     console.print(table)
+    return any_warn
 
 
 def _render_breakdown(
@@ -189,10 +226,15 @@ def _render_breakdown(
     group_col: str,
     rows: list[AgentStats] | list[MapStats],
     top_n: int,
-) -> None:
-    """Per-agent or per-map table, top_n rows by matches."""
+) -> bool:
+    """Per-agent or per-map table, top_n rows by matches.
+
+    Returns ``True`` if any cell was tagged as unreliable. Per-split rows
+    use the stricter ``is_split=True`` floor — a 4-game Jett split should
+    ⚠️ even when the overall sample is reliable.
+    """
     if not rows:
-        return
+        return False
 
     table = Table(title=title, show_header=True, header_style="bold", pad_edge=False)
     table.add_column(group_col, style="cyan")
@@ -203,19 +245,27 @@ def _render_breakdown(
     table.add_column("K/D", justify="right")
     table.add_column("HS%", justify="right")
 
+    any_warn = False
     for row in rows[:top_n]:
         label = row.agent if isinstance(row, AgentStats) else row.map_name
         s = row.stats
+        flags = reliability_flags(s, is_split=True)
+        if not all(flags.values()):
+            any_warn = True
         table.add_row(
             label,
-            str(s.matches),
-            f"{s.wins}-{s.losses}",
-            _fmt_pct(s.win_rate),
-            f"{s.acs:.0f}",
-            f"{s.kd:.2f}",
-            _fmt_pct(s.hs_pct),
+            # Mark the G column when *any* split-metric is thin — this is
+            # the user's "don't trust this row" canary, keyed off the
+            # sample size that drives everything else.
+            _warn(str(s.matches), all(flags.values())),
+            _warn(f"{s.wins}-{s.losses}", flags["win_rate"]),
+            _warn(_fmt_pct(s.win_rate), flags["win_rate"]),
+            _warn(f"{s.acs:.0f}", flags["acs"]),
+            _warn(f"{s.kd:.2f}", flags["kd"]),
+            _warn(_fmt_pct(s.hs_pct), flags["hs_pct"]),
         )
     console.print(table)
+    return any_warn
 
 
 # ---------------------------------------------------------------------------
@@ -307,12 +357,26 @@ def run_stats(
         agent_filter=agent,
         map_filter=map_,
     )
-    _render_overall(con, overall)
+    any_warn = _render_overall(con, overall)
     con.print()
     # Skip per-agent breakdown when the user already filtered to one agent —
     # the single-row table would be redundant with the overall card.
     if agent is None:
-        _render_breakdown(con, title="By agent", group_col="Agent", rows=per_agent, top_n=TOP_N)
+        any_warn |= _render_breakdown(
+            con, title="By agent", group_col="Agent", rows=per_agent, top_n=TOP_N
+        )
         con.print()
     if map_ is None:
-        _render_breakdown(con, title="By map", group_col="Map", rows=per_map, top_n=TOP_N)
+        any_warn |= _render_breakdown(
+            con, title="By map", group_col="Map", rows=per_map, top_n=TOP_N
+        )
+
+    if any_warn:
+        con.print()
+        # One-line legend, dim so it doesn't compete with the numbers.
+        # Only shown when a ⚠️ appeared above — no point teaching the
+        # glyph when the user didn't see one.
+        con.print(
+            "[dim]⚠️  = below the sample-size threshold for this metric; "
+            "treat as indicative, not reliable (see BUILD_PLAN.md § sample-size thresholds).[/dim]"
+        )

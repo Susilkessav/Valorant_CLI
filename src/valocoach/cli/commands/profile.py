@@ -26,15 +26,22 @@ from rich.table import Table
 
 from valocoach.cli import display
 
-# Reach into stats.py for the shared per-agent breakdown renderer and the
-# percent formatter — they're private-by-convention to discourage drive-by
-# imports, but a sibling CLI command is a legitimate reuse case.
-from valocoach.cli.commands.stats import _fmt_pct, _render_breakdown
+# Reach into stats.py for the shared per-agent breakdown renderer, the
+# percent formatter, and the reliability-tagging helpers. They're
+# private-by-convention to discourage drive-by imports, but a sibling
+# CLI command is a legitimate reuse case — and sharing keeps the ⚠️
+# behaviour identical between `stats` and `profile`.
+from valocoach.cli.commands.stats import (
+    WARN_PREFIX,
+    _fmt_pct,
+    _render_breakdown,
+    _warn,
+)
 from valocoach.core.config import load_settings
 from valocoach.data.database import ensure_db, session_scope
 from valocoach.data.orm_models import MatchPlayer, Player
 from valocoach.data.repository import get_player_by_name, get_recent_matches
-from valocoach.stats import compute_per_agent, compute_player_stats
+from valocoach.stats import compute_per_agent, compute_player_stats, reliability_flags
 
 # Default number of recent matches to summarise. Profile is "at a glance" —
 # a larger N starts looking like the stats dashboard.
@@ -109,17 +116,23 @@ def _render_summary_card(
     rows: list[MatchPlayer],
     *,
     limit: int,
-) -> None:
+) -> bool:
     """Compact "last N matches" summary. One table, dense numbers.
 
     Different shape from the stats dashboard's Overall card — tighter, meant
     to fit alongside the identity panel rather than dominate the screen.
+
+    Returns ``True`` if any cell was tagged ⚠️. Callers roll this up so
+    the legend footer shows only when a warning actually appeared.
+    Returns ``False`` (nothing to warn about) on the empty-rows branch.
     """
     if not rows:
         console.print("[dim]No matches in the local DB yet.[/dim]")
-        return
+        return False
 
     stats = compute_player_stats(rows)
+    flags = reliability_flags(stats)
+    any_warn = not all(flags.values())
     shown = min(len(rows), limit)
 
     table = Table(
@@ -135,29 +148,36 @@ def _render_summary_card(
 
     table.add_row(
         "Record",
-        f"{stats.wins}-{stats.losses}  ({_fmt_pct(stats.win_rate)})",
+        _warn(
+            f"{stats.wins}-{stats.losses}  ({_fmt_pct(stats.win_rate)})",
+            flags["win_rate"],
+        ),
         "ACS",
-        f"{stats.acs:.0f}",
+        _warn(f"{stats.acs:.0f}", flags["acs"]),
     )
     table.add_row(
         "K/D",
-        f"{stats.kd:.2f}",
+        _warn(f"{stats.kd:.2f}", flags["kd"]),
         "KDA",
-        f"{stats.kda:.2f}",
+        _warn(f"{stats.kda:.2f}", flags["kda"]),
     )
     table.add_row(
         "HS%",
-        _fmt_pct(stats.hs_pct),
+        _warn(_fmt_pct(stats.hs_pct), flags["hs_pct"]),
         "ADR",
-        f"{stats.adr:.0f}",
+        _warn(f"{stats.adr:.0f}", flags["adr"]),
     )
     table.add_row(
         "FB diff",
-        f"{stats.fb_diff:+d}",
+        # FB diff is a signed raw-count metric derived from fb/fd — its
+        # meaning hinges on the underlying rates being reliable, so we
+        # tag it when either rate is thin (same rule as in _render_overall).
+        _warn(f"{stats.fb_diff:+d}", flags["fb_rate"] and flags["fd_rate"]),
         "Rounds",
-        str(stats.rounds),
+        str(stats.rounds),  # raw count, no threshold
     )
     console.print(table)
+    return any_warn
 
 
 # ---------------------------------------------------------------------------
@@ -228,17 +248,27 @@ def run_profile(
     player, rows = fetched
 
     _render_identity_panel(con, player)
-    _render_summary_card(con, rows, limit=limit)
+    any_warn = _render_summary_card(con, rows, limit=limit)
 
     # Top-N agents — reuses the stats breakdown renderer. Skip if only one
     # agent shows up; the single row would be redundant with the summary.
     per_agent = compute_per_agent(rows)
     if len(per_agent) >= 2:
         con.print()
-        _render_breakdown(
+        any_warn |= _render_breakdown(
             con,
             title="Top agents",
             group_col="Agent",
             rows=per_agent,
             top_n=TOP_AGENTS,
+        )
+
+    if any_warn:
+        con.print()
+        # Same legend wording as `valocoach stats` — stable phrase
+        # "sample-size threshold" is what tests grep for, kept identical
+        # across commands so docs/user-mental-model line up.
+        con.print(
+            f"[dim]{WARN_PREFIX.strip()}  = below the sample-size threshold for this metric; "
+            "treat as indicative, not reliable (see BUILD_PLAN.md § sample-size thresholds).[/dim]"
         )

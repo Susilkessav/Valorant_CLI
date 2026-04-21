@@ -22,6 +22,20 @@ Zero-safety:
     denominator. Empty input returns a PlayerStats of all zeros —
     callers can render a "no data yet" panel instead of crashing.
 
+Reliability:
+    Per-metric minimum-sample thresholds (MIN_MATCHES_*) live below.
+    They mark the smallest match count at which a metric is *statistically
+    meaningful* — anything below is noisy enough that a naive display
+    misleads the user. `reliability_flags(stats)` returns a per-metric
+    bool map so presentation layers can tag thin numbers with ⚠️ without
+    having to know the thresholds themselves.
+
+    Why the upper end of each BUILD_PLAN.md range?
+        The spec gives ranges (e.g. ACS "10-15"). We pick the top so ⚠️
+        means "genuinely unreliable" rather than "a bit thin". A new user
+        seeing warnings for a couple weeks is a better failure mode than
+        a long-tenured user mistaking small-sample noise for real trend.
+
 KAST% is intentionally omitted: it requires kill-timeline reconstruction
 and teammate-trade detection from the Kill table. Worth adding later as a
 dedicated pass over rounds + kills; not a calculator.py concern.
@@ -32,8 +46,30 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import Final
 
 from valocoach.data.orm_models import MatchPlayer
+
+# ---------------------------------------------------------------------------
+# Reliability thresholds
+# ---------------------------------------------------------------------------
+# Minimum match count for each metric to be considered reliable. Sourced
+# from BUILD_PLAN.md § "Sample-size thresholds for statistical reliability"
+# (upper end of each range — see module docstring for the why).
+#
+# These are exposed as module-level constants on purpose: tests pin the
+# values, and presentation code (stats CLI, profile card, coach context)
+# should reference the constants by name rather than hard-coding integers.
+
+MIN_MATCHES_ACS: Final[int] = 15  # BUILD_PLAN ACS/ADR: 10-15
+MIN_MATCHES_ADR: Final[int] = 15
+MIN_MATCHES_KD: Final[int] = 20  # BUILD_PLAN K/D: 15-20
+MIN_MATCHES_HS: Final[int] = 30  # BUILD_PLAN HS%: 20-30
+MIN_MATCHES_FB: Final[int] = 30  # BUILD_PLAN first-blood rate: 20-30
+
+# Win rate per split (per-agent, per-map) needs a larger sample than the
+# overall win rate because each split is a narrower subset of matches.
+MIN_MATCHES_WIN_RATE_SPLIT: Final[int] = 30  # BUILD_PLAN win rate per split: 30+
 
 # ---------------------------------------------------------------------------
 # Result types
@@ -110,6 +146,42 @@ def _safe_div(num: float, den: float) -> float:
     (or 0 rounds, or 0 shots landed) should render as 0.0, not crash.
     """
     return num / den if den else 0.0
+
+
+def reliability_flags(stats: PlayerStats, *, is_split: bool = False) -> dict[str, bool]:
+    """Per-metric reliability map — ``True`` means "enough data to trust".
+
+    Keyed by the attribute name on PlayerStats so presentation code can do
+    ``flags["acs"]`` without re-deriving thresholds. Metrics not in the
+    BUILD_PLAN threshold table (e.g. total kills, matches, rounds — raw
+    counts, not rates) are intentionally absent: nothing to flag.
+
+    Args:
+        stats:     The aggregated stats to check.
+        is_split:  Set ``True`` when ``stats`` is one agent's or map's
+                   slice of the player's history. Splits need a larger
+                   sample than overall (BUILD_PLAN § win rate per split:
+                   30+) because each slice is a narrower subset. When
+                   ``False`` (overall), win_rate uses the same ACS/ADR
+                   floor — overall win rate stabilises sooner than a
+                   split's.
+
+    Empty input (matches=0) returns every flag ``False`` so an empty
+    profile card renders with consistent ⚠️ behaviour instead of mixing
+    "no warning" and "warning" cells arbitrarily.
+    """
+    m = stats.matches
+    win_rate_threshold = MIN_MATCHES_WIN_RATE_SPLIT if is_split else MIN_MATCHES_ACS
+    return {
+        "win_rate": m >= win_rate_threshold,
+        "acs": m >= MIN_MATCHES_ACS,
+        "adr": m >= MIN_MATCHES_ADR,
+        "kd": m >= MIN_MATCHES_KD,
+        "kda": m >= MIN_MATCHES_KD,  # same variance regime as K/D
+        "hs_pct": m >= MIN_MATCHES_HS,
+        "fb_rate": m >= MIN_MATCHES_FB,
+        "fd_rate": m >= MIN_MATCHES_FB,  # first-death is the same rarity
+    }
 
 
 def _zero_stats() -> PlayerStats:

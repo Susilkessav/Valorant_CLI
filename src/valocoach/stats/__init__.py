@@ -16,19 +16,33 @@ coach system-prompt context builder.
 from __future__ import annotations
 
 from valocoach.stats.calculator import (
+    MIN_MATCHES_ACS,
+    MIN_MATCHES_ADR,
+    MIN_MATCHES_FB,
+    MIN_MATCHES_HS,
+    MIN_MATCHES_KD,
+    MIN_MATCHES_WIN_RATE_SPLIT,
     AgentStats,
     MapStats,
     PlayerStats,
     compute_per_agent,
     compute_per_map,
     compute_player_stats,
+    reliability_flags,
 )
 
 __all__ = [
+    "MIN_MATCHES_ACS",
+    "MIN_MATCHES_ADR",
+    "MIN_MATCHES_FB",
+    "MIN_MATCHES_HS",
+    "MIN_MATCHES_KD",
+    "MIN_MATCHES_WIN_RATE_SPLIT",
     "AgentStats",
     "MapStats",
     "PlayerStats",
     "compute_per_agent",
     "compute_per_map",
     "compute_player_stats",
+    "reliability_flags",
 ]

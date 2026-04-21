@@ -15,11 +15,13 @@ import typer
 from rich.console import Console
 
 from valocoach.cli.commands.stats import (
+    WARN_PREFIX,
     _filter_rows,
     _period_to_cutoff_iso,
     _render_breakdown,
     _render_header,
     _render_overall,
+    run_stats,
 )
 from valocoach.data.orm_models import Match, MatchPlayer
 from valocoach.stats import (
@@ -273,3 +275,169 @@ def test_render_per_map_labels_map_column() -> None:
     out = con.file.getvalue()
     assert "Ascent" in out
     assert "Lotus" in out
+
+
+# ---------------------------------------------------------------------------
+# Reliability warnings (⚠️) — Phase B
+# ---------------------------------------------------------------------------
+#
+# The calculator already has threshold tests; these tests verify the CLI
+# renderers actually *surface* that signal instead of silently dropping it
+# on the floor. That's the failure mode we're guarding against — stats
+# being technically available but visually indistinguishable from reliable
+# ones.
+
+
+def _make_rows(n: int, **kwargs: object) -> list[MatchPlayer]:
+    """n matches with distinct match_ids. Keeps match_id unique so the
+    ORM relationship set in _mp() doesn't collapse rows."""
+    return [_mp(match_id=f"m-{i}", **kwargs) for i in range(n)]  # type: ignore[arg-type]
+
+
+def test_render_overall_warns_on_thin_sample() -> None:
+    """Under the smallest threshold (MIN_MATCHES_ACS=15), every derived
+    metric should render with ⚠️ and the function returns True so the
+    caller can print the legend."""
+    stats = compute_player_stats(_make_rows(5))
+    con = _capture_console()
+    any_warn = _render_overall(con, stats)
+    out = con.file.getvalue()
+    assert any_warn is True
+    assert WARN_PREFIX in out
+    # Spot-check: the ACS cell should be tagged. Exact column layout is
+    # Rich's business; we just assert the glyph co-occurs with the value.
+    assert "⚠️" in out and "ACS" in out
+
+
+def test_render_overall_does_not_warn_on_thick_sample() -> None:
+    """At 30 matches every metric clears its threshold → no ⚠️ anywhere."""
+    stats = compute_player_stats(_make_rows(30))
+    con = _capture_console()
+    any_warn = _render_overall(con, stats)
+    out = con.file.getvalue()
+    assert any_warn is False
+    assert WARN_PREFIX not in out
+
+
+def test_render_breakdown_warns_on_thin_split_even_when_overall_is_fat() -> None:
+    """A player can have 30 overall matches (overall reliable) but only
+    3 games on a specific agent — that per-agent row MUST still ⚠️.
+    Guards against the bug where we'd use the overall flag for splits."""
+    # 27 Jett games + 3 Reyna games → 30 overall, reliable;
+    # but Reyna split has 3 games, below every threshold.
+    rows = _make_rows(27, agent="Jett") + [_mp(agent="Reyna", match_id=f"r-{i}") for i in range(3)]
+    per_agent = compute_per_agent(rows)
+    con = _capture_console()
+    any_warn = _render_breakdown(con, title="By agent", group_col="Agent", rows=per_agent, top_n=5)
+    out = con.file.getvalue()
+    assert any_warn is True
+    # Reyna row is thin — must carry ⚠️. Use the row-level canary: the G cell.
+    # We locate Reyna's line in the output and assert the warn glyph on it.
+    reyna_line = next(line for line in out.splitlines() if "Reyna" in line)
+    assert "⚠️" in reyna_line, f"Reyna row missing warn glyph: {reyna_line!r}"
+
+
+def test_render_breakdown_split_needs_30_for_win_rate() -> None:
+    """Split win rate uses the stricter 30-match floor. At exactly 30
+    (`MIN_MATCHES_WIN_RATE_SPLIT`), the row clears all flags → no ⚠️."""
+    rows = _make_rows(30, agent="Jett")
+    per_agent = compute_per_agent(rows)
+    con = _capture_console()
+    any_warn = _render_breakdown(con, title="By agent", group_col="Agent", rows=per_agent, top_n=5)
+    assert any_warn is False
+    assert WARN_PREFIX not in con.file.getvalue()
+
+
+def test_run_stats_shows_legend_only_when_warnings_fired(tmp_path, monkeypatch) -> None:
+    """Integration: legend text appears iff any ⚠️ was rendered. Two
+    cases from one fixture — thin (warns, legend) and thick (no warn,
+    no legend) — proves the footer wiring tracks the render calls."""
+    from unittest.mock import patch
+
+    # Thin path: 5 matches → warnings fire → legend appears.
+    thin_rows = _make_rows(5)
+    # Thick path: 30 matches → no warnings → no legend.
+    thick_rows = _make_rows(30)
+
+    # Minimal stub Player with the attributes _render_header reads.
+    class _P:
+        riot_name = "Tester"
+        riot_tag = "NA1"
+        current_tier_patched = "Gold 1"
+        region = "na"
+        puuid = "p-tracked"
+
+    from valocoach.core.config import Settings
+
+    fake_settings = Settings(
+        riot_name="Tester",
+        riot_tag="NA1",
+        riot_region="na",
+        henrikdev_api_key="fake",
+        data_dir=tmp_path,
+    )
+
+    async def _fetch_thin(_settings):
+        return _P(), thin_rows
+
+    async def _fetch_thick(_settings):
+        return _P(), thick_rows
+
+    for fetch, rows, expect_legend in [
+        (_fetch_thin, thin_rows, True),
+        (_fetch_thick, thick_rows, False),
+    ]:
+        con = _capture_console()
+        with (
+            patch("valocoach.cli.commands.stats.load_settings", return_value=fake_settings),
+            patch("valocoach.cli.commands.stats._fetch_stats_data", side_effect=fetch),
+        ):
+            run_stats(period="all", console=con)
+        out = con.file.getvalue()
+        # Footer is keyed on a stable phrase, not the full sentence, to
+        # avoid brittle wording coupling.
+        has_legend = "sample-size threshold" in out
+        assert has_legend is expect_legend, (
+            f"legend expectation mismatch (rows={len(rows)}): "
+            f"got has_legend={has_legend}, expected {expect_legend}"
+        )
+
+
+def test_legend_mentions_the_warn_glyph() -> None:
+    """The footer must contain the same ⚠️ glyph we use to tag cells,
+    otherwise the user sees the warning on rows but no explanation of
+    what it means."""
+    stats = compute_player_stats(_make_rows(3))  # forces warnings
+    con = _capture_console()
+
+    # Drive the full render path by calling run_stats with mocked IO.
+    from unittest.mock import patch
+
+    from valocoach.core.config import Settings
+
+    class _P:
+        riot_name = "T"
+        riot_tag = "X"
+        current_tier_patched = "Iron 1"
+        region = "na"
+        puuid = "p"
+
+    fake_settings = Settings(riot_name="T", riot_tag="X", riot_region="na", henrikdev_api_key="f")
+
+    async def _fetch(_s):
+        return _P(), _make_rows(3)
+
+    with (
+        patch("valocoach.cli.commands.stats.load_settings", return_value=fake_settings),
+        patch("valocoach.cli.commands.stats._fetch_stats_data", side_effect=_fetch),
+    ):
+        run_stats(period="all", console=con)
+    out = con.file.getvalue()
+    assert WARN_PREFIX.strip() in out  # glyph appears in body
+    # And the legend line carries it too, so the user can map cell→meaning.
+    legend_lines = [line for line in out.splitlines() if "sample-size threshold" in line]
+    assert legend_lines, "no legend found"
+    assert any(WARN_PREFIX.strip() in line for line in legend_lines)
+    # Ensure `stats` imported above is actually used (keeps ruff happy on
+    # this explicitly-structured test without suppressing a lint).
+    assert stats.matches == 3

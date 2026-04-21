@@ -15,12 +15,18 @@ import pytest
 
 from valocoach.data.orm_models import Match, MatchPlayer
 from valocoach.stats.calculator import (
+    MIN_MATCHES_ACS,
+    MIN_MATCHES_FB,
+    MIN_MATCHES_HS,
+    MIN_MATCHES_KD,
+    MIN_MATCHES_WIN_RATE_SPLIT,
     AgentStats,
     MapStats,
     PlayerStats,
     compute_per_agent,
     compute_per_map,
     compute_player_stats,
+    reliability_flags,
 )
 
 # ---------------------------------------------------------------------------
@@ -345,3 +351,83 @@ def test_player_stats_is_frozen() -> None:
 
 def test_returns_playerstats_instance() -> None:
     assert isinstance(compute_player_stats([]), PlayerStats)
+
+
+# ---------------------------------------------------------------------------
+# Reliability thresholds
+# ---------------------------------------------------------------------------
+#
+# The numeric thresholds themselves come from BUILD_PLAN.md — tests pin
+# the exact values so a silent edit to the constants triggers a test
+# failure and forces a conscious change (and a BUILD_PLAN update).
+
+
+def test_thresholds_match_build_plan_upper_end() -> None:
+    """Contract pin: if these drift, someone changed the spec without
+    updating BUILD_PLAN.md / AGENTS.md. Fail loudly."""
+    assert MIN_MATCHES_ACS == 15
+    assert MIN_MATCHES_KD == 20
+    assert MIN_MATCHES_HS == 30
+    assert MIN_MATCHES_FB == 30
+    assert MIN_MATCHES_WIN_RATE_SPLIT == 30
+
+
+def _stats_with_n_matches(n: int) -> PlayerStats:
+    """Synthesise a PlayerStats with ``matches == n`` — reliability cares
+    only about match count, so we don't need a full aggregation here."""
+    return compute_player_stats([_mp(match_id=f"m-{i}") for i in range(n)])
+
+
+def test_reliability_all_false_on_empty_input() -> None:
+    """Empty stats → every flag False. No mixed states in a blank profile."""
+    flags = reliability_flags(_stats_with_n_matches(0))
+    assert flags and not any(flags.values())
+
+
+def test_reliability_all_true_at_max_threshold() -> None:
+    """30 matches clears every threshold (HS% and FB are the strictest)."""
+    flags = reliability_flags(_stats_with_n_matches(MIN_MATCHES_HS))
+    assert all(flags.values())
+
+
+def test_reliability_tiered_at_intermediate_counts() -> None:
+    """Midway between ACS and HS thresholds: fast metrics flip first.
+
+    20 matches: ACS/ADR/K/D/KDA reliable; HS%/FB rates not yet.
+    """
+    flags = reliability_flags(_stats_with_n_matches(20))
+    assert flags["acs"] is True
+    assert flags["adr"] is True
+    assert flags["kd"] is True
+    assert flags["kda"] is True
+    assert flags["hs_pct"] is False  # needs 30
+    assert flags["fb_rate"] is False  # needs 30
+
+
+def test_reliability_boundary_is_inclusive() -> None:
+    """``>=`` semantics: exactly-at-threshold counts as reliable.
+
+    The rule says "fewer matches than threshold" triggers ⚠️, so N==threshold
+    must NOT warn. Tested at the ACS boundary because it's the lowest."""
+    below = reliability_flags(_stats_with_n_matches(MIN_MATCHES_ACS - 1))
+    at = reliability_flags(_stats_with_n_matches(MIN_MATCHES_ACS))
+    assert below["acs"] is False
+    assert at["acs"] is True
+
+
+def test_reliability_split_uses_stricter_win_rate_floor() -> None:
+    """Per-agent/per-map splits need 30+ matches for win rate even when
+    the overall would be reliable at 15. Guards against showing a 3-4
+    Jett record as a meaningful win rate just because ACS is reliable."""
+    # 15 matches: overall win_rate reliable (uses ACS floor); split is not.
+    stats = _stats_with_n_matches(MIN_MATCHES_ACS)
+    overall = reliability_flags(stats, is_split=False)
+    split = reliability_flags(stats, is_split=True)
+    assert overall["win_rate"] is True
+    assert split["win_rate"] is False
+
+
+def test_reliability_split_win_rate_clears_at_30() -> None:
+    """At MIN_MATCHES_WIN_RATE_SPLIT, the split-tagged flag flips True."""
+    stats = _stats_with_n_matches(MIN_MATCHES_WIN_RATE_SPLIT)
+    assert reliability_flags(stats, is_split=True)["win_rate"] is True
