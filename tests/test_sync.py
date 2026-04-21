@@ -146,9 +146,7 @@ def mmr_data():
 class TestSyncOrchestratorRun:
     """Tests for the full run() method with all phases mocked."""
 
-    async def test_happy_path_returns_correct_result(
-        self, account_data, mmr_data, match_details
-    ):
+    async def test_happy_path_returns_correct_result(self, account_data, mmr_data, match_details):
         """Two new matches → result counts correct, puuid set."""
         session = _make_session()
         client = _make_client(
@@ -203,9 +201,7 @@ class TestSyncOrchestratorRun:
         assert result.matches_fetched == 1
         assert result.matches_skipped == 1
 
-    async def test_per_match_api_error_is_non_fatal(
-        self, account_data, mmr_data, match_details
-    ):
+    async def test_per_match_api_error_is_non_fatal(self, account_data, mmr_data, match_details):
         """APIError on one match → collected in result.errors, run continues."""
         session = _make_session()
         client = _make_client(
@@ -234,7 +230,7 @@ class TestSyncOrchestratorRun:
         assert result.ok
         assert len(result.errors) == 1
         assert "rate limited" in result.errors[0]
-        assert result.matches_new == 1   # the second match succeeded
+        assert result.matches_new == 1  # the second match succeeded
 
     async def test_resolve_api_error_raises_sync_error(self, account_data, mmr_data):
         """APIError in _resolve is promoted to SyncError and propagates out."""
@@ -345,9 +341,7 @@ class TestDiscover:
         assert fetched == 1
         assert skipped == 0
 
-    async def test_already_stored_stops_early_in_normal_mode(
-        self, account_data, mmr_data
-    ):
+    async def test_already_stored_stops_early_in_normal_mode(self, account_data, mmr_data):
         """First stored match stops early scan when full=False."""
         stored = [_stored_match(MATCH_A), _stored_match(MATCH_B)]
         session = _make_session()
@@ -364,7 +358,7 @@ class TestDiscover:
             )
 
         assert new_ids == []
-        assert skipped == 1   # stopped after first duplicate — MATCH_B never checked
+        assert skipped == 1  # stopped after first duplicate — MATCH_B never checked
 
     async def test_full_mode_scans_past_stored_ids(self, account_data, mmr_data):
         """full=True continues scanning even when a stored match is encountered."""

@@ -49,6 +49,74 @@ def get_engine() -> AsyncEngine:
     return _engine
 
 
+def _find_alembic_dir() -> Path | None:
+    """Locate the repo's ``alembic/`` directory by walking up from this module.
+
+    Returns ``None`` when running from an installed wheel — alembic sources
+    aren't packaged (see ``[tool.hatch.build.targets.wheel]`` in pyproject),
+    and without them we can't stamp. That's fine: an installed-wheel user
+    can't run ``alembic upgrade`` either, so skipping the stamp is safe.
+    """
+    for parent in Path(__file__).resolve().parents:
+        candidate = parent / "alembic"
+        if (candidate / "env.py").exists():
+            return candidate
+    return None
+
+
+def _stamp_if_needed(sync_conn) -> None:
+    """Mark the DB as being at the current Alembic head if it isn't already.
+
+    Problem this solves: ``Base.metadata.create_all`` writes the schema but
+    does not populate ``alembic_version``. A later ``alembic upgrade head``
+    then tries to re-create existing tables and fails. Stamping here keeps
+    CLI-created DBs forward-compatible with migrations.
+
+    Idempotent: if ``alembic_version`` already has a row (because an alembic
+    command ran previously), we leave it alone — alembic is in charge now.
+    """
+    from alembic.config import Config
+    from alembic.runtime.migration import MigrationContext
+    from alembic.script import ScriptDirectory
+
+    alembic_dir = _find_alembic_dir()
+    if alembic_dir is None:
+        return
+
+    ctx = MigrationContext.configure(sync_conn)
+    if ctx.get_current_revision() is not None:
+        return  # already stamped — leave it to alembic
+
+    cfg = Config()
+    cfg.set_main_option("script_location", str(alembic_dir))
+    script = ScriptDirectory.from_config(cfg)
+    head = script.get_current_head()
+    if head is None:
+        return
+
+    # stamp() writes ``alembic_version`` within the current transaction,
+    # which is what we want — keeps the schema + version write atomic.
+    ctx.stamp(script, head)
+
+
+async def ensure_db(db_path: Path) -> AsyncEngine:
+    """Initialise the engine, create all tables, and stamp the Alembic head.
+
+    Callers that need the DB ready (sync, stats, profile) should start with:
+
+        engine = await ensure_db(settings.data_dir / "valocoach.db")
+
+    Safe to call on every command invocation — ``CREATE TABLE IF NOT EXISTS``
+    is a no-op when tables already exist, and the stamp step is guarded so
+    it only writes ``alembic_version`` on first init.
+    """
+    engine = init_engine(db_path)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(_stamp_if_needed)
+    return engine
+
+
 @asynccontextmanager
 async def session_scope() -> AsyncIterator[AsyncSession]:
     """Transactional scope around a series of operations."""

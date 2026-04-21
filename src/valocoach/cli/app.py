@@ -39,21 +39,39 @@ def coach(
     agent: str | None = typer.Option(None, "--agent", "-a"),
     map_: str | None = typer.Option(None, "--map", "-m", help="Map name"),
     side: str | None = typer.Option(None, "--side", "-s", help="attack or defense"),
+    with_stats: bool = typer.Option(
+        True,
+        "--with-stats/--no-stats",
+        help="Include your recent performance stats in the prompt (default on).",
+    ),
 ) -> None:
     """Get tactical coaching for a match situation."""
     from valocoach.cli.commands.coach import run_coach
 
-    run_coach(situation=situation, agent=agent, map_=map_, side=side)
+    run_coach(
+        situation=situation,
+        agent=agent,
+        map_=map_,
+        side=side,
+        with_stats=with_stats,
+    )
 
 
 @app.command()
 def stats(
-    agent: str | None = typer.Option(None, "--agent", "-a"),
-    map_: str | None = typer.Option(None, "--map", "-m"),
-    period: str = typer.Option("30d", "--period", "-p"),
+    agent: str | None = typer.Option(None, "--agent", "-a", help="Filter to a single agent."),
+    map_: str | None = typer.Option(None, "--map", "-m", help="Filter to a single map."),
+    period: str = typer.Option(
+        "30d",
+        "--period",
+        "-p",
+        help="Time window: 'Nd' for last N days (e.g. 7d, 30d) or 'all'.",
+    ),
 ) -> None:
-    """Show your performance stats. (stub — week 3)"""
-    display.warn("stats: not implemented yet (week 3)")
+    """Show your performance stats (overall + per-agent + per-map)."""
+    from valocoach.cli.commands.stats import run_stats
+
+    run_stats(agent=agent, map_=map_, period=period)
 
 
 @app.command()
@@ -79,15 +97,13 @@ def sync(
 
     from valocoach.core.config import load_settings
     from valocoach.core.exceptions import ConfigError, SyncError
-    from valocoach.data.database import Base, init_engine
+    from valocoach.data.database import ensure_db
     from valocoach.data.sync import sync_player_matches
 
     settings = load_settings()
 
     async def _run() -> None:
-        engine = init_engine(settings.data_dir / "valocoach.db")
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+        await ensure_db(settings.data_dir / "valocoach.db")
 
         try:
             result = await sync_player_matches(settings, limit=limit, full=full, mode=mode)
@@ -113,9 +129,30 @@ def sync(
 
 
 @app.command()
-def profile() -> None:
-    """Show player profile summary. (stub — week 2)"""
-    display.warn("profile: not implemented yet (week 2)")
+def profile(
+    name: str | None = typer.Option(
+        None,
+        "--name",
+        "-n",
+        help="Riot username. Defaults to your configured riot_name.",
+    ),
+    tag: str | None = typer.Option(
+        None,
+        "--tag",
+        "-t",
+        help="Riot tag. Must be given together with --name.",
+    ),
+    limit: int = typer.Option(
+        20,
+        "--limit",
+        "-l",
+        help="Number of recent matches to summarise.",
+    ),
+) -> None:
+    """Show player identity + compact recent-performance card."""
+    from valocoach.cli.commands.profile import run_profile
+
+    run_profile(name=name, tag=tag, limit=limit)
 
 
 @app.command()

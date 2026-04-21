@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from valocoach.cli import display
+from valocoach.coach import build_stats_context
 from valocoach.core.config import load_settings
 from valocoach.llm.provider import stream_completion
 
@@ -15,6 +16,7 @@ Rules:
 - If the player names an agent, tailor the plan to that agent's full kit.
 - If economy is mentioned, factor in buy/save/force decisions.
 - Never give generic advice like "communicate with team" — assume comms are fine.
+- When PLAYER CONTEXT is provided below, use it to tailor advice to this player's actual recent form — reference their agents, maps, and tendencies where relevant. Do NOT dump the stats back at them.
 
 Respond in markdown with these sections:
 
@@ -33,13 +35,42 @@ Keep response under 350 words. Prioritize specificity over completeness.
 """.strip()
 
 
+def _build_system_prompt(base_prompt: str, stats_context: str | None) -> str:
+    """Compose the final system prompt.
+
+    When ``stats_context`` is present, append it under a separator so the
+    LLM can distinguish role instructions from player data.
+    """
+    if stats_context is None:
+        return base_prompt
+    return f"{base_prompt}\n\n---\n\n{stats_context}"
+
+
 def run_coach(
     situation: str,
     agent: str | None = None,
     map_: str | None = None,
     side: str | None = None,
+    *,
+    with_stats: bool = True,
 ) -> None:
     settings = load_settings()
+
+    # Fetch player context — non-fatal. If anything goes wrong (no sync yet,
+    # DB unreachable, bad data), we still want coaching to work; the user
+    # just loses the personalisation.
+    stats_context: str | None = None
+    if with_stats:
+        try:
+            stats_context = build_stats_context(settings)
+        except Exception as e:
+            display.warn(f"Couldn't load stats context (continuing without): {e}")
+            stats_context = None
+
+    if stats_context is not None:
+        display.info("Personalised with your recent stats.")
+
+    system_prompt = _build_system_prompt(SYSTEM_PROMPT_STUB, stats_context)
 
     # Week 1: just pass the situation through. Week 5 will add structured parsing.
     user_msg_parts = [f"Situation: {situation}"]
@@ -56,7 +87,7 @@ def run_coach(
     try:
         token_stream = stream_completion(
             settings=settings,
-            system_prompt=SYSTEM_PROMPT_STUB,
+            system_prompt=system_prompt,
             user_message=user_msg,
         )
         display.stream_to_panel(token_stream)

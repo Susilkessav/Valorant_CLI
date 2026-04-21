@@ -21,6 +21,8 @@ def test_help_shows_all_commands():
 
 
 def test_unimplemented_stub_exits_cleanly():
-    result = runner.invoke(app, ["stats"])
+    # `meta`, `patch`, `interactive` are still stubs — pick one that hasn't
+    # been implemented yet so this test tracks stub→real migrations.
+    result = runner.invoke(app, ["meta"])
     assert result.exit_code == 0
     assert "not implemented" in result.stdout.lower()

@@ -280,9 +280,7 @@ def match_details() -> MatchDetails:
                 killer=_PlayerRef(puuid=PUUID, name="Yoursaviour01", tag="SK04", team="Blue"),
                 victim=_PlayerRef(puuid=ENEMY_PUUID, name="dipp", tag="100T", team="Red"),
                 weapon=_Ref(id="phantom-id", name="Phantom"),
-                assistants=[
-                    _PlayerRef(puuid="ally-puuid", name="ally", tag="AA", team="Blue")
-                ],
+                assistants=[_PlayerRef(puuid="ally-puuid", name="ally", tag="AA", team="Blue")],
             ),
         ],
     )

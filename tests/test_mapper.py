@@ -90,7 +90,7 @@ def test_match_metadata_fields(match_details):
     assert m.map_id == "map-lotus-id"
     assert m.queue_id == "competitive"
     assert m.is_ranked is True
-    assert m.game_length_secs == 1462          # 1_462_000 ms ÷ 1000
+    assert m.game_length_secs == 1462  # 1_462_000 ms ÷ 1000
     assert m.rounds_played == 2
     assert m.red_score == 9
     assert m.blue_score == 8
@@ -155,7 +155,7 @@ def test_match_player_impact_stats(match_details):
 def test_match_player_won_assigned_correctly(match_details):
     m = match_from_details(match_details)
     enemy = next(p for p in m.players if p.puuid == ENEMY_PUUID)
-    assert enemy.won is True   # Red team won
+    assert enemy.won is True  # Red team won
 
 
 # ---------------------------------------------------------------------------
@@ -224,7 +224,7 @@ def test_ability_kill_weapon_name_is_none(match_details):
             time_in_match_in_ms=99_000,
             killer=_PlayerRef(puuid="x", team="Red"),
             victim=_PlayerRef(puuid="y", team="Blue"),
-            weapon=_Ref(id="", name=None),   # ability kill — no weapon name
+            weapon=_Ref(id="", name=None),  # ability kill — no weapon name
         )
     )
     m = match_from_details(match_details)

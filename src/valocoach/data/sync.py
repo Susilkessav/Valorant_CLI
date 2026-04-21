@@ -72,7 +72,7 @@ class SyncResult:
     matches_fetched: int = 0
     matches_new: int = 0
     matches_skipped: int = 0
-    error: str | None = None          # fatal error that aborted the run
+    error: str | None = None  # fatal error that aborted the run
     errors: list[str] = field(default_factory=list)  # per-match non-fatal errors
 
     @property
@@ -149,8 +149,8 @@ class SyncOrchestrator:
             sync_log_id = await self._open_log(account, mmr)
 
             # ── Phase 2: discover which match IDs are new ─────────────────
-            new_ids, result.matches_fetched, result.matches_skipped = (
-                await self._discover(region, name, tag, limit=limit, full=full, mode=mode)
+            new_ids, result.matches_fetched, result.matches_skipped = await self._discover(
+                region, name, tag, limit=limit, full=full, mode=mode
             )
 
             # ── Phase 3: fetch details + upsert ───────────────────────────
@@ -218,13 +218,9 @@ class SyncOrchestrator:
         Returns:
             (new_match_ids, total_fetched, skipped_count)
         """
-        self._con.print(
-            f"[cyan]Fetching stored match list (mode={mode!r}, limit={limit})…[/cyan]"
-        )
+        self._con.print(f"[cyan]Fetching stored match list (mode={mode!r}, limit={limit})…[/cyan]")
         try:
-            stored = await self._client.get_stored_matches(
-                region, name, tag, mode=mode, size=limit
-            )
+            stored = await self._client.get_stored_matches(region, name, tag, mode=mode, size=limit)
         except APIError as exc:
             raise SyncError(f"Cannot fetch match list: {exc}") from exc
 
@@ -251,8 +247,7 @@ class SyncOrchestrator:
                     new_ids.append(mid)
 
         self._con.print(
-            f"  [green]{len(new_ids)} new[/green]  /  "
-            f"[dim]{skipped} already stored[/dim]"
+            f"  [green]{len(new_ids)} new[/green]  /  " f"[dim]{skipped} already stored[/dim]"
         )
         return new_ids, fetched, skipped
 
@@ -309,11 +304,11 @@ class SyncOrchestrator:
 
     async def _finalise(self, sync_log_id: int, result: SyncResult) -> None:
         """Close the SyncLog row with outcome counts.  Always called via finally."""
-        error_summary: str | None
-        if result.errors:
-            error_summary = f"{len(result.errors)} fetch error(s)"
-        else:
-            error_summary = result.error  # None if everything was fine
+        # None when everything was fine; a fetch-error summary wins over
+        # any previously-set error because aggregate counts are more useful.
+        error_summary: str | None = (
+            f"{len(result.errors)} fetch error(s)" if result.errors else result.error
+        )
 
         async with session_scope() as session:
             sync_log = await session.get(SyncLog, sync_log_id)
