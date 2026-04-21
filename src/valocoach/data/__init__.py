@@ -27,7 +27,7 @@ from __future__ import annotations
 from valocoach.data.api_client import HenrikClient
 
 # Database setup
-from valocoach.data.database import Base, get_engine, init_engine, session_scope
+from valocoach.data.database import Base, ensure_db, get_engine, init_engine, session_scope
 
 # Mapper functions (API shape → ORM shape — update mapper.py when schema changes)
 from valocoach.data.mapper import match_from_details, player_from_account_mmr
@@ -57,6 +57,7 @@ __all__ = [
     # database
     "Base",
     "init_engine",
+    "ensure_db",
     "get_engine",
     "session_scope",
     # client

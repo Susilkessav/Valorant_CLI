@@ -49,6 +49,23 @@ def get_engine() -> AsyncEngine:
     return _engine
 
 
+async def ensure_db(db_path: Path) -> AsyncEngine:
+    """Initialise the engine and create all tables. Idempotent.
+
+    Callers that need the DB ready (sync, stats, profile) should start with:
+
+        engine = await ensure_db(settings.data_dir / "valocoach.db")
+
+    Safe to call on every command invocation — ``CREATE TABLE IF NOT EXISTS``
+    is a no-op when tables already exist, and ``init_engine`` overwrites the
+    module-level engine pointer rather than raising.
+    """
+    engine = init_engine(db_path)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    return engine
+
+
 @asynccontextmanager
 async def session_scope() -> AsyncIterator[AsyncSession]:
     """Transactional scope around a series of operations."""
