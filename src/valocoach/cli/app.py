@@ -67,11 +67,17 @@ def stats(
         "-p",
         help="Time window: 'Nd' for last N days (e.g. 7d, 30d) or 'all'.",
     ),
+    result: str | None = typer.Option(
+        None,
+        "--result",
+        "-r",
+        help="Filter by match outcome: 'win' or 'loss'. Omit for both.",
+    ),
 ) -> None:
-    """Show your performance stats (overall + per-agent + per-map)."""
+    """Show your performance stats (overall + win/loss split + per-agent + per-map)."""
     from valocoach.cli.commands.stats import run_stats
 
-    run_stats(agent=agent, map_=map_, period=period)
+    run_stats(agent=agent, map_=map_, period=period, result=result)
 
 
 @app.command()

@@ -166,6 +166,11 @@ class OrmMatchPlayer(Base):
     plants: Mapped[int] = mapped_column(Integer, default=0)
     defuses: Mapped[int] = mapped_column(Integer, default=0)
 
+    # Economy — match-level aggregates from player.economy API field.
+    # Populated on v4 syncs; NULL for rows synced before this migration.
+    credits_spent: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    avg_loadout: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     # Behavior / metadata
     afk_rounds: Mapped[int] = mapped_column(Integer, default=0)
     rounds_in_spawn: Mapped[int] = mapped_column(Integer, default=0)
@@ -224,7 +229,9 @@ class Round(Base):
     result_code: Mapped[str] = mapped_column(String, nullable=False)  # e.g. "Elimination"
     bomb_planted: Mapped[bool] = mapped_column(Boolean, default=False)
     plant_site: Mapped[str | None] = mapped_column(String, nullable=True)
+    planter_puuid: Mapped[str | None] = mapped_column(String, nullable=True)
     bomb_defused: Mapped[bool] = mapped_column(Boolean, default=False)
+    defuser_puuid: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # Relationships
     match: Mapped[Match] = relationship(back_populates="rounds")

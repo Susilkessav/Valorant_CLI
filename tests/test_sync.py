@@ -353,7 +353,7 @@ class TestDiscover:
             patch(_P_MATCH_EXISTS, new_callable=AsyncMock, return_value=True),
         ):
             orch = SyncOrchestrator(client, console=_quiet_console())
-            new_ids, fetched, skipped = await orch._discover(
+            new_ids, _fetched, skipped = await orch._discover(
                 "na", "Yoursaviour01", "SK04", limit=20, full=False, mode="competitive"
             )
 
@@ -398,7 +398,7 @@ class TestDiscover:
             patch(_P_MATCH_EXISTS, new_callable=AsyncMock, return_value=False),
         ):
             orch = SyncOrchestrator(client, console=_quiet_console())
-            new_ids, fetched, skipped = await orch._discover(
+            new_ids, _fetched, _skipped = await orch._discover(
                 "na", "Yoursaviour01", "SK04", limit=20, full=False, mode="competitive"
             )
 

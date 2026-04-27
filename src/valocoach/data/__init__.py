@@ -29,6 +29,14 @@ from valocoach.data.api_client import HenrikClient
 # Database setup
 from valocoach.data.database import Base, ensure_db, get_engine, init_engine, session_scope
 
+# Data loader (bridge between DB and calculator)
+from valocoach.data.loader import (
+    DEFAULT_LOAD_LIMIT,
+    PlayerData,
+    load_player_data,
+    load_player_data_async,
+)
+
 # Mapper functions (API shape → ORM shape — update mapper.py when schema changes)
 from valocoach.data.mapper import match_from_details, player_from_account_mmr
 
@@ -54,38 +62,43 @@ from valocoach.data.repository import (
 )
 
 __all__ = [
-    # database
-    "Base",
-    "init_engine",
-    "ensure_db",
-    "get_engine",
-    "session_scope",
-    # client
-    "HenrikClient",
+    # loader (DB → calculator bridge)
+    "DEFAULT_LOAD_LIMIT",
     # pydantic models
     "AccountData",
+    # database
+    "Base",
+    # client
+    "HenrikClient",
+    # orm models  (MatchPlayer = ORM table class)
+    "Kill",
     "MMRData",
     "MMRHistoryEntry",
-    "MatchData",
-    # orm models  (MatchPlayer = ORM table class)
-    "Player",
     "Match",
+    "MatchData",
     "MatchPlayer",
+    "Player",
+    "PlayerData",
     "Round",
-    "Kill",
     "SyncLog",
-    # mapper (API shape → ORM shape)
-    "match_from_details",
-    "player_from_account_mmr",
     # repository (DB operations)
-    "upsert_player",
-    "upsert_match",
-    "upsert_match_details",
-    "match_exists",
+    "complete_sync",
+    "ensure_db",
+    "get_engine",
+    "get_match",
     "get_player",
     "get_player_by_name",
     "get_recent_matches",
-    "get_match",
+    "init_engine",
+    "load_player_data",
+    "load_player_data_async",
+    "match_exists",
+    # mapper (API shape → ORM shape)
+    "match_from_details",
+    "player_from_account_mmr",
+    "session_scope",
     "start_sync",
-    "complete_sync",
+    "upsert_match",
+    "upsert_match_details",
+    "upsert_player",
 ]

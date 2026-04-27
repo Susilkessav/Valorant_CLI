@@ -46,30 +46,77 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Final
 
 from valocoach.data.orm_models import MatchPlayer
+from valocoach.stats.constants import SAMPLE_THRESHOLDS
+
+# Flat aliases derived from SAMPLE_THRESHOLDS so existing callers
+# (tests, stats CLI, profile card, coach context) keep working unchanged.
+MIN_MATCHES_ACS: int = SAMPLE_THRESHOLDS["acs"]["matches"]  # type: ignore[assignment]
+MIN_MATCHES_ADR: int = SAMPLE_THRESHOLDS["adr"]["matches"]  # type: ignore[assignment]
+MIN_MATCHES_KD: int = SAMPLE_THRESHOLDS["kd"]["matches"]  # type: ignore[assignment]
+MIN_MATCHES_HS: int = SAMPLE_THRESHOLDS["hs_pct"]["matches"]  # type: ignore[assignment]
+MIN_MATCHES_FB: int = SAMPLE_THRESHOLDS["first_blood_rate"]["matches"]  # type: ignore[assignment]
+MIN_MATCHES_WIN_RATE_SPLIT: int = SAMPLE_THRESHOLDS["win_rate_split"]["matches"]  # type: ignore[assignment]
 
 # ---------------------------------------------------------------------------
-# Reliability thresholds
+# StatResult — a computed value bundled with its presentation metadata
 # ---------------------------------------------------------------------------
-# Minimum match count for each metric to be considered reliable. Sourced
-# from BUILD_PLAN.md § "Sample-size thresholds for statistical reliability"
-# (upper end of each range — see module docstring for the why).
-#
-# These are exposed as module-level constants on purpose: tests pin the
-# values, and presentation code (stats CLI, profile card, coach context)
-# should reference the constants by name rather than hard-coding integers.
 
-MIN_MATCHES_ACS: Final[int] = 15  # BUILD_PLAN ACS/ADR: 10-15
-MIN_MATCHES_ADR: Final[int] = 15
-MIN_MATCHES_KD: Final[int] = 20  # BUILD_PLAN K/D: 15-20
-MIN_MATCHES_HS: Final[int] = 30  # BUILD_PLAN HS%: 20-30
-MIN_MATCHES_FB: Final[int] = 30  # BUILD_PLAN first-blood rate: 20-30
 
-# Win rate per split (per-agent, per-map) needs a larger sample than the
-# overall win rate because each split is a narrower subset of matches.
-MIN_MATCHES_WIN_RATE_SPLIT: Final[int] = 30  # BUILD_PLAN win rate per split: 30+
+@dataclass(slots=True)
+class StatResult:
+    """One computed metric with reliability and display metadata.
+
+    Carrying reliability inline — rather than querying a separate flags dict
+    after the fact — means the presentation layer needs no knowledge of
+    thresholds. It reads ``stat.is_reliable`` and ``stat.warning`` and moves on.
+
+    ``format`` controls how ``display`` renders the value:
+        ".1f"   one decimal  (ACS 245.3, ADR 148.7)
+        ".0f"   integer      (rounds, raw counts)
+        "pct"   appends %    (KAST 74.0%, HS 22.0%)
+        "ratio" two decimals (K/D 1.35)
+    """
+
+    value: float
+    label: str
+    format: str = ".1f"
+    matches_used: int = 0
+    rounds_used: int = 0
+    is_reliable: bool = True
+    warning: str | None = None
+
+    @property
+    def display(self) -> str:
+        if self.format == "pct":
+            return f"{self.value:.1f}%"
+        if self.format == "ratio":
+            return f"{self.value:.2f}"
+        return f"{self.value:{self.format}}"
+
+
+def _check_threshold(metric: str, matches: int, rounds: int = 0) -> tuple[bool, str | None]:
+    """Return (is_reliable, warning_str | None) for a metric and sample size.
+
+    Reads ``SAMPLE_THRESHOLDS`` — the single source of truth for both the
+    match-count and round-count floors. A metric absent from the table is
+    assumed reliable (no threshold defined ≡ no minimum).
+
+    Both dimensions must be met. A player who hit the match floor but not
+    the round floor (played many short stomps) gets a round-count warning.
+    """
+    thresh = SAMPLE_THRESHOLDS.get(metric)
+    if not thresh:
+        return True, None
+    min_m: int = thresh.get("matches") or 0
+    min_r: int | None = thresh.get("rounds")
+    if matches < min_m:
+        return False, f"⚠ {matches}/{min_m} matches — stat may be unreliable"
+    if min_r and rounds < min_r:
+        return False, f"⚠ {rounds}/{min_r} rounds — stat may be unreliable"
+    return True, None
+
 
 # ---------------------------------------------------------------------------
 # Result types
@@ -120,6 +167,9 @@ class PlayerStats:
     # Objective
     plants: int
     defuses: int
+
+    # Economy — None when credits_spent data was unavailable (pre-migration rows).
+    econ_rating: float | None  # damage_dealt / (credits_spent / 1000)
 
 
 @dataclass(frozen=True, slots=True)
@@ -181,6 +231,7 @@ def reliability_flags(stats: PlayerStats, *, is_split: bool = False) -> dict[str
         "hs_pct": m >= MIN_MATCHES_HS,
         "fb_rate": m >= MIN_MATCHES_FB,
         "fd_rate": m >= MIN_MATCHES_FB,  # first-death is the same rarity
+        "econ_rating": m >= MIN_MATCHES_ADR,  # same convergence as ADR
     }
 
 
@@ -210,6 +261,7 @@ def _zero_stats() -> PlayerStats:
         fb_diff=0,
         plants=0,
         defuses=0,
+        econ_rating=None,
     )
 
 
@@ -253,6 +305,11 @@ def compute_player_stats(match_players: Iterable[MatchPlayer]) -> PlayerStats:
     plants = sum(mp.plants for mp in rows)
     defuses = sum(mp.defuses for mp in rows)
 
+    # Econ rating: total damage / (total credits spent / 1000).
+    # NULL when no row has economy data (pre-migration or non-v4 sync).
+    total_spent = sum(mp.credits_spent for mp in rows if mp.credits_spent is not None)
+    econ_rating = _safe_div(damage, total_spent / 1000) if total_spent else None
+
     return PlayerStats(
         matches=matches,
         rounds=rounds,
@@ -277,6 +334,7 @@ def compute_player_stats(match_players: Iterable[MatchPlayer]) -> PlayerStats:
         fb_diff=first_bloods - first_deaths,
         plants=plants,
         defuses=defuses,
+        econ_rating=econ_rating,
     )
 
 

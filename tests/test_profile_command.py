@@ -3,24 +3,36 @@
 The async DB plumbing is covered by test_repository.py; here we focus on
 the parts profile owns: figuring out which player to show (CLI args vs
 settings fallback) and that the renderer surfaces the right numbers.
+
+Mock contract (after stats-engine upgrade):
+    profile calls load_player_data_async (async), so mocks use
+    AsyncMock / coroutine side_effect returning PlayerData | None.
 """
 
 from __future__ import annotations
 
 from io import StringIO
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
+import click
 import pytest
 import typer
 from rich.console import Console
 
 from valocoach.cli.commands.profile import (
-    _render_identity_panel,
-    _render_summary_card,
     _resolve_identity,
     run_profile,
 )
-from valocoach.cli.commands.stats import WARN_PREFIX
+from valocoach.cli.formatter import (
+    WARN_PREFIX,
+)
+from valocoach.cli.formatter import (
+    render_identity_panel as _render_identity_panel,
+)
+from valocoach.cli.formatter import (
+    render_summary_card as _render_summary_card,
+)
+from valocoach.data.loader import PlayerData
 from valocoach.data.orm_models import Match, MatchPlayer, Player
 
 # ---------------------------------------------------------------------------
@@ -116,6 +128,11 @@ def _player(
 
 def _capture_console() -> Console:
     return Console(file=StringIO(), force_terminal=False, width=120)
+
+
+def _player_data(rows: list[MatchPlayer]) -> PlayerData:
+    """Convenience: wrap player + rows into a PlayerData with no round data."""
+    return PlayerData(player=_player(), rows=rows, full_matches=[])
 
 
 # ---------------------------------------------------------------------------
@@ -250,19 +267,14 @@ def test_summary_card_includes_fb_diff_with_sign() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Reliability warnings (⚠️) — Phase C
+# Reliability warnings (⚠️)
 # ---------------------------------------------------------------------------
-#
-# The profile card shares machinery with `valocoach stats`, but users interact
-# with the two differently: stats is a deep dive, profile is at-a-glance. The
-# ⚠️ signal matters *more* on profile because a glance is where small-sample
-# numbers are most likely to be taken at face value.
 
 
 def test_summary_card_warns_on_thin_sample() -> None:
     """Default --limit is 20. HS% and FB rate both need 30 matches — at
     20 the card should warn even though ACS (needs 15) and K/D (needs 20)
-    are reliable. This is the realistic first-weeks user experience."""
+    are reliable."""
     rows = [_mp(match_id=f"m-{i}") for i in range(20)]
     con = _capture_console()
     any_warn = _render_summary_card(con, rows, limit=20)
@@ -286,19 +298,19 @@ def test_summary_card_no_warn_at_full_reliability() -> None:
 
 
 def test_summary_card_empty_returns_false() -> None:
-    """Empty-row branch returns False so the legend doesn't appear on an
-    otherwise-blank profile (no ⚠️ rendered → nothing to explain)."""
+    """Empty-row branch returns False so the legend doesn't appear."""
     con = _capture_console()
     assert _render_summary_card(con, [], limit=20) is False
 
 
-def test_run_profile_legend_only_when_warnings_fire(tmp_path) -> None:
-    """End-to-end: legend text appears iff any ⚠️ was rendered. Mirrors
-    the same contract as `valocoach stats` so users see consistent
-    behaviour across the two commands."""
-    from valocoach.core.config import Settings
+# ---------------------------------------------------------------------------
+# run_profile end-to-end  (loader mocked at import point)
+# ---------------------------------------------------------------------------
 
-    fake_settings = Settings(
+
+def _fake_settings(tmp_path):
+    from valocoach.core.config import Settings
+    return Settings(
         riot_name="Tester",
         riot_tag="NA1",
         riot_region="na",
@@ -306,31 +318,218 @@ def test_run_profile_legend_only_when_warnings_fire(tmp_path) -> None:
         data_dir=tmp_path,
     )
 
+
+def test_run_profile_legend_only_when_warnings_fire(tmp_path) -> None:
+    """Legend text appears iff any ⚠️ was rendered."""
+    fake_settings = _fake_settings(tmp_path)
     thin_rows = [_mp(match_id=f"m-{i}") for i in range(5)]
     thick_rows = [_mp(match_id=f"m-{i}") for i in range(30)]
 
-    async def _fetch_thin(**kwargs: object):
-        return _player(), thin_rows
-
-    async def _fetch_thick(**kwargs: object):
-        return _player(), thick_rows
-
-    for fetch, expect_legend in [(_fetch_thin, True), (_fetch_thick, False)]:
+    for rows, expect_legend in [(thin_rows, True), (thick_rows, False)]:
+        data = _player_data(rows)
         con = _capture_console()
         with (
+            patch("valocoach.cli.commands.profile.load_settings", return_value=fake_settings),
             patch(
-                "valocoach.cli.commands.profile.load_settings",
-                return_value=fake_settings,
-            ),
-            patch(
-                "valocoach.cli.commands.profile._fetch_profile_data",
-                side_effect=fetch,
+                "valocoach.cli.commands.profile.load_player_data_async",
+                new=AsyncMock(return_value=data),
             ),
         ):
             run_profile(name="Tester", tag="NA1", console=con)
         out = con.file.getvalue()
         has_legend = "sample-size threshold" in out
         assert has_legend is expect_legend, (
-            f"profile legend mismatch (fetch={fetch.__name__}): "
+            f"profile legend mismatch (rows={len(rows)}): "
             f"got has_legend={has_legend}, expected {expect_legend}"
         )
+
+
+def test_run_profile_not_found_warns_and_exits(tmp_path) -> None:
+    """None from the loader → warn and exit(1)."""
+    fake_settings = _fake_settings(tmp_path)
+    with (
+        patch("valocoach.cli.commands.profile.load_settings", return_value=fake_settings),
+        patch(
+            "valocoach.cli.commands.profile.load_player_data_async",
+            new=AsyncMock(return_value=None),
+        ),
+        pytest.raises(click.exceptions.Exit),
+    ):
+        run_profile(name="Ghost", tag="XX99")
+
+
+def test_run_profile_passes_resolved_name_to_loader(tmp_path) -> None:
+    """The loader must be called with the CLI --name/--tag, not the settings default."""
+    fake_settings = _fake_settings(tmp_path)
+    data = _player_data([_mp(match_id=f"m-{i}") for i in range(30)])
+    mock_loader = AsyncMock(return_value=data)
+
+    con = _capture_console()
+    with (
+        patch("valocoach.cli.commands.profile.load_settings", return_value=fake_settings),
+        patch("valocoach.cli.commands.profile.load_player_data_async", new=mock_loader),
+    ):
+        run_profile(name="TargetPlayer", tag="TG99", console=con)
+
+    call_kwargs = mock_loader.call_args.kwargs
+    assert call_kwargs["name"] == "TargetPlayer"
+    assert call_kwargs["tag"] == "TG99"
+    assert call_kwargs["include_rounds"] is True
+
+
+def test_run_profile_uses_settings_identity_when_no_args(tmp_path) -> None:
+    """No --name/--tag → loader receives settings.riot_name / riot_tag."""
+    fake_settings = _fake_settings(tmp_path)
+    data = _player_data([_mp(match_id=f"m-{i}") for i in range(30)])
+    mock_loader = AsyncMock(return_value=data)
+
+    con = _capture_console()
+    with (
+        patch("valocoach.cli.commands.profile.load_settings", return_value=fake_settings),
+        patch("valocoach.cli.commands.profile.load_player_data_async", new=mock_loader),
+    ):
+        run_profile(console=con)  # no name/tag
+
+    call_kwargs = mock_loader.call_args.kwargs
+    assert call_kwargs["name"] == "Tester"
+    assert call_kwargs["tag"] == "NA1"
+
+
+def test_run_profile_round_stats_shown_when_full_matches_present(tmp_path) -> None:
+    """When PlayerData.full_matches is non-empty with rounds, KAST appears."""
+    import json
+
+    from valocoach.data.orm_models import Kill, Round
+
+    fake_settings = _fake_settings(tmp_path)
+
+    # Build a minimal full Match with one round so analyze_rounds finds something.
+    from valocoach.data.orm_models import Match as OrmMatch
+
+    full_match = OrmMatch(
+        match_id="m-full",
+        map_name="Ascent",
+        map_id=None,
+        queue_id="competitive",
+        is_ranked=True,
+        game_version=None,
+        game_length_secs=0,
+        season_short=None,
+        region="na",
+        rounds_played=1,
+        red_score=0,
+        blue_score=0,
+        winning_team=None,
+        started_at="2026-04-19T18:00:00+00:00",
+    )
+    rnd = Round(
+        match_id="m-full",
+        round_number=0,
+        winning_team="Blue",
+        result_code="Elimination",
+        bomb_planted=False,
+        plant_site=None,
+        bomb_defused=False,
+    )
+    kill = Kill(
+        round_id=0,
+        match_id="m-full",
+        round_number=0,
+        time_in_round_ms=5000,
+        killer_puuid="p-tracked",
+        victim_puuid="p-enemy",
+        weapon_name=None,
+        is_headshot=True,
+        assistants_json=json.dumps([]),
+    )
+    rnd.kills = [kill]
+    full_match.rounds = [rnd]
+    full_match.players = [
+        MatchPlayer(
+            match_id="m-full",
+            puuid="p-tracked",
+            agent_name="Jett",
+            agent_id=None,
+            team="Blue",
+            won=True,
+            score=0,
+            kills=1,
+            deaths=0,
+            assists=0,
+            rounds_played=1,
+            headshots=1,
+            bodyshots=0,
+            legshots=0,
+            damage_dealt=150,
+            damage_received=0,
+            first_bloods=1,
+            first_deaths=0,
+            plants=0,
+            defuses=0,
+            afk_rounds=0,
+            rounds_in_spawn=0,
+            competitive_tier=None,
+            started_at="2026-04-19T18:00:00+00:00",
+        ),
+        MatchPlayer(
+            match_id="m-full",
+            puuid="p-enemy",
+            agent_name="Reyna",
+            agent_id=None,
+            team="Red",
+            won=False,
+            score=0,
+            kills=0,
+            deaths=1,
+            assists=0,
+            rounds_played=1,
+            headshots=0,
+            bodyshots=0,
+            legshots=0,
+            damage_dealt=0,
+            damage_received=150,
+            first_bloods=0,
+            first_deaths=0,
+            plants=0,
+            defuses=0,
+            afk_rounds=0,
+            rounds_in_spawn=0,
+            competitive_tier=None,
+            started_at="2026-04-19T18:00:00+00:00",
+        ),
+    ]
+
+    rows = [_mp(match_id=f"m-{i}") for i in range(5)]
+    data = PlayerData(player=_player(), rows=rows, full_matches=[full_match])
+
+    con = _capture_console()
+    with (
+        patch("valocoach.cli.commands.profile.load_settings", return_value=fake_settings),
+        patch(
+            "valocoach.cli.commands.profile.load_player_data_async",
+            new=AsyncMock(return_value=data),
+        ),
+    ):
+        run_profile(name="Tester", tag="NA1", console=con)
+
+    out = con.file.getvalue()
+    assert "KAST" in out, "Round-level stats section should appear when full_matches present"
+
+
+def test_run_profile_no_round_stats_when_full_matches_empty(tmp_path) -> None:
+    """When full_matches=[], the KAST section is silently skipped."""
+    fake_settings = _fake_settings(tmp_path)
+    rows = [_mp(match_id=f"m-{i}") for i in range(5)]
+    data = PlayerData(player=_player(), rows=rows, full_matches=[])
+
+    con = _capture_console()
+    with (
+        patch("valocoach.cli.commands.profile.load_settings", return_value=fake_settings),
+        patch(
+            "valocoach.cli.commands.profile.load_player_data_async",
+            new=AsyncMock(return_value=data),
+        ),
+    ):
+        run_profile(name="Tester", tag="NA1", console=con)
+
+    assert "KAST" not in con.file.getvalue()
