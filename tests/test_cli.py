@@ -21,8 +21,28 @@ def test_help_shows_all_commands():
 
 
 def test_unimplemented_stub_exits_cleanly():
-    # `meta`, `patch`, `interactive` are still stubs — pick one that hasn't
-    # been implemented yet so this test tracks stub→real migrations.
-    result = runner.invoke(app, ["meta"])
+    # `patch` and `interactive` are still stubs — pick one to track stub→real migrations.
+    result = runner.invoke(app, ["patch"])
     assert result.exit_code == 0
     assert "not implemented" in result.stdout.lower()
+
+
+def test_meta_command_runs_without_args():
+    result = runner.invoke(app, ["meta"])
+    assert result.exit_code == 0
+    assert "tier" in result.stdout.lower()
+
+
+def test_meta_command_map_haven():
+    result = runner.invoke(app, ["meta", "--map", "Haven"])
+    assert result.exit_code == 0
+    assert "Haven" in result.stdout
+    assert "A Long" in result.stdout
+
+
+def test_meta_command_agent_omen():
+    result = runner.invoke(app, ["meta", "--agent", "Omen"])
+    assert result.exit_code == 0
+    assert "Omen" in result.stdout
+    assert "Dark Cover" in result.stdout
+    assert "ult pts" in result.stdout

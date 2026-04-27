@@ -1,0 +1,352 @@
+{
+  "agents": [
+    {
+      "name": "Jett",
+      "role": "Duelist",
+      "abilities": {
+        "C": {"name": "Cloudburst", "cost": 200, "description": "Throw a brief smoke globe that blocks vision. Hold to curve the trajectory mid-air. Lasts ~4 s."},
+        "Q": {"name": "Updraft", "cost": 150, "description": "Instantly propel yourself upward. Use to reach high ground or dodge."},
+        "E": {"name": "Tailwind", "cost": 0, "charges": 1, "description": "Dash a short distance in your movement direction. Charges refresh on Bladestorm kills."},
+        "X": {"name": "Bladestorm", "ult_points": 6, "description": "Equip 5 throwing knives. L-click: throw single knife. R-click: throw all remaining. Kills refresh all knives."}
+      },
+      "playstyle": "Entry duelist. Tailwind into aggressive angles; Updraft for elevated positions or dodging. Pairs with Op or Vandal.",
+      "economy_tip": "Can run light shield + Sheriff on pistol rounds for aggressive peeks."
+    },
+    {
+      "name": "Reyna",
+      "role": "Duelist",
+      "abilities": {
+        "C": {"name": "Leer", "cost": 250, "description": "Throw a spectral eye that nearsights ALL enemies who see it (through walls). Can be shot and destroyed."},
+        "Q": {"name": "Devour", "cost": 100, "description": "Instantly consume a Soul Orb (dropped by kills) to heal up to 150 HP over time. Overheal during Empress."},
+        "E": {"name": "Dismiss", "cost": 100, "description": "Consume a Soul Orb to become briefly invulnerable. During Empress: also become intangible (pass through objects)."},
+        "X": {"name": "Empress", "ult_points": 6, "description": "Enter combat trance: instant reloads, rapid fire rate, reduced equip time. Kills grant free Devour/Dismiss casts and reset the timer."}
+      },
+      "playstyle": "Snowball duelist. Relies on getting first kill to chain Devour/Dismiss. Best in structured team comps that set her up.",
+      "economy_tip": "Full-buy every round; Leer is cheap to supplement fights."
+    },
+    {
+      "name": "Phoenix",
+      "role": "Duelist",
+      "abilities": {
+        "C": {"name": "Blaze", "cost": 200, "description": "Create a curving wall of fire that blocks vision, deals damage to enemies, and heals Phoenix when he stands in it."},
+        "Q": {"name": "Curveball", "cost": 200, "description": "Throw a curving flash orb. L-click curves left; R-click curves right. Briefly blinds all who see it."},
+        "E": {"name": "Hot Hands", "cost": 100, "description": "Throw a fire orb that bounces once and creates a damaging zone on landing. Phoenix heals while standing in it."},
+        "X": {"name": "Run It Back", "ult_points": 6, "description": "Mark current position. If killed or ult expires, respawn at marked spot with full health. No soul orbs needed."}
+      },
+      "playstyle": "Self-sustaining duelist. Blaze + Hot Hands enable off-angle fights with built-in healing. Run It Back for aggressive intel.",
+      "economy_tip": "Hot Hands (100) is the cheapest self-heal in the game; always buy it."
+    },
+    {
+      "name": "Neon",
+      "role": "Duelist",
+      "abilities": {
+        "C": {"name": "Fast Lane", "cost": 300, "description": "Sprint in a direction to throw two parallel energy lines forward, creating vision-blocking walls that also damage enemies passing through."},
+        "Q": {"name": "Relay Bolt", "cost": 200, "description": "Throw a bolt that concusses on first contact, then bounces once and concusses again."},
+        "E": {"name": "High Gear", "cost": 0, "charges": 1, "description": "Sprint at high speed. R-click while sprinting to slide (1 charge, refreshes on 2 kills)."},
+        "X": {"name": "Overdrive", "ult_points": 6, "description": "Unlimited sprint and slides. Fire a lightning beam as primary weapon. Kill extends duration."}
+      },
+      "playstyle": "Speed-based entry duelist. Fast Lane creates instant site-execute smokes; Relay Bolt replaces a flash. Best on maps with long corridors.",
+      "economy_tip": "High Gear is free; Fast Lane (300) is the key buy for executes."
+    },
+    {
+      "name": "Yoru",
+      "role": "Duelist",
+      "abilities": {
+        "C": {"name": "Fakeout", "cost": 100, "charges": 2, "description": "Deploy echo footsteps, or activate a decoy clone that runs forward and flashes enemies when shot. Excellent for misdirection."},
+        "Q": {"name": "Blindside", "cost": 200, "description": "Toss an underhanded flash that activates on contact with a solid surface. Cannot self-blind."},
+        "E": {"name": "Gatecrash", "cost": 150, "charges": 2, "description": "Throw a tether that travels forward; activate to teleport to it. Can send a decoy instead. Refreshes on kill."},
+        "X": {"name": "Dimensional Drift", "ult_points": 7, "description": "Enter a ghost dimension: invisible and invulnerable to enemy vision. Hear/see enemies but cannot shoot. Can place Gatecrash tethers."}
+      },
+      "playstyle": "Deception and flanking duelist. Dimensional Drift enables deep scouting and denying info. High skill ceiling.",
+      "economy_tip": "Fakeout (100) is dirt cheap misdirection; always buy both charges."
+    },
+    {
+      "name": "Iso",
+      "role": "Duelist",
+      "abilities": {
+        "C": {"name": "Contingency", "cost": 250, "description": "Push an expanding energy column forward that blocks all bullets (not movement). Use to shield pushes or cut angles."},
+        "Q": {"name": "Undercut", "cost": 200, "description": "Throw a destabilizing field disk that passes through walls. Enemies hit receive Fragile (take increased damage) briefly."},
+        "E": {"name": "Double Tap", "cost": 0, "charges": 1, "description": "Enter a focused state; next kill creates a temporary shield around Iso. Refreshes on kill or shield break."},
+        "X": {"name": "Kill Contract", "ult_points": 7, "description": "Link to a target enemy. Both are pulled into a private 1v1 arena. Winner returns to main game."}
+      },
+      "playstyle": "Duel-focused duelist. Double Tap rewards trading aggressively. Contingency creates instant linear cover mid-execute.",
+      "economy_tip": "Double Tap is free; always activate it before entering site."
+    },
+    {
+      "name": "Brimstone",
+      "role": "Controller",
+      "abilities": {
+        "C": {"name": "Stim Beacon", "cost": 200, "description": "Place a beacon that pulses, giving nearby allies Rapid Fire (increased fire rate). Lasts ~12 s."},
+        "Q": {"name": "Incendiary", "cost": 250, "description": "Launch a canister that creates a large damaging fire zone on impact. Effective for post-plant and site denial."},
+        "E": {"name": "Sky Smoke", "cost": 100, "description": "Open map view and click up to 3 locations to call in large smoke clouds (~19 s duration). Can be done from range."},
+        "X": {"name": "Orbital Strike", "ult_points": 7, "description": "Target a location on the minimap to unleash a sustained laser strike dealing heavy damage. Lingers ~6 s."}
+      },
+      "playstyle": "Anchor controller. Sky Smoke is the most reliable 3-smoke setup in the game. Stim Beacon pairs with Op picks on contact.",
+      "economy_tip": "Always buy at least 2 smokes (200 cr total). Incendiary can replace a Molly."
+    },
+    {
+      "name": "Viper",
+      "role": "Controller",
+      "abilities": {
+        "C": {"name": "Snake Bite", "cost": 200, "charges": 2, "description": "Fire a canister of acid that creates a small lingering acid pool dealing damage and applying Fragile/slow."},
+        "Q": {"name": "Poison Cloud", "cost": 200, "description": "Toss a gas emitter. Activate to create a lingering smoke cloud that decays enemies inside. Deactivate to pick up and redeploy. Uses fuel."},
+        "E": {"name": "Toxic Screen", "cost": 0, "description": "Deploy a long line of gas emitters through any terrain. Activate to raise a wall of poison smoke. Uses fuel. Recharges over time."},
+        "X": {"name": "Viper's Pit", "ult_points": 8, "description": "Create a massive toxic cloud covering a large area. Enemies inside decay and lose vision. Viper gains enhanced vision inside and reduced decay effect."}
+      },
+      "playstyle": "Dominant on closed maps (Icebox, Breeze, Pearl). Pit can lock an entire site post-plant. Toxic Screen splits the map every round for free.",
+      "economy_tip": "Toxic Screen is free — always use it. Snake Bite (200) is the cheapest Fragile applicator."
+    },
+    {
+      "name": "Omen",
+      "role": "Controller",
+      "abilities": {
+        "C": {"name": "Shrouded Step", "cost": 150, "description": "Short teleport to a targeted nearby location. Great for repositioning and mind games."},
+        "Q": {"name": "Paranoia", "cost": 300, "description": "Fire a shadow projectile in a straight line that nearsights ALL enemies it passes through, including through walls."},
+        "E": {"name": "Dark Cover", "cost": 100, "charges": 2, "description": "Lob a shadow sphere that travels through geometry and expands into a large opaque smoke (~15 s). Hold to extend range."},
+        "X": {"name": "From the Shadows", "ult_points": 7, "description": "Teleport to any location on the map (via minimap select). Appears as a visible shadow first; the teleport can be cancelled by killing the shadow."}
+      },
+      "playstyle": "Most versatile controller. Dark Cover smokes ANY angle through walls. Paranoia through walls is a hard-to-block flash. From the Shadows flanks are map-defining.",
+      "economy_tip": "Dark Cover (100/charge) is the cheapest per-smoke in the game. Paranoia (300) is situational — skip on eco."
+    },
+    {
+      "name": "Astra",
+      "role": "Controller",
+      "abilities": {
+        "C": {"name": "Nova Pulse", "cost": 200, "description": "Place a star on the map; activate it remotely to create a concussing pulse in that area."},
+        "Q": {"name": "Nebula", "cost": 200, "description": "Place a star; activate it to create a smoke cloud. Can be dissipated briefly to create a fake pullback, then reinstated."},
+        "E": {"name": "Gravity Well", "cost": 200, "description": "Place a star; activate it to pull all nearby enemies toward the center, then stun them. Enemies inside take no damage but are very vulnerable."},
+        "X": {"name": "Cosmic Divide", "ult_points": 8, "description": "Create an infinite-length wall across the entire map that blocks bullets and significantly muffles audio on either side."}
+      },
+      "playstyle": "High-ceiling controller for coordinated teams. 5 stars allow complex smoke+util combos from anywhere. Weakest in 1v1 situations.",
+      "economy_tip": "All star placements cost 200 each; buy a minimum of 3 stars per round for meaningful impact."
+    },
+    {
+      "name": "Harbor",
+      "role": "Controller",
+      "abilities": {
+        "C": {"name": "Cove", "cost": 300, "description": "Throw a sphere of water that creates a temporary, bullet-resistant bubble shield. Great for spike-plant cover."},
+        "Q": {"name": "High Tide", "cost": 0, "description": "Send forward a wave of water that curves with mouse movement, creating a long water wall blocking vision. Recharges over time."},
+        "E": {"name": "Cascade", "cost": 300, "charges": 2, "description": "Send a wave of water rolling forward. Enemies hit are slowed."},
+        "X": {"name": "Reckoning", "ult_points": 7, "description": "Call geysers that erupt from the ground in a large area, concussing enemies they hit. Landing pattern adapts to enemy positions."}
+      },
+      "playstyle": "Entry-controller hybrid. High Tide creates moving smokes for live pushes. Cove is the only bullet-resistant shield in the game.",
+      "economy_tip": "High Tide is free. Cascade (300) is the biggest cost; consider skipping one charge on eco."
+    },
+    {
+      "name": "Clove",
+      "role": "Controller",
+      "abilities": {
+        "C": {"name": "Pick-Me-Up", "cost": 100, "description": "Absorb the life force of a kill or assist to gain a temporary burst of move speed and bonus HP."},
+        "Q": {"name": "Meddle", "cost": 200, "description": "Throw a smoke pellet that applies Decay (reduces max HP) to enemies in the area."},
+        "E": {"name": "Ruse", "cost": 100, "charges": 2, "description": "Place smoke clouds at targeted locations. Unique: can be activated even after Clove's death."},
+        "X": {"name": "Not Dead Yet", "ult_points": 8, "description": "Upon death, if Clove gets a kill or assist within the window, they respawn with partial HP. Only one respawn per life."}
+      },
+      "playstyle": "Aggressive controller. Not Dead Yet incentivizes playing forward. Ruse smokes persist post-death, which is unique among controllers.",
+      "economy_tip": "Pick-Me-Up (100) and Ruse (100) are dirt cheap. Buy both every round."
+    },
+    {
+      "name": "Sova",
+      "role": "Initiator",
+      "abilities": {
+        "C": {"name": "Shock Bolt", "cost": 150, "charges": 2, "description": "Fire an electric arrow that deals damage and stuns on exploding. Hold fire to extend range; use bounces with R-click (up to 2 bounces)."},
+        "Q": {"name": "Recon Bolt", "cost": 0, "charges": 1, "description": "Fire a dart that bounces (hold for bounces) and scans on landing, revealing all nearby enemies. Can be recalled. Recharges on kill."},
+        "E": {"name": "Owl Drone", "cost": 300, "description": "Fly a remote drone that fires a tracking dart; enemies hit are revealed for several seconds."},
+        "X": {"name": "Hunter's Fury", "ult_points": 7, "description": "Fire up to 3 long-range blasts through walls that deal 80 damage and reveal all enemies in their path. Each blast is independent."}
+      },
+      "playstyle": "Information-dominant initiator. Recon Bolt is free intel every round. Lineups for Shock Bolt and Recon Bolt take practice but are the highest-value Sova skill.",
+      "economy_tip": "Recon Bolt is free — always equip and use it. Owl Drone (300) can be skipped on eco."
+    },
+    {
+      "name": "Breach",
+      "role": "Initiator",
+      "abilities": {
+        "C": {"name": "Aftershock", "cost": 100, "description": "Charge and fire a slow-triggering burst through the wall, dealing heavy damage to enemies on the other side. 3-round delayed explosion."},
+        "Q": {"name": "Flashpoint", "cost": 250, "description": "Charge a blinding flash that fires through the surface you're facing. Anyone on the other side of the wall is blinded."},
+        "E": {"name": "Fault Line", "cost": 0, "description": "Charge a seismic blast forward that concusses all enemies in its path. Recharges over time."},
+        "X": {"name": "Rolling Thunder", "ult_points": 7, "description": "Charge and fire a massive seismic cascade forward that concusses and knocks up all enemies in its path. Very wide, impossible to avoid."}
+      },
+      "playstyle": "Through-wall utility king. Flashpoint through walls is the safest flash in the game. Fault Line into a site is a free take if opponents aren't off-angles.",
+      "economy_tip": "Aftershock (100) is underrated for post-plant. Flashpoint (250) is the must-buy."
+    },
+    {
+      "name": "Skye",
+      "role": "Initiator",
+      "abilities": {
+        "C": {"name": "Trailblazer", "cost": 250, "description": "Remotely control a wolf trinket. L-click to lunge and concuss enemies on impact. Can scout corners safely."},
+        "Q": {"name": "Guiding Light", "cost": 250, "charges": 3, "description": "Send a hawk that you can activate mid-flight to flash. Hold to curve. Cannot self-flash."},
+        "E": {"name": "Regrowth", "cost": 0, "description": "Channel to heal nearby teammates. Cannot heal yourself. Recharges on kill."},
+        "X": {"name": "Seekers", "ult_points": 7, "description": "Unleash 3 seeker creatures that find and nearsight the 3 closest enemies. Can be outrun."}
+      },
+      "playstyle": "Heal + info initiator. 3 charges of Guiding Light are the best flash economy in the game. Trailblazer scouts + concusses corners safely.",
+      "economy_tip": "Regrowth is free healing — position near teammates. Guiding Light (250) is the must-buy."
+    },
+    {
+      "name": "KAY/O",
+      "role": "Initiator",
+      "abilities": {
+        "C": {"name": "FRAGMENT", "cost": 200, "charges": 2, "description": "Throw a blade that sticks to the ground and explodes in 3 cycles, dealing damage in a radius. Similar to a molly."},
+        "Q": {"name": "FLASH/drive", "cost": 200, "charges": 2, "description": "Toss a flash grenade. L-click: large slow-pop flash. R-click: small fast-pop flash. Both blind enemies."},
+        "E": {"name": "ZERO/point", "cost": 0, "description": "Throw a suppression blade. Enemies hit cannot use their abilities for ~8 s. Reveals their location briefly. Recharges on kill."},
+        "X": {"name": "NULL/cmd", "ult_points": 8, "description": "Overclock and emit suppression pulses, suppressing all enemies in a large radius. If KAY/O is downed during the ult, allies can stabilize him (revive with partial HP)."}
+      },
+      "playstyle": "Ability-suppression initiator. ZERO/point suppressing a site-defender removes their utility before entering. FLASH/drive is reliable two-flash-per-round initiator.",
+      "economy_tip": "ZERO/point is free info + suppression every round. FRAGMENT (200) is a cheap post-plant tool."
+    },
+    {
+      "name": "Fade",
+      "role": "Initiator",
+      "abilities": {
+        "C": {"name": "Haunt", "cost": 200, "description": "Throw a crawling orb that reveals and marks nearby enemies on landing. Can be shot and destroyed."},
+        "Q": {"name": "Seize", "cost": 200, "description": "Throw a tendril pool that tethers enemies caught in it, dealing decay damage and preventing movement out of range."},
+        "E": {"name": "Prowler", "cost": 0, "charges": 1, "description": "Release a creature that follows the nearest sound or player vision. Reaches target and nearsights. Recharges on kill."},
+        "X": {"name": "Nightfall", "ult_points": 7, "description": "Send a wave of nightmare energy that marks, deafens, and decays all enemies it hits across the entire path."}
+      },
+      "playstyle": "Replace Sova when you want aggression. Prowler clears corners without line-of-sight; Seize is a free tether that stops enemy rotations.",
+      "economy_tip": "Prowler is free every round. Buy Haunt (200) and Seize (200) together for full-buy rounds."
+    },
+    {
+      "name": "Gekko",
+      "role": "Initiator",
+      "abilities": {
+        "C": {"name": "Wingman", "cost": 300, "description": "Deploy Wingman who runs to the spike location to plant/defuse, or fires a concussing burst at enemies. Recalled after use, then recharges."},
+        "Q": {"name": "Dizzy", "cost": 250, "description": "Send Dizzy flying forward; enemies hit by charged plasma blasts are nearsighted. Recalled and recharges on kill."},
+        "E": {"name": "Thrash", "cost": 0, "charges": 1, "description": "Remote-control a creature; lunge into enemies to detain them briefly. Recalled and recharges on kill."},
+        "X": {"name": "Mosh Pit", "ult_points": 7, "description": "Throw Mosh who creates a large unstable area; after a delay it explodes for massive damage."}
+      },
+      "playstyle": "Spike-focused initiator. Wingman can plant while you hold angles. Dizzy is a long-range nearsight initiator. Thrash can clear a corner in a duel.",
+      "economy_tip": "Thrash is free. Buy Dizzy (250) for flash value. Wingman (300) is ideal when you need off-angle planting coverage."
+    },
+    {
+      "name": "Sage",
+      "role": "Sentinel",
+      "abilities": {
+        "C": {"name": "Barrier Orb", "cost": 400, "description": "Erect a large solid wall. R-click to rotate before placing. Blocks movement and vision. Decays over time."},
+        "Q": {"name": "Slow Orb", "cost": 200, "description": "Throw an orb that creates a large slow field on the ground. Enemies in it are slowed and make loud footsteps."},
+        "E": {"name": "Healing Orb", "cost": 0, "description": "Heal yourself (over time) or a teammate (instantly to 100 HP). Cannot use during combat. Recharges over ~45 s."},
+        "X": {"name": "Resurrection", "ult_points": 8, "description": "Target a dead ally to fully revive them with full HP. They come back with their current weapon and armor."}
+      },
+      "playstyle": "Hard sentinel anchor. Barrier Orb can block a choke permanently. Slow Orb under spike for post-plant is essential. Healing Orb provides sustained HP advantage.",
+      "economy_tip": "Barrier Orb (400) is expensive; skip on eco. Slow Orb (200) is always worth buying."
+    },
+    {
+      "name": "Cypher",
+      "role": "Sentinel",
+      "abilities": {
+        "C": {"name": "Cyber Cage", "cost": 100, "charges": 2, "description": "Place a small cage; activate remotely to create a vision-blocking dome and slow enemies passing through. Very cheap intel denial."},
+        "Q": {"name": "Spycam", "cost": 150, "description": "Place a remote camera on a surface. Activate to view its feed and fire a tracking dart that reveals the hit enemy."},
+        "E": {"name": "Trapwire", "cost": 200, "charges": 2, "description": "Place a tripwire across an area; enemies who cross it are tethered, decayed, and revealed if they don't destroy it in time."},
+        "X": {"name": "Neural Theft", "ult_points": 7, "description": "Use on an enemy corpse to reveal the locations of all living enemies on the map (twice in quick succession)."}
+      },
+      "playstyle": "Information-dominant sentinel. Tripwires + Spycam give full coverage of one side of the map. Best on one-site anchor roles.",
+      "economy_tip": "Cyber Cage (100) is cheapest vision blocker in game. Always buy both Trapwires (400 total) and Spycam (150)."
+    },
+    {
+      "name": "Killjoy",
+      "role": "Sentinel",
+      "abilities": {
+        "C": {"name": "Alarmbot", "cost": 200, "description": "Place a bot that detects nearby enemies and explodes when triggered, applying Vulnerable (increased incoming damage) briefly."},
+        "Q": {"name": "Nanoswarm", "cost": 200, "charges": 2, "description": "Throw a grenade that stays hidden; activate remotely to unleash a damaging nanoswarm cloud. Best post-plant tool."},
+        "E": {"name": "Turret", "cost": 0, "description": "Deploy a turret that tracks and fires at enemies in a 180-degree cone. Can be recalled. Free intel + chip damage."},
+        "X": {"name": "Lockdown", "ult_points": 7, "description": "Deploy a device with a 13-second wind-up that detains all enemies in a very large radius. Destroyable but punishing."}
+      },
+      "playstyle": "Best post-plant and site-anchor sentinel. Nanoswarm under spike with spike-planted is one of the highest-value post-plant combos in competitive.",
+      "economy_tip": "Turret is free; always deploy it. Nanoswarm (200 each) are the highest-value buy."
+    },
+    {
+      "name": "Chamber",
+      "role": "Sentinel",
+      "abilities": {
+        "C": {"name": "Headhunter", "cost": 100, "description": "Activate to equip a powerful hand cannon. R-click to aim down sights for long range. Buys 1–4 bullets."},
+        "Q": {"name": "Rendezvous", "cost": 0, "charges": 2, "description": "Place two anchor points. Stand near one to instantly teleport to the other. Refreshes on kill."},
+        "E": {"name": "Trademark", "cost": 200, "description": "Place a trap that scans for enemies; slows in a radius when triggered. Teleports away when Chamber is far from it."},
+        "X": {"name": "Tour de Force", "ult_points": 8, "description": "Equip a custom high-powered sniper rifle. Kills create a large slowing zone at the kill location. 5 bullets."}
+      },
+      "playstyle": "Operator-focused sentinel. Rendezvous enables peek-and-retreat with Op. Trademark traps one flank so Chamber can Op the other.",
+      "economy_tip": "Rendezvous is free teleport resets. Headhunter (100) is the cheapest scoped weapon on pistol round."
+    },
+    {
+      "name": "Deadlock",
+      "role": "Sentinel",
+      "abilities": {
+        "C": {"name": "GravNet", "cost": 200, "description": "Throw a grenade that explodes and forces all caught enemies to crouch and be unable to jump briefly."},
+        "Q": {"name": "Sonic Sensor", "cost": 200, "description": "Place a sensor that monitors for loud sounds (footsteps, gunfire, abilities). Triggers to concuss enemies nearby."},
+        "E": {"name": "Barrier Mesh", "cost": 0, "description": "Create disc-shaped barriers of nanowire that block all movement and bounce grenades. Can be deployed through walls. Recharges over time."},
+        "X": {"name": "Annihilation", "ult_points": 7, "description": "Fire a nanowire pulse that captures the first enemy hit in a rapidly-moving cocoon, pulling them toward Deadlock's position. Kill them before the cocoon leaves the map for the kill."}
+      },
+      "playstyle": "Lockdown sentinel for tight corridors. Sonic Sensor + Barrier Mesh creates zones enemies cannot safely navigate. GravNet is the best anti-Op tool.",
+      "economy_tip": "Barrier Mesh is free. Buy Sonic Sensor (200) and GravNet (200) together for full-site coverage."
+    },
+    {
+      "name": "Vyse",
+      "role": "Sentinel",
+      "abilities": {
+        "C": {"name": "Arc Rose", "cost": 200, "charges": 2, "description": "Place a bramble device that can be concealed in a surface. Activates on enemy contact to root them in place briefly."},
+        "Q": {"name": "Razorvine", "cost": 200, "description": "Throw a tangle of wire that damages and slows enemies passing through the zone."},
+        "E": {"name": "Shear", "cost": 0, "description": "Raise a wall of metal shards that blocks bullets and movement temporarily. Recharges over time."},
+        "X": {"name": "Steel Garden", "ult_points": 7, "description": "Remotely activate all deployed Arc Roses simultaneously, rooting all nearby enemies in place."}
+      },
+      "playstyle": "Area-denial sentinel. Arc Roses act as hidden tripwires with a root instead of a slow. Steel Garden can lock down an entire site on a retake.",
+      "economy_tip": "Shear is free wall denial. Buy both Arc Roses (400 total) for trap coverage on full-buys."
+    },
+    {
+      "name": "Raze",
+      "role": "Duelist",
+      "abilities": {
+        "C": {"name": "Boom Bot", "cost": 300, "description": "Deploy a bot that travels forward bouncing off walls. Locks onto enemies in its frontal cone and chases them, exploding for heavy damage on contact."},
+        "Q": {"name": "Blast Pack", "cost": 100, "description": "Throw a sticky pack that attaches to surfaces. Reactivate to detonate — deals damage and blasts anything nearby. Also used for satchel-jumping Raze herself."},
+        "E": {"name": "Paint Shells", "cost": 0, "charges": 1, "description": "Throw a cluster grenade that explodes on impact and releases sub-munitions dealing additional damage. Charge resets on every two kills."},
+        "X": {"name": "Showstopper", "ult_points": 8, "description": "Equip a rocket launcher and fire a rocket that deals massive area damage on contact with anything. Direct hit is lethal; splash is very high damage."}
+      },
+      "playstyle": "High-damage entry duelist. Blast Pack enables vertical movement and satchel rushes. Boom Bot forces enemies off angles before Raze pushes. Showstopper clears a site instantly.",
+      "economy_tip": "Blast Pack (100) is the cheapest mobility tool in the game — always buy it. Paint Shells is free; use it to clear corners before entering."
+    },
+    {
+      "name": "Tejo",
+      "role": "Initiator",
+      "abilities": {
+        "C": {"name": "Stealth Drone", "cost": 200, "description": "Throw a stealth drone and assume direct control of its movement. Fire again while controlling it to trigger a pulse that Suppresses and Reveals enemies hit."},
+        "Q": {"name": "Special Delivery", "cost": 100, "description": "Throw a sticky grenade that attaches to the first surface it hits, then explodes to Concuss and deal damage to nearby targets. Alt fire launches with a single bounce."},
+        "E": {"name": "Guided Salvo", "cost": 0, "description": "Equip an AR targeting system and select up to two target locations on the map. Launches missiles that autonomously navigate to those locations, detonating repeatedly on arrival. Recharges over time."},
+        "X": {"name": "Armageddon", "ult_points": 8, "description": "Select an origin point and an end point on the map to launch a tactical strike that unleashes a wave of lethal damaging explosions along the entire strike path."}
+      },
+      "playstyle": "Long-range initiator. Guided Salvo provides free, precise denial from across the map. Stealth Drone suppresses defenders before entry. Special Delivery concusses chokepoints without needing line of sight.",
+      "economy_tip": "Guided Salvo is free — use it every round to soften defenders. Special Delivery (100) is the cheapest concuss in the game."
+    },
+    {
+      "name": "Waylay",
+      "role": "Duelist",
+      "abilities": {
+        "C": {"name": "Saturate", "cost": 200, "description": "Throw a cluster of light that explodes on contact with the ground, Hindering nearby players with a powerful movement and weapon slow."},
+        "Q": {"name": "Lightspeed", "cost": 150, "description": "Prepare for a burst of speed then dash forward twice. Alt fire to dash once. Only the first dash can send you upward."},
+        "E": {"name": "Refract", "cost": 0, "charges": 1, "description": "Instantly create a beacon of light on the floor. Reactivate to speed back to the beacon as a mote of pure light — invulnerable while traveling. Charge resets every two kills."},
+        "X": {"name": "Convergent Paths", "ult_points": 6, "description": "Create an afterimage that projects a beam of light. After a brief delay, gain a powerful speed boost and the beam expands, Hindering all other players caught in the area."}
+      },
+      "playstyle": "Mobility-based entry duelist. Refract enables aggressive peeks with a guaranteed escape route. Lightspeed chains upward then horizontal for vertical entry. Saturate slows defenders mid-push.",
+      "economy_tip": "Refract is free and refreshes on kills — always keep it active before peeking. Lightspeed (150) is cheap mobility; buy it every full round."
+    },
+    {
+      "name": "Miks",
+      "role": "Controller",
+      "abilities": {
+        "C": {"name": "M-pulse", "cost": 200, "description": "Toggle between Concuss and Healing outputs, then throw the device. Upon landing, M-pulse sends out sound waves that either Concuss or Heal players caught in the area."},
+        "Q": {"name": "Harmonize", "cost": 250, "description": "Target an ally to activate a Combat Stim on both yourself and that ally. The stim refreshes with each kill. Alt fire to grant the stim to yourself only."},
+        "E": {"name": "Waveform", "cost": 0, "description": "Equip a map targeter and set up to several smoke locations, then alt fire to deploy smokes at all selected points simultaneously. Recharges over time."},
+        "X": {"name": "Bassquake", "ult_points": 8, "description": "Build up sonic radiance and unleash it forward in a wide wave, knocking back, Deafening, and Slowing all players caught in its path."}
+      },
+      "playstyle": "Team-amplifying controller. Waveform provides free smokes every round. M-pulse in Healing mode is the only mid-round area heal in the game. Harmonize stacks with aggressive teammates for combat-stim chains.",
+      "economy_tip": "Waveform is free — always place smokes. M-pulse (200) doubles as a cheap concuss or heal depending on the situation."
+    },
+    {
+      "name": "Veto",
+      "role": "Sentinel",
+      "abilities": {
+        "C": {"name": "Crosscut", "cost": 200, "description": "Place a vortex on the ground. While in range and looking at it, activate to teleport to the vortex. Can be reclaimed and redeployed during buy phase."},
+        "Q": {"name": "Chokehold", "cost": 150, "description": "Throw a fragment of mutation that deploys on hitting the ground, creating a trap that holds enemies in place, Deafening and Decaying them. Enemies can destroy the trap before it activates."},
+        "E": {"name": "Interceptor", "cost": 0, "description": "Place the Interceptor at a projected location. Once activated, it destroys incoming utility that would bounce off players or be destroyed by gunfire. Enemies can shoot the Interceptor down. Recharges over time."},
+        "X": {"name": "Evolution", "ult_points": 6, "description": "Instantly fully mutate, gaining a combat stim, HP regeneration, and immunity to all debuffs for the duration."}
+      },
+      "playstyle": "Anti-utility sentinel. Interceptor hard-counters flash and grenade spam, forcing enemies into pure gunfights. Crosscut provides repositioning to cover multiple angles. Chokehold traps enemies who push your setup.",
+      "economy_tip": "Interceptor is free and denies entire ability compositions — always deploy it. Chokehold (150) is a cheap trap; buy it every full round."
+    }
+  ]
+}

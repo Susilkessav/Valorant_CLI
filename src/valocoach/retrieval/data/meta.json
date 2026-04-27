@@ -1,0 +1,72 @@
+{
+  "patch": "10.08",
+  "updated": "2025-04",
+  "notes": "Tier list reflects high-ELO competitive play (Diamond+). Solo-queue viability may differ.",
+  "tier_list": {
+    "S": ["Omen", "Viper", "Killjoy", "Jett", "Sova"],
+    "A": ["Cypher", "Fade", "Reyna", "Brimstone", "Breach", "Astra"],
+    "B": ["Sage", "Skye", "KAY/O", "Gekko", "Chamber", "Clove", "Iso"],
+    "C": ["Harbor", "Neon", "Yoru", "Phoenix", "Deadlock", "Vyse"]
+  },
+  "economy": {
+    "full_buy": 3900,
+    "half_buy": 2400,
+    "force_buy": 1900,
+    "eco_save": 1600,
+    "notes": "Full buy: Phantom/Vandal (2900) + Heavy Armor (1000) + signature ability. Half buy: Spectre (1600) + Heavy Armor (1000) or light armor + cheap abilities. Eco/save: pistol only, save credits for next round."
+  },
+  "map_meta": {
+    "Ascent": {
+      "top_agents": ["Jett", "Killjoy", "Sova", "Omen", "Brimstone"],
+      "notes": "Jett Op on A Catwalk is a must-defend angle. Killjoy Lockdown retakes B through Mid Market. Sova Recon lineups into A Wine and B Main are critical."
+    },
+    "Bind": {
+      "top_agents": ["Viper", "Raze", "Skye", "KAY/O", "Sage"],
+      "notes": "Viper Toxic Screen splits A Long. Teleporters require denial (cage/slow in the tube). No mid means utility usage is heavily site-specific."
+    },
+    "Haven": {
+      "top_agents": ["Omen", "Killjoy", "Reyna", "Sage", "Breach"],
+      "notes": "Omen is the default controller: 3 smokes can cover Mid Doors + one site simultaneously. Sage C Long wall on defense is a time-buy. Killjoy holds B or C retake. B Mid is the cheapest site entry — smoke B Window and push."
+    },
+    "Icebox": {
+      "top_agents": ["Viper", "Jett", "Sova", "Killjoy", "KAY/O"],
+      "notes": "Viper Pit on A or B site is map-defining post-plant. B Tube with Jett Updraft elevation is the most effective aggressive peek. Sova drone through B Tube is a classic opener."
+    },
+    "Lotus": {
+      "top_agents": ["Omen", "Viper", "Breach", "Sova", "Killjoy"],
+      "notes": "Rotating doors create audio tells — time rotations around door sounds. Breach Rolling Thunder on B Halls is nearly unavoidable. Viper Pit on A or C locks out retakes."
+    },
+    "Pearl": {
+      "top_agents": ["Omen", "Fade", "Cypher", "Jett", "Viper"],
+      "notes": "Mid control determines the round. Op at Mid Top with Chamber or Jett is high-value. Cypher cam through A Art is consistent intel."
+    },
+    "Split": {
+      "top_agents": ["Sage", "Cypher", "Omen", "Raze", "KAY/O"],
+      "notes": "Sage Barrier on A Ramps or B Main is the highest-value single ability in the game here. Defender-sided: winning Heaven on both sites is the meta. Rush strategies are rare — default to slow setups."
+    },
+    "Sunset": {
+      "top_agents": ["Jett", "Omen", "Killjoy", "Sova", "Fade"],
+      "notes": "B Lane is a long-range Op corridor. A Bridge elevation enables aggressive Jett peeks. Omen smokes Mid Market to cut rotation timing."
+    },
+    "Abyss": {
+      "top_agents": ["Jett", "Reyna", "Omen", "Cypher", "Sova"],
+      "notes": "Edge mechanics punish aggressive crossing. Jett Tailwind dash near ledges is high risk/reward. Cypher trapwire near ledge angles forces opponents to stop and look before peeking."
+    }
+  },
+  "agent_meta": {
+    "Omen": {"tier": "S", "pick_rate": "~32%", "win_rate": "~51%", "reason": "Dark Cover through any geometry makes him the most flexible smoke. From the Shadows teleport creates pressure on any map."},
+    "Viper": {"tier": "S", "pick_rate": "~28%", "win_rate": "~52%", "reason": "Toxic Screen is the only free wall per round. Pit is the most oppressive post-plant ability in the game."},
+    "Killjoy": {"tier": "S", "pick_rate": "~35%", "win_rate": "~51%", "reason": "Nanoswarm under spike is the best post-plant combo. Lockdown forces free retakes on most maps."},
+    "Jett": {"tier": "S", "pick_rate": "~30%", "win_rate": "~50%", "reason": "Only duelist with Operator synergy at high level. Tailwind peek-and-retreat is unpunishable with Op."},
+    "Sova": {"tier": "S", "pick_rate": "~25%", "win_rate": "~51%", "reason": "Free Recon Bolt every round. Drone + Shock Bolt lineups are map-unique advantages."},
+    "Reyna": {"tier": "A", "pick_rate": "~38%", "win_rate": "~49%", "reason": "High solo-queue pick rate but team-dependent at high ELO. Leer nearsight is the cheapest hard-flash in the game."},
+    "Cypher": {"tier": "A", "pick_rate": "~22%", "win_rate": "~50%", "reason": "Strongest single-site anchor. Neural Theft reveals all enemies — most information-dense ult available."},
+    "Fade": {"tier": "A", "pick_rate": "~20%", "win_rate": "~50%", "reason": "Prowler hard-checks corners. Seize stops retakes. Better entry-initiator than Sova on aggressive maps."},
+    "Brimstone": {"tier": "A", "pick_rate": "~18%", "win_rate": "~51%", "reason": "Most reliable 3-smoke setup with no wall-of-sight restrictions. Stim Beacon enables contact plays."},
+    "Breach": {"tier": "A", "pick_rate": "~15%", "win_rate": "~50%", "reason": "Flashpoint through walls is the safest flash in the game. Rolling Thunder is the most team-fight-winning ult."},
+    "Sage": {"tier": "B", "pick_rate": "~20%", "win_rate": "~49%", "reason": "Resurrection is a round-winner but Sage needs to play safely to be available for the revive. Barrier is high-value on specific maps (Split, Haven)."},
+    "Chamber": {"tier": "B", "pick_rate": "~12%", "win_rate": "~48%", "reason": "Post-nerf (Rendezvous range reduced). Still strong with Op but less mobile than pre-nerf. Tour de Force win conditions still exist."},
+    "Iso": {"tier": "B", "pick_rate": "~10%", "win_rate": "~48%", "reason": "Kill Contract removes one enemy from the round but risks Iso too. Double Tap rewards aggressive trading. Rising in team compositions that execute fast."},
+    "KAY/O": {"tier": "B", "pick_rate": "~14%", "win_rate": "~49%", "reason": "ZERO/point suppression is strongest on utility-heavy defenders (Killjoy, Cypher). Underused: R-click FLASH is the fastest pop flash available."}
+  }
+}

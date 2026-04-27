@@ -203,17 +203,33 @@ def test_format_context_is_compact() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_build_system_prompt_with_context_appends_separator() -> None:
-    ctx = "PLAYER CONTEXT — fake"
-    out = _build_system_prompt("BASE PROMPT", ctx)
+def test_build_system_prompt_with_grounded_and_stats_context() -> None:
+    grounded = "GROUNDED CONTEXT — fake"
+    stats = "PLAYER CONTEXT — fake"
+    out = _build_system_prompt("BASE PROMPT", grounded, stats)
     assert out.startswith("BASE PROMPT")
     assert "---" in out
-    assert ctx in out
+    assert grounded in out
+    assert stats in out
 
 
-def test_build_system_prompt_without_context_is_passthrough() -> None:
-    out = _build_system_prompt("BASE PROMPT", None)
+def test_build_system_prompt_without_contexts_is_passthrough() -> None:
+    out = _build_system_prompt("BASE PROMPT", None, None)
     assert out == "BASE PROMPT"
+
+
+def test_build_system_prompt_grounded_only() -> None:
+    grounded = "GROUNDED CONTEXT — fake"
+    out = _build_system_prompt("BASE PROMPT", grounded, None)
+    assert grounded in out
+    assert "PLAYER CONTEXT" not in out
+
+
+def test_build_system_prompt_stats_only() -> None:
+    stats = "PLAYER CONTEXT — fake"
+    out = _build_system_prompt("BASE PROMPT", None, stats)
+    assert stats in out
+    assert "GROUNDED CONTEXT" not in out
 
 
 # ---------------------------------------------------------------------------
@@ -252,7 +268,8 @@ def test_run_coach_injects_context_into_system_prompt() -> None:
 
 
 def test_run_coach_skips_context_when_with_stats_false() -> None:
-    """--no-stats means DON'T even call the builder. Faster + offline-safe."""
+    """--no-stats means DON'T even call the stats builder. Faster + offline-safe.
+    Grounded meta context is still injected (it comes from local JSON, not the DB)."""
     with (
         patch("valocoach.cli.commands.coach.load_settings", return_value=_settings()),
         patch(
@@ -267,12 +284,15 @@ def test_run_coach_skips_context_when_with_stats_false() -> None:
         run_coach("any situation", with_stats=False)
 
     mock_build.assert_not_called()
-    assert mock_stream.call_args.kwargs["system_prompt"] == SYSTEM_PROMPT_STUB
+    prompt = mock_stream.call_args.kwargs["system_prompt"]
+    assert prompt.startswith(SYSTEM_PROMPT_STUB)
+    # Grounded meta context is always injected even without stats
+    assert "GROUNDED CONTEXT" in prompt
 
 
 def test_run_coach_proceeds_when_context_is_none() -> None:
-    """No synced data → build_stats_context returns None → no '---' divider
-    appears in the system prompt. Coach still runs."""
+    """No synced data → build_stats_context returns None → no PLAYER CONTEXT block
+    in the prompt, but grounded meta context is still injected. Coach still runs."""
     with (
         patch("valocoach.cli.commands.coach.load_settings", return_value=_settings()),
         patch(
@@ -288,7 +308,11 @@ def test_run_coach_proceeds_when_context_is_none() -> None:
         run_coach("situation", with_stats=True)
 
     assert mock_stream.call_count == 1
-    assert mock_stream.call_args.kwargs["system_prompt"] == SYSTEM_PROMPT_STUB
+    prompt = mock_stream.call_args.kwargs["system_prompt"]
+    assert prompt.startswith(SYSTEM_PROMPT_STUB)
+    assert "GROUNDED CONTEXT" in prompt
+    # No stats block appended (stats header includes "—" separator after "PLAYER CONTEXT")
+    assert "PLAYER CONTEXT —" not in prompt
 
 
 def test_run_coach_survives_context_builder_exception() -> None:
@@ -313,8 +337,11 @@ def test_run_coach_survives_context_builder_exception() -> None:
     assert mock_warn.called
     warn_msg = mock_warn.call_args.args[0]
     assert "stats context" in warn_msg.lower() or "continuing" in warn_msg.lower()
-    # No context injected when builder failed
-    assert mock_stream.call_args.kwargs["system_prompt"] == SYSTEM_PROMPT_STUB
+    # Stats context is absent when builder failed, but grounded meta is still present
+    prompt = mock_stream.call_args.kwargs["system_prompt"]
+    assert prompt.startswith(SYSTEM_PROMPT_STUB)
+    assert "PLAYER CONTEXT —" not in prompt
+    assert "GROUNDED CONTEXT" in prompt
 
 
 # ---------------------------------------------------------------------------
