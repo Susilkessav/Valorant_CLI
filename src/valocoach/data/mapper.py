@@ -53,6 +53,26 @@ def _tier_int(tier_id: str) -> int | None:
     return int(tier_id) if tier_id and tier_id.lstrip("-").isdigit() else None
 
 
+def _econ_int(economy: dict, *keys: str) -> int | None:
+    """Safely traverse a nested economy dict and return an int leaf or None.
+
+    HenrikDev v4 economy shape on MatchDetailsPlayer:
+        {"spent": {"overall": 12000, "average": 400},
+         "loadout_value": {"overall": 35000, "average": 1166}}
+
+    Example: _econ_int(player.economy, "spent", "overall") → 12000.
+    Returns None if any key is missing or the leaf is not an int — old
+    rows (synced before this migration) are left as NULL rather than
+    crashing the sync.
+    """
+    cur: object = economy
+    for k in keys:
+        if not isinstance(cur, dict):
+            return None
+        cur = cur.get(k)
+    return int(cur) if isinstance(cur, int | float) else None
+
+
 @dataclass(slots=True)
 class _ImpactStats:
     """Per-PUUID impact counters derived from kill and round lists."""
@@ -137,6 +157,8 @@ def _map_player(
         rounds_in_spawn=int(player.behavior.rounds_in_spawn),  # float → int
         competitive_tier=_tier_int(player.tier.id),  # int JSON → str → int
         started_at=started_at,
+        credits_spent=_econ_int(player.economy, "spent", "overall"),
+        avg_loadout=_econ_int(player.economy, "loadout_value", "average"),
     )
 
 
@@ -163,7 +185,9 @@ def _build_round_tree(details: MatchDetails, match_id: str) -> list[Round]:
             result_code=rnd.ceremony or "",
             bomb_planted=rnd.plant is not None,
             plant_site=rnd.plant.site if rnd.plant else None,
+            planter_puuid=rnd.plant.player.puuid if rnd.plant and rnd.plant.player.puuid else None,
             bomb_defused=rnd.defuse is not None,
+            defuser_puuid=rnd.defuse.player.puuid if rnd.defuse and rnd.defuse.player.puuid else None,
         )
         round_map[rnd.id] = orm_round
 

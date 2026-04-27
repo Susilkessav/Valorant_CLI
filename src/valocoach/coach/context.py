@@ -25,14 +25,22 @@ from __future__ import annotations
 import asyncio
 
 from valocoach.core.config import Settings
-from valocoach.data.database import ensure_db, session_scope
+from valocoach.data.loader import load_player_data_async
 from valocoach.data.orm_models import MatchPlayer, Player
-from valocoach.data.repository import get_player_by_name, get_recent_matches
 from valocoach.stats import (
     compute_per_agent,
     compute_per_map,
     compute_player_stats,
     reliability_flags,
+)
+from valocoach.stats.baseline import BaselineComparison, compare_baseline
+from valocoach.stats.round_analyzer import (
+    RoundAnalysis,
+    analyze_rounds,
+    clutch_stat,
+    kast_stat,
+    multi_kill_summary,
+    trade_efficiency_stat,
 )
 
 # Default match window for the context snippet. Mirrors the profile card —
@@ -54,11 +62,78 @@ def _pct(ratio: float) -> str:
     return f"{round(ratio * 100)}%"
 
 
+def _warn(stat: object) -> str:
+    """Return '⚠' when a StatResult is unreliable, '' otherwise."""
+    from valocoach.stats.calculator import StatResult  # avoid circular at module level
+    if isinstance(stat, StatResult) and not stat.is_reliable:
+        return "⚠"
+    return ""
+
+
+def _format_round_line(analysis: RoundAnalysis, matches: int) -> str | None:
+    """Render the round-level line for the coach context.
+
+    Returns None when there is no round-level data (empty analysis) so
+    the caller can drop it rather than showing zeros the LLM would mistake
+    for real signal.
+
+    Reliability comes directly from StatResult.is_reliable — no manual
+    threshold math here. Each metric carries its own ⚠ flag.
+    """
+    if analysis.rounds == 0:
+        return None
+
+    kast = kast_stat(analysis, matches)
+    clutch = clutch_stat(analysis, matches)
+    trade = trade_efficiency_stat(analysis, matches)
+    multi = multi_kill_summary(analysis)
+
+    multi_str = f" · {multi}" if multi else ""
+
+    side_str = ""
+    if analysis.attack_win_rate is not None and analysis.defense_win_rate is not None:
+        side_str = (
+            f" · ATK {_pct(analysis.attack_win_rate)}"
+            f"/{_pct(analysis.defense_win_rate)} DEF"
+        )
+
+    return (
+        f"- Round play ({analysis.rounds} rounds): "
+        f"KAST {kast.display}{_warn(kast)} "
+        f"· Clutch {analysis.clutches_won}/{analysis.clutch_opportunities}{_warn(clutch)} "
+        f"· Traded deaths {trade.display}{_warn(trade)}"
+        f"{side_str}{multi_str}"
+    )
+
+
+def _format_baseline_lines(comparison: BaselineComparison) -> list[str]:
+    """Render the form-trend block for the coach context.
+
+    Returns a non-empty list of strings when there are detected anomalies,
+    an empty list otherwise. The caller drops the block when empty.
+
+    Format: one header line + one bullet per anomaly. Significant anomalies
+    are annotated with '(!!)' so the LLM can triage severity quickly.
+    """
+    if not comparison.has_anomalies:
+        return []
+
+    lines = [
+        f"Form trend (last {comparison.form_matches}g vs {comparison.baseline_matches}g baseline):"
+    ]
+    for a in comparison.anomalies:
+        sev_tag = " (!)" if a.severity == "notable" else " (!!)"
+        lines.append(f"- {a.one_liner()}{sev_tag}")
+    return lines
+
+
 def _format_context(
     player: Player,
     rows: list[MatchPlayer],
     *,
     top_n: int = DEFAULT_TOP_N,
+    round_analysis: RoundAnalysis | None = None,
+    baseline_comparison: BaselineComparison | None = None,
 ) -> str:
     """Render a compact context block for the LLM prompt.
 
@@ -101,12 +176,27 @@ def _format_context(
             f"· KDA {overall.kda:.2f} "
             f"· HS {_pct(overall.hs_pct)} "
             f"· ADR {overall.adr:.0f}"
+            + (f" · Econ {overall.econ_rating:.0f}" if overall.econ_rating is not None else "")
         ),
         (
             f"- Entry: FB {overall.first_bloods} / FD {overall.first_deaths} "
             f"(diff {overall.fb_diff:+d})"
         ),
     ]
+
+    # Round-level line is optional: only appears when the caller supplied
+    # analysis (i.e. loaded the heavier full-match fetch). Keeps the
+    # snippet cheap for callers that don't need KAST/clutch/trade.
+    if round_analysis is not None:
+        round_line = _format_round_line(round_analysis, overall.matches)
+        if round_line is not None:
+            lines.append(round_line)
+
+    # Baseline / anomaly block — only when there is something to flag.
+    # Silent when the window is too thin or when performance is stable,
+    # so the LLM doesn't see an empty section that wastes tokens.
+    if baseline_comparison is not None:
+        lines.extend(_format_baseline_lines(baseline_comparison))
 
     # Only show the per-agent block when the player has actually played
     # multiple agents — a single-agent list would duplicate the overall line.
@@ -152,21 +242,18 @@ async def _build_stats_context_async(
     no matches for them. Either way there's nothing to personalise with —
     caller should fall back to generic coaching.
     """
-    if not settings.riot_name or not settings.riot_tag:
+    data = await load_player_data_async(settings, limit=limit, include_rounds=True)
+    if data is None or not data.rows:
         return None
 
-    await ensure_db(settings.data_dir / "valocoach.db")
-
-    async with session_scope() as session:
-        player = await get_player_by_name(session, settings.riot_name, settings.riot_tag)
-        if player is None:
-            return None
-        rows = await get_recent_matches(session, player.puuid, limit=limit)
-
-    if not rows:
-        return None
-
-    return _format_context(player, rows, top_n=top_n)
+    analysis = analyze_rounds(data.full_matches, data.player.puuid) if data.full_matches else None
+    comparison = compare_baseline(data.rows)
+    return _format_context(
+        data.player, data.rows,
+        top_n=top_n,
+        round_analysis=analysis,
+        baseline_comparison=comparison,
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -13,6 +13,7 @@ Public API:
     await get_player(session, puuid)                          -> Player | None
     await get_player_by_name(session, name, tag)              -> Player | None
     await get_recent_matches(session, puuid, limit, queue_id) -> list[MatchPlayer]
+    await get_recent_matches_full(session, puuid, limit, ...) -> list[Match]
     await match_exists(session, match_id)                     -> bool
     await get_match(session, match_id)                        -> Match | None
     await start_sync(session, puuid)                          -> SyncLog
@@ -32,7 +33,7 @@ from sqlalchemy.orm import selectinload
 from valocoach.data.api_models import MatchDetails
 from valocoach.data.mapper import match_from_details, player_from_account_mmr
 from valocoach.data.models import AccountData, MatchData, MMRData
-from valocoach.data.orm_models import Match, MatchPlayer, Player, SyncLog
+from valocoach.data.orm_models import Match, MatchPlayer, Player, Round, SyncLog
 
 logger = logging.getLogger(__name__)
 
@@ -277,6 +278,39 @@ async def get_match(session: AsyncSession, match_id: str) -> Match | None:
     )
     result = await session.scalars(stmt)
     return result.first()
+
+
+async def get_recent_matches_full(
+    session: AsyncSession,
+    puuid: str,
+    limit: int = 10,
+    queue_id: str | None = DEFAULT_QUEUE,
+) -> list[Match]:
+    """Return full Match trees (players + rounds + kills) for a puuid.
+
+    Heavier than get_recent_matches: fires additional selectin queries
+    for rounds and kills. Use only when the caller needs round-level
+    data (the round analyzer for KAST / clutch / trade) — aggregate-only
+    callers (stats CLI, profile card) should keep using get_recent_matches.
+    """
+    stmt = (
+        select(Match)
+        .join(Match.players)
+        .where(MatchPlayer.puuid == puuid)
+        .order_by(Match.started_at.desc())
+        .limit(limit)
+        .options(
+            selectinload(Match.players),
+            selectinload(Match.rounds).selectinload(Round.kills),
+        )
+    )
+    if queue_id is not None:
+        stmt = stmt.where(Match.queue_id == queue_id)
+    result = await session.scalars(stmt)
+    # Distinct: a Match can surface twice if the join picks more than one
+    # MatchPlayer row (shouldn't happen with our puuid filter, but cheap
+    # defense — .unique() is a no-op on a clean result).
+    return list(result.unique().all())
 
 
 # ---------------------------------------------------------------------------

@@ -2,42 +2,41 @@
 
 Flow:
     1. Load settings → validate riot_name/riot_tag are configured.
-    2. ensure_db()   → open the SQLite engine, create tables if missing.
-    3. Look up the tracked Player row by name+tag.
-       Missing Player → nudge the user to run `valocoach sync` first.
-    4. Fetch recent MatchPlayer rows for that puuid (up to FETCH_LIMIT).
-    5. Apply --period / --agent / --map filters in Python (cheap at this size).
-    6. Run the calculator → render three tables.
+    2. load_player_data() → ensure_db + session_scope + fetch rows (via loader).
+    3. Apply --period / --agent / --map / --result filters (pure, cheap).
+    4. Call formatter renderers → overall + trend + win/loss split + per-agent + per-map.
 
-The DB-facing phase is async; rendering is sync. All DB access sits behind a
-single ``session_scope()``; by the time we render, every row is detached from
-the session and the connection is back in the pool.
+The DB-facing phase is inside the loader (async internally, sync entry point).
+By the time we render, every row is detached from the session.  All rendering
+logic lives in ``valocoach.cli.formatter`` so this module is pure orchestration:
+parse args → load data → filter → render.
 """
 
 from __future__ import annotations
 
-import asyncio
-from datetime import UTC, datetime, timedelta
-
 import typer
 from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
 
 from valocoach.cli import display
-from valocoach.core.config import Settings, load_settings
-from valocoach.data.database import ensure_db, session_scope
-from valocoach.data.orm_models import MatchPlayer
-from valocoach.data.repository import get_player_by_name, get_recent_matches
+from valocoach.cli.formatter import (
+    render_breakdown,
+    render_header,
+    render_overall,
+    render_round_stats,
+    render_trend,
+    render_warn_legend,
+    render_win_loss_split,
+)
+from valocoach.core.config import load_settings
+from valocoach.data.loader import load_player_data
 from valocoach.stats import (
-    AgentStats,
-    MapStats,
-    PlayerStats,
     compute_per_agent,
     compute_per_map,
     compute_player_stats,
-    reliability_flags,
+    parse_period,
+    split_by_result,
 )
+from valocoach.stats.round_analyzer import analyze_rounds
 
 # Fetch plenty of rows — the period/agent/map filters narrow from here in Python.
 # 200 covers ~3 months of ranked for a heavy player; raise when we track >1 player.
@@ -48,249 +47,21 @@ TOP_N = 5
 
 
 # ---------------------------------------------------------------------------
-# Period parsing
+# Period parsing  (thin CLI wrapper around the pure parse_period helper)
 # ---------------------------------------------------------------------------
 
 
 def _period_to_cutoff_iso(period: str) -> str | None:
     """Translate a ``--period`` string into an ISO8601 cutoff timestamp.
 
-    ``'30d'`` → ISO of "30 days ago" (filter rows with started_at >= cutoff).
-    ``'all'`` → ``None`` (no filter).
-
-    ISO8601 UTC strings sort lexicographically the same as chronologically,
-    so callers can use ``row.started_at >= cutoff`` directly — no parsing.
-
-    Raises:
-        typer.BadParameter: on unrecognised input. Surfaces in the CLI as a
-            clean error instead of a traceback.
+    Delegates to :func:`valocoach.stats.filters.parse_period` and converts
+    ``ValueError`` to ``typer.BadParameter`` so the CLI surfaces a clean
+    error message instead of a traceback.
     """
-    p = period.strip().lower()
-    if p == "all":
-        return None
-    if not p.endswith("d") or not p[:-1].isdigit():
-        raise typer.BadParameter(f"--period must be 'Nd' (e.g. 7d, 30d) or 'all'; got {period!r}")
-    days = int(p[:-1])
-    if days <= 0:
-        raise typer.BadParameter(f"--period must be positive; got {period!r}")
-    cutoff = datetime.now(UTC) - timedelta(days=days)
-    return cutoff.isoformat()
-
-
-# ---------------------------------------------------------------------------
-# Row filtering  (pure — tested directly)
-# ---------------------------------------------------------------------------
-
-
-def _filter_rows(
-    rows: list[MatchPlayer],
-    *,
-    cutoff_iso: str | None,
-    agent: str | None,
-    map_name: str | None,
-) -> list[MatchPlayer]:
-    """Apply --period / --agent / --map filters to the row set.
-
-    All comparisons are case-insensitive on agent/map because CLI users
-    will type "jett" and the DB has "Jett".
-    """
-    result = rows
-    if cutoff_iso is not None:
-        result = [mp for mp in result if mp.started_at >= cutoff_iso]
-    if agent is not None:
-        agent_lc = agent.lower()
-        result = [mp for mp in result if mp.agent_name.lower() == agent_lc]
-    if map_name is not None:
-        map_lc = map_name.lower()
-        result = [
-            mp for mp in result if mp.match is not None and mp.match.map_name.lower() == map_lc
-        ]
-    return result
-
-
-# ---------------------------------------------------------------------------
-# Rendering  (pure — takes computed stats, writes to a Console)
-# ---------------------------------------------------------------------------
-
-
-def _fmt_pct(ratio: float) -> str:
-    """0.2734 → '27.3%'. Rate fields live as 0.0-1.0 ratios in PlayerStats."""
-    return f"{ratio * 100:.1f}%"
-
-
-# Sentinel prefix for unreliable metrics. Rendered before the value so the
-# warning is visible even if a narrow column truncates the right side.
-# Exposed as a constant so tests can assert on it without duplicating the
-# glyph literal (and so any future theming/locale swap stays consistent).
-WARN_PREFIX = "⚠️ "
-
-
-def _warn(value: str, reliable: bool) -> str:
-    """Prepend ⚠️ when ``reliable`` is False; pass through otherwise.
-
-    Kept trivial on purpose — presentation-layer concern only. The
-    truth-value for reliability comes from ``reliability_flags`` in
-    calculator.py, not from re-deriving thresholds here.
-    """
-    return value if reliable else f"{WARN_PREFIX}{value}"
-
-
-def _render_header(
-    console: Console,
-    *,
-    name: str,
-    tag: str,
-    tier: str,
-    region: str,
-    matches_shown: int,
-    period: str,
-    agent_filter: str | None,
-    map_filter: str | None,
-) -> None:
-    """Top panel: who we're showing, over what window."""
-    filter_bits = [f"period={period}"]
-    if agent_filter:
-        filter_bits.append(f"agent={agent_filter}")
-    if map_filter:
-        filter_bits.append(f"map={map_filter}")
-
-    title = f"[bold]{name}#{tag}[/bold]  [dim]·[/dim]  {tier}  [dim]·[/dim]  {region.upper()}"
-    subtitle = f"{matches_shown} match(es) after filters · " + " · ".join(filter_bits)
-    console.print(Panel(subtitle, title=title, border_style="cyan", padding=(0, 2)))
-
-
-def _render_overall(console: Console, stats: PlayerStats) -> bool:
-    """Overall stats — two-column layout of the numbers that matter most.
-
-    Returns ``True`` if any metric was tagged as unreliable (⚠️). Callers
-    roll that up to decide whether to show the footer legend.
-    """
-    flags = reliability_flags(stats)
-    # Raw counts (matches, rounds, kills/deaths/assists, raw FB/FD counts)
-    # have no threshold — they're facts, not inferences. Only tag derived
-    # rates and ratios.
-    any_warn = not all(flags.values())
-
-    table = Table(title="Overall", show_header=False, box=None, pad_edge=False)
-    table.add_column("Label", style="dim")
-    table.add_column("Value", justify="right")
-    table.add_column("Label", style="dim")
-    table.add_column("Value", justify="right")
-
-    table.add_row(
-        "Matches",
-        str(stats.matches),
-        "Win rate",
-        _warn(
-            f"{stats.wins}-{stats.losses}  ({_fmt_pct(stats.win_rate)})",
-            flags["win_rate"],
-        ),
-    )
-    table.add_row(
-        "Rounds",
-        str(stats.rounds),
-        "ACS",
-        _warn(f"{stats.acs:.1f}", flags["acs"]),
-    )
-    table.add_row(
-        "K / D / A",
-        f"{stats.kills} / {stats.deaths} / {stats.assists}",
-        "ADR",
-        _warn(f"{stats.adr:.1f}", flags["adr"]),
-    )
-    table.add_row(
-        "K/D",
-        _warn(f"{stats.kd:.2f}", flags["kd"]),
-        "KDA",
-        _warn(f"{stats.kda:.2f}", flags["kda"]),
-    )
-    table.add_row(
-        "HS%",
-        _warn(_fmt_pct(stats.hs_pct), flags["hs_pct"]),
-        "FB / FD (diff)",
-        # FB and FD share a threshold (same rarity). Either being thin
-        # warrants a ⚠️ on the combined cell.
-        _warn(
-            f"{stats.first_bloods} / {stats.first_deaths}  ({stats.fb_diff:+d})",
-            flags["fb_rate"] and flags["fd_rate"],
-        ),
-    )
-    console.print(table)
-    return any_warn
-
-
-def _render_breakdown(
-    console: Console,
-    *,
-    title: str,
-    group_col: str,
-    rows: list[AgentStats] | list[MapStats],
-    top_n: int,
-) -> bool:
-    """Per-agent or per-map table, top_n rows by matches.
-
-    Returns ``True`` if any cell was tagged as unreliable. Per-split rows
-    use the stricter ``is_split=True`` floor — a 4-game Jett split should
-    ⚠️ even when the overall sample is reliable.
-    """
-    if not rows:
-        return False
-
-    table = Table(title=title, show_header=True, header_style="bold", pad_edge=False)
-    table.add_column(group_col, style="cyan")
-    table.add_column("G", justify="right")
-    table.add_column("W-L", justify="right")
-    table.add_column("Win%", justify="right")
-    table.add_column("ACS", justify="right")
-    table.add_column("K/D", justify="right")
-    table.add_column("HS%", justify="right")
-
-    any_warn = False
-    for row in rows[:top_n]:
-        label = row.agent if isinstance(row, AgentStats) else row.map_name
-        s = row.stats
-        flags = reliability_flags(s, is_split=True)
-        if not all(flags.values()):
-            any_warn = True
-        table.add_row(
-            label,
-            # Mark the G column when *any* split-metric is thin — this is
-            # the user's "don't trust this row" canary, keyed off the
-            # sample size that drives everything else.
-            _warn(str(s.matches), all(flags.values())),
-            _warn(f"{s.wins}-{s.losses}", flags["win_rate"]),
-            _warn(_fmt_pct(s.win_rate), flags["win_rate"]),
-            _warn(f"{s.acs:.0f}", flags["acs"]),
-            _warn(f"{s.kd:.2f}", flags["kd"]),
-            _warn(_fmt_pct(s.hs_pct), flags["hs_pct"]),
-        )
-    console.print(table)
-    return any_warn
-
-
-# ---------------------------------------------------------------------------
-# Async worker
-# ---------------------------------------------------------------------------
-
-
-async def _fetch_stats_data(
-    settings: Settings,
-) -> tuple[object, list[MatchPlayer]] | None:
-    """Resolve player + fetch recent MatchPlayer rows.
-
-    Returns:
-        (player, rows) on success.
-        None if the player has never been synced — caller prints guidance.
-    """
-    await ensure_db(settings.data_dir / "valocoach.db")
-
-    async with session_scope() as session:
-        player = await get_player_by_name(session, settings.riot_name, settings.riot_tag)
-        if player is None:
-            return None
-        rows = await get_recent_matches(session, player.puuid, limit=FETCH_LIMIT)
-
-    return player, rows
+    try:
+        return parse_period(period)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -303,16 +74,35 @@ def run_stats(
     agent: str | None = None,
     map_: str | None = None,
     period: str = "30d",
+    result: str | None = None,
     console: Console | None = None,
 ) -> None:
     """CLI entry: ``valocoach stats`` dispatches here.
 
-    ``console`` is injectable for testing — defaults to the shared themed
-    console so output matches the rest of the CLI.
+    Args:
+        agent:   Case-insensitive agent filter (e.g. ``'Jett'``).
+        map_:    Case-insensitive map filter (e.g. ``'Ascent'``).
+        period:  Time window — ``'Nd'`` or ``'all'``.
+        result:  ``'win'`` to show wins only, ``'loss'`` for losses only,
+                 ``None`` to show both (default).
+        console: Injectable for testing; defaults to the shared theme.
     """
     con = console or display.console
 
-    # Parse the period string before we do anything expensive — fail fast on bad input.
+    # Parse and validate result filter before any I/O — fast fail on bad input.
+    won: bool | None
+    if result is None:
+        won = None
+    elif result.lower() == "win":
+        won = True
+    elif result.lower() in ("loss", "lose"):
+        won = False
+    else:
+        raise typer.BadParameter(
+            f"--result must be 'win' or 'loss'; got {result!r}", param_hint="'--result'"
+        )
+
+    # Validate period before I/O too.
     cutoff_iso = _period_to_cutoff_iso(period)
 
     settings = load_settings()
@@ -322,22 +112,36 @@ def run_stats(
         )
         raise typer.Exit(1)
 
-    fetched = asyncio.run(_fetch_stats_data(settings))
-    if fetched is None:
+    data = load_player_data(settings, limit=FETCH_LIMIT, include_rounds=True)
+    if data is None:
         display.warn(
             f"No local data for {settings.riot_name}#{settings.riot_tag}. "
             "Run `valocoach sync` first to pull match history."
         )
         raise typer.Exit(1)
 
-    player, rows = fetched
+    player, rows = data.player, data.rows
 
-    filtered = _filter_rows(rows, cutoff_iso=cutoff_iso, agent=agent, map_name=map_)
+    # Apply all filters in one pass. period is already parsed to a cutoff.
+    from valocoach.stats.filters import (
+        filter_by_agent,
+        filter_by_map,
+        filter_by_period,
+        filter_by_result,
+    )
+
+    filtered = filter_by_period(rows, cutoff_iso)
+    filtered = filter_by_agent(filtered, agent)
+    filtered = filter_by_map(filtered, map_)
+    filtered = filter_by_result(filtered, won)
+
     if not filtered:
         display.warn(
-            f"No matches after filters (period={period}"
+            "No matches after filters"
+            + (f" (period={period}" if period != "all" else " (period=all")
             + (f", agent={agent}" if agent else "")
             + (f", map={map_}" if map_ else "")
+            + (f", result={result}" if result else "")
             + ")."
         )
         raise typer.Exit(0)
@@ -346,7 +150,7 @@ def run_stats(
     per_agent = compute_per_agent(filtered)
     per_map = compute_per_map(filtered)
 
-    _render_header(
+    render_header(
         con,
         name=player.riot_name,
         tag=player.riot_tag,
@@ -356,27 +160,43 @@ def run_stats(
         period=period,
         agent_filter=agent,
         map_filter=map_,
+        result_filter=result,
     )
-    any_warn = _render_overall(con, overall)
+    any_warn = render_overall(con, overall)
     con.print()
+
+    # Trend section — silent when stable or window is too thin.
+    render_trend(con, filtered)
+
+    # Win/Loss split — only when no result filter is active (splits are
+    # meaningless if the user already filtered to wins or losses only).
+    if won is None:
+        wins_rows, losses_rows = split_by_result(filtered)
+        any_warn |= render_win_loss_split(con, wins_rows, losses_rows)
+        con.print()
+
     # Skip per-agent breakdown when the user already filtered to one agent —
     # the single-row table would be redundant with the overall card.
     if agent is None:
-        any_warn |= _render_breakdown(
+        any_warn |= render_breakdown(
             con, title="By agent", group_col="Agent", rows=per_agent, top_n=TOP_N
         )
         con.print()
     if map_ is None:
-        any_warn |= _render_breakdown(
+        any_warn |= render_breakdown(
             con, title="By map", group_col="Map", rows=per_map, top_n=TOP_N
         )
 
+    # Round-level stats (KAST, clutch, trade, side win rates).
+    # Only shown when full match data was loaded (include_rounds=True) and the
+    # round analyzer finds round events for the player. Absent data renders
+    # nothing — users with pre-round-migration history see a clean stats card.
+    if data.full_matches:
+        round_analysis = analyze_rounds(data.full_matches, player.puuid)
+        if round_analysis.rounds > 0:
+            con.print()
+            any_warn |= render_round_stats(con, round_analysis, overall.matches)
+
     if any_warn:
         con.print()
-        # One-line legend, dim so it doesn't compete with the numbers.
-        # Only shown when a ⚠️ appeared above — no point teaching the
-        # glyph when the user didn't see one.
-        con.print(
-            "[dim]⚠️  = below the sample-size threshold for this metric; "
-            "treat as indicative, not reliable (see BUILD_PLAN.md § sample-size thresholds).[/dim]"
-        )
+        render_warn_legend(con)

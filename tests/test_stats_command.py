@@ -15,19 +15,32 @@ import typer
 from rich.console import Console
 
 from valocoach.cli.commands.stats import (
-    WARN_PREFIX,
-    _filter_rows,
     _period_to_cutoff_iso,
-    _render_breakdown,
-    _render_header,
-    _render_overall,
     run_stats,
 )
+from valocoach.cli.formatter import (
+    WARN_PREFIX,
+)
+from valocoach.cli.formatter import (
+    render_breakdown as _render_breakdown,
+)
+from valocoach.cli.formatter import (
+    render_header as _render_header,
+)
+from valocoach.cli.formatter import (
+    render_overall as _render_overall,
+)
+from valocoach.data.loader import PlayerData
 from valocoach.data.orm_models import Match, MatchPlayer
 from valocoach.stats import (
     compute_per_agent,
     compute_per_map,
     compute_player_stats,
+)
+from valocoach.stats.filters import (
+    filter_by_agent,
+    filter_by_map,
+    filter_by_period,
 )
 
 # ---------------------------------------------------------------------------
@@ -134,7 +147,9 @@ def test_period_bad_input_raises_bad_parameter(bad: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# _filter_rows
+# Row filtering (via public filter_by_* from valocoach.stats.filters)
+# These tests live here because they exercise the same data the stats
+# command uses; comprehensive filter-module tests are in test_filters.py.
 # ---------------------------------------------------------------------------
 
 
@@ -143,8 +158,7 @@ def test_filter_by_period_drops_old_rows() -> None:
         _mp(started_at="2026-04-19T18:00:00+00:00", match_id="new"),
         _mp(started_at="2025-01-01T00:00:00+00:00", match_id="old"),
     ]
-    cutoff = "2026-01-01T00:00:00+00:00"
-    out = _filter_rows(rows, cutoff_iso=cutoff, agent=None, map_name=None)
+    out = filter_by_period(rows, "2026-01-01T00:00:00+00:00")
     assert [mp.match_id for mp in out] == ["new"]
 
 
@@ -154,7 +168,7 @@ def test_filter_by_agent_is_case_insensitive() -> None:
         _mp(agent="Reyna", match_id="b"),
         _mp(agent="jett", match_id="c"),  # defensive — shouldn't happen in real data
     ]
-    out = _filter_rows(rows, cutoff_iso=None, agent="JETT", map_name=None)
+    out = filter_by_agent(rows, "JETT")
     assert {mp.match_id for mp in out} == {"a", "c"}
 
 
@@ -163,11 +177,11 @@ def test_filter_by_map_is_case_insensitive() -> None:
         _mp(map_name="Ascent", match_id="a"),
         _mp(map_name="Lotus", match_id="b"),
     ]
-    out = _filter_rows(rows, cutoff_iso=None, agent=None, map_name="ascent")
+    out = filter_by_map(rows, "ascent")
     assert [mp.match_id for mp in out] == ["a"]
 
 
-def test_filter_combines_all_three() -> None:
+def test_filter_combines_period_agent_map() -> None:
     rows = [
         _mp(
             agent="Jett", map_name="Ascent", started_at="2026-04-01T00:00:00+00:00", match_id="keep"
@@ -191,19 +205,16 @@ def test_filter_combines_all_three() -> None:
             match_id="too_old",
         ),
     ]
-    out = _filter_rows(
-        rows,
-        cutoff_iso="2026-01-01T00:00:00+00:00",
-        agent="Jett",
-        map_name="Ascent",
-    )
+    out = filter_by_period(rows, "2026-01-01T00:00:00+00:00")
+    out = filter_by_agent(out, "Jett")
+    out = filter_by_map(out, "Ascent")
     assert [mp.match_id for mp in out] == ["keep"]
 
 
-def test_filter_no_args_is_identity() -> None:
+def test_filter_no_cutoff_is_identity() -> None:
     rows = [_mp(match_id="a"), _mp(match_id="b")]
-    out = _filter_rows(rows, cutoff_iso=None, agent=None, map_name=None)
-    assert out == rows  # same list instance semantics — equal contents
+    out = filter_by_period(rows, None)
+    assert out == rows
 
 
 # ---------------------------------------------------------------------------
@@ -377,11 +388,11 @@ def test_run_stats_shows_legend_only_when_warnings_fired(tmp_path, monkeypatch) 
         data_dir=tmp_path,
     )
 
-    async def _fetch_thin(_settings):
-        return _P(), thin_rows
+    def _fetch_thin(_settings, **_kw):
+        return PlayerData(player=_P(), rows=thin_rows, full_matches=[])
 
-    async def _fetch_thick(_settings):
-        return _P(), thick_rows
+    def _fetch_thick(_settings, **_kw):
+        return PlayerData(player=_P(), rows=thick_rows, full_matches=[])
 
     for fetch, rows, expect_legend in [
         (_fetch_thin, thin_rows, True),
@@ -390,7 +401,7 @@ def test_run_stats_shows_legend_only_when_warnings_fired(tmp_path, monkeypatch) 
         con = _capture_console()
         with (
             patch("valocoach.cli.commands.stats.load_settings", return_value=fake_settings),
-            patch("valocoach.cli.commands.stats._fetch_stats_data", side_effect=fetch),
+            patch("valocoach.cli.commands.stats.load_player_data", side_effect=fetch),
         ):
             run_stats(period="all", console=con)
         out = con.file.getvalue()
@@ -424,12 +435,12 @@ def test_legend_mentions_the_warn_glyph() -> None:
 
     fake_settings = Settings(riot_name="T", riot_tag="X", riot_region="na", henrikdev_api_key="f")
 
-    async def _fetch(_s):
-        return _P(), _make_rows(3)
+    def _fetch(_s, **_kw):
+        return PlayerData(player=_P(), rows=_make_rows(3), full_matches=[])
 
     with (
         patch("valocoach.cli.commands.stats.load_settings", return_value=fake_settings),
-        patch("valocoach.cli.commands.stats._fetch_stats_data", side_effect=_fetch),
+        patch("valocoach.cli.commands.stats.load_player_data", side_effect=_fetch),
     ):
         run_stats(period="all", console=con)
     out = con.file.getvalue()

@@ -16,6 +16,7 @@ from valocoach.cli.commands.coach import SYSTEM_PROMPT_STUB, _build_system_promp
 from valocoach.coach.context import _format_context
 from valocoach.core.config import Settings
 from valocoach.data.orm_models import Match, MatchPlayer, Player
+from valocoach.stats.round_analyzer import RoundAnalysis
 
 # ---------------------------------------------------------------------------
 # Fixture builders
@@ -392,3 +393,94 @@ def test_format_context_compact_budget_still_holds_with_tags() -> None:
     rows = [_mp(agent=f"A{i % 4}", map_name=f"M{i % 3}", match_id=f"m-{i}") for i in range(5)]
     out = _format_context(_player(), rows)
     assert len(out) < 700, f"context too long ({len(out)} chars):\n{out}"
+
+
+# ---------------------------------------------------------------------------
+# Round-level line (KAST / clutch / trade)
+# ---------------------------------------------------------------------------
+
+
+def _round_analysis(
+    *,
+    rounds: int,
+    rounds_kast: int,
+    clutches_won: int = 0,
+    clutch_opportunities: int = 0,
+    deaths: int = 0,
+    traded_deaths: int = 0,
+    triples: int = 0,
+    aces: int = 0,
+) -> RoundAnalysis:
+    return RoundAnalysis(
+        rounds=rounds,
+        deaths=deaths,
+        teammate_deaths=0,
+        clutch_opportunities=clutch_opportunities,
+        rounds_with_kill=0,
+        rounds_with_assist=0,
+        rounds_survived=0,
+        rounds_traded_death=0,
+        rounds_kast=rounds_kast,
+        clutches_won=clutches_won,
+        traded_deaths=traded_deaths,
+        trades_given=0,
+        double_kills=0,
+        triple_kills=triples,
+        quadra_kills=0,
+        aces=aces,
+    )
+
+
+def test_format_context_omits_round_line_when_analysis_is_none() -> None:
+    """Backwards compat: callers that don't pass analysis keep the old output."""
+    out = _format_context(_player(), [_mp()])
+    assert "Round play" not in out
+
+
+def test_format_context_omits_round_line_on_empty_analysis() -> None:
+    """Empty analysis (zero rounds) should drop the line — not emit zeros
+    that the LLM would treat as real data."""
+    analysis = _round_analysis(rounds=0, rounds_kast=0)
+    out = _format_context(_player(), [_mp()], round_analysis=analysis)
+    assert "Round play" not in out
+
+
+def test_format_context_includes_round_line_when_analysis_present() -> None:
+    """Happy path: KAST + clutch + traded-deaths land on one dash line."""
+    analysis = _round_analysis(
+        rounds=700,               # above every round floor (max is clutch: 600)
+        rounds_kast=490,          # 70 % KAST
+        clutches_won=2,
+        clutch_opportunities=4,
+        deaths=200,
+        traded_deaths=100,        # 50 % traded
+        triples=3,
+        aces=1,
+    )
+    # 30 rows so match-count thresholds pass; 700 rounds clears every
+    # round-count floor → no ⚠ anywhere on this line.
+    rows = [_mp(match_id=f"m-{i}") for i in range(30)]
+    out = _format_context(_player(), rows, round_analysis=analysis)
+    round_line = next(line for line in out.splitlines() if "Round play" in line)
+    assert "KAST 70.0%" in round_line
+    assert "Clutch 2/4" in round_line
+    assert "Traded deaths 50.0%" in round_line
+    assert "1xAce" in round_line
+    assert "3x3K" in round_line
+    assert "⚠" not in round_line
+
+
+def test_format_context_round_line_tags_thin_sample() -> None:
+    """Below matches+rounds floor → individual metrics get a ⚠ tag but
+    the line still renders (LLM should see the data, down-weighted)."""
+    analysis = _round_analysis(
+        rounds=50,        # well below KAST's 200-round floor
+        rounds_kast=30,
+        clutches_won=0,
+        clutch_opportunities=0,
+        deaths=10,
+    )
+    rows = [_mp(match_id=f"m-{i}") for i in range(5)]  # 5 matches — thin
+    out = _format_context(_player(), rows, round_analysis=analysis)
+    round_line = next(line for line in out.splitlines() if "Round play" in line)
+    assert "⚠" in round_line
