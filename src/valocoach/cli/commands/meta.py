@@ -6,6 +6,7 @@ from rich.table import Table
 from rich.text import Text
 
 from valocoach.cli import display
+from valocoach.core.config import load_settings
 from valocoach.retrieval import (
     format_agent_context,
     format_map_context,
@@ -49,8 +50,35 @@ def _meta_header() -> str:
     return f"[bold]Patch {meta['patch']}[/bold]  ·  updated {meta['updated']}  ·  {meta.get('notes', '')}"
 
 
+def _try_get_live_patch(settings) -> str | None:
+    """Read the most recently detected game version from the DB. Non-fatal.
+
+    Returns None if the DB hasn't been initialised (e.g. first run, no sync yet).
+    """
+    try:
+        import asyncio
+
+        from valocoach.data.database import init_engine
+        from valocoach.retrieval.patch_tracker import get_current_patch
+
+        init_engine(settings.data_dir / "valocoach.db")
+        return asyncio.run(get_current_patch())
+    except Exception:
+        return None
+
+
 def run_meta(agent: str | None, map_: str | None) -> None:
+    settings = load_settings()
     meta = get_meta()
+
+    # Show live-patch alert in every view if a newer patch was detected by sync.
+    live_patch = _try_get_live_patch(settings)
+    json_patch = meta.get("patch", "")
+    if live_patch and live_patch != json_patch:
+        display.warn(
+            f"New patch detected: [bold]{live_patch}[/bold] "
+            f"(meta data still reflects {json_patch} — run `valocoach sync` to refresh)"
+        )
 
     # --- agent-specific view ---
     if agent:
