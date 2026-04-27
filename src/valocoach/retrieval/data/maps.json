@@ -1,0 +1,105 @@
+{
+  "maps": [
+    {
+      "name": "Ascent",
+      "sites": ["A", "B"],
+      "callouts": {
+        "A": ["A Main", "A Lobby", "A Catwalk", "A Market", "A Wine", "A Courtyard", "A Garden", "A Tree", "A Generator", "A Heaven", "A Rafters", "A Default Plant"],
+        "B": ["B Main", "B Lobby", "B Market", "B Arcade", "B Link", "B Green", "B Boat", "B Site"],
+        "mid": ["Mid", "Mid Top", "Mid Market", "Mid Catwalk", "Mid Pizza", "Mid Bottom", "Mid Attacker Side"]
+      },
+      "rotations": "A–B rotate through Mid Market (fastest). CT connects both sites near spawn.",
+      "notes": "Mid control opens A Catwalk flank and B Market pressure simultaneously. Defending Mid Market is the #1 priority for defense."
+    },
+    {
+      "name": "Bind",
+      "sites": ["A", "B"],
+      "callouts": {
+        "A": ["A Short", "A Long", "A Lobby", "A Lamps", "A Bath", "A Hookah", "A Heaven", "A Site", "A Showers"],
+        "B": ["B Short", "B Long", "B Lobby", "B Garden", "B Elbow", "B Window", "B CT", "B Site"],
+        "mid": ["Teleporter A", "Teleporter B", "Short Mid"]
+      },
+      "rotations": "Bind has no traditional mid — instead, two one-way teleporters connect the halves. Teleporter A exits near B Short; Teleporter B exits near A Short.",
+      "notes": "Teleporters enable fast rotations but make loud sounds. Timing the teleporter sound is critical intel."
+    },
+    {
+      "name": "Haven",
+      "sites": ["A", "B", "C"],
+      "callouts": {
+        "A": ["A Long", "A Short", "A Lobby", "A Corner", "A Sewer", "A Catwalk", "A Site", "A Box", "A Heaven", "A Link"],
+        "B": ["B Long", "B Short", "B Garage", "B Mid", "B Window", "B Site", "B CT"],
+        "C": ["C Long", "C Short", "C Lobby", "C Sewer", "C Catwalk", "C Site", "C Box", "C Heaven", "C Link"],
+        "mid": ["Mid", "Mid Link", "Top Mid", "Mid Cubby", "Mid Doors", "Courtyard"]
+      },
+      "rotations": "C Long → C Site is fastest CT rotate. Mid Doors connect to both B and A sides. Defenders must watch 3 sites — rotations are the longest in the game.",
+      "notes": "Only 3-site map. Smokes for Mid Doors and Mid Top are highest priority — cutting off rotations is more important than site smokes. C Long is the longest approach; B is the fastest default."
+    },
+    {
+      "name": "Icebox",
+      "sites": ["A", "B"],
+      "callouts": {
+        "A": ["A Main", "A Lobby", "A Rafters", "A Site", "A Tube", "A Kitchen", "A Conveyor", "A Green", "A Screen"],
+        "B": ["B Main", "B Lobby", "B Orange", "B Yellow", "B Site", "B Tube", "B Snowpile", "B Nest"],
+        "mid": ["Mid", "Mid Pillar", "Mid Boiler", "Mid Attacker Side"]
+      },
+      "rotations": "A–B through boiler (mid). Kitchen connects A to attacker spawn quickly.",
+      "notes": "Vertical map — Rafters on A and Nest on B are elevated positions that control the site. Viper Pit is the dominant ult on both sites."
+    },
+    {
+      "name": "Lotus",
+      "sites": ["A", "B", "C"],
+      "callouts": {
+        "A": ["A Main", "A Stairs", "A Rubble", "A Mound", "A Tree", "A Site", "A Dropdown"],
+        "B": ["B Main", "B Halls", "B Pillar", "B Pot", "B Canopy", "B Site"],
+        "C": ["C Main", "C Top", "C Mound", "C Corner", "C Site", "C Dropdown"],
+        "mid": ["Mid", "Root", "Waterfall", "Connector"]
+      },
+      "rotations": "Three rotating stone doors connect mid to each site; the doors make loud sounds when used. Rotating through mid (Waterfall, Root) is key.",
+      "notes": "Like Haven, 3 sites stress defender rotations. The rotating doors are game-defining mechanics — timing door sounds reveals incoming rotations."
+    },
+    {
+      "name": "Pearl",
+      "sites": ["A", "B"],
+      "callouts": {
+        "A": ["A Main", "A Art", "A Lobby", "A Link", "A CT", "A Site", "A Default"],
+        "B": ["B Main", "B Ramp", "B Tower", "B Link", "B CT", "B Site", "B Default"],
+        "mid": ["Mid", "Mid Top", "Mid Market", "Mid Shops", "Mid Lower", "Mid Connector"]
+      },
+      "rotations": "Mid connects to both A Link and B Link. Top Mid is a critical high-ground position that enables pressure on both sites.",
+      "notes": "Fully enclosed underwater city map — no elevated or sky-based mechanics. Long corridors on A Main and B Main favor Op. Mid control is essential for splitting the map."
+    },
+    {
+      "name": "Split",
+      "sites": ["A", "B"],
+      "callouts": {
+        "A": ["A Main", "A Ramps", "A Lobby", "A Sewer", "A Heaven", "A Screens", "A Site", "A Default", "A Link"],
+        "B": ["B Main", "B Alley", "B Lobby", "B Mid", "B Back", "B Heaven", "B Site", "B Default"],
+        "mid": ["Mid", "Mid Vent", "Mid Top", "Mid Mail", "Top Mid", "Mid Bottom"]
+      },
+      "rotations": "A–B through Mid Top or Vent. Heaven on both sites provides elevated defender advantage.",
+      "notes": "Heavily defender-sided map. Heaven positions on A and B are almost mandatory to hold. A Ramps is the most contested chokepoint on attack."
+    },
+    {
+      "name": "Sunset",
+      "sites": ["A", "B"],
+      "callouts": {
+        "A": ["A Main", "A Elbow", "A Lobby", "A Bridge", "A Heaven", "A Site", "A Default"],
+        "B": ["B Main", "B Alley", "B Market", "B Mid", "B Lane", "B Site", "B Default"],
+        "mid": ["Mid", "Mid Market", "Mid Plaza", "Mid Alley", "Top Mid"]
+      },
+      "rotations": "Mid Market connects A and B through the center. B Alley can be accessed from mid quickly.",
+      "notes": "Attacker-sided mid. A Bridge provides a high-ground look into A Site. B Lane is a long open corridor where Op is highly effective."
+    },
+    {
+      "name": "Abyss",
+      "sites": ["A", "B"],
+      "callouts": {
+        "A": ["A Main", "A Hall", "A Ledge", "A Site", "A Default", "A Link"],
+        "B": ["B Main", "B Hall", "B Ledge", "B Tree", "B Site", "B Default", "B Link"],
+        "mid": ["Mid", "Mid Bridge", "Mid Pillar", "Attacker Mid"]
+      },
+      "rotations": "Mid Bridge is a fast A–B connector. There are no map boundaries — falling off the edges is instant death.",
+      "notes": "No wall boundaries — certain angles and pushes near edges can result in falling off the map. Vertical peeking from ledges is a unique mechanic."
+    }
+  ]
+}

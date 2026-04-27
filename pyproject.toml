@@ -25,6 +25,13 @@ dependencies = [
     "alembic==1.18.4",
     # Retry/backoff policy for HenrikDev rate limits and transient server errors.
     "tenacity==9.1.4",
+    # week 4 — vector RAG pipeline
+    "chromadb>=0.5.0",
+    "trafilatura>=1.12.0",
+    "beautifulsoup4>=4.12.0",
+    "ollama>=0.3.0",
+    "tiktoken>=0.7.0",
+    "youtube-transcript-api>=0.6.0",
 ]
 
 [project.optional-dependencies]
