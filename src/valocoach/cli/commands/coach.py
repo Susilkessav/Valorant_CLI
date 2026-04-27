@@ -54,45 +54,15 @@ def _build_grounded_context(
     situation: str,
     data_dir,
 ) -> str | None:
-    parts: list[str] = []
+    from valocoach.retrieval.retriever import retrieve_static
 
-    # Static JSON — precise, structured, always reliable.
-    if agent:
-        agent_ctx = format_agent_context(agent)
-        if agent_ctx:
-            parts.append(agent_ctx)
-        else:
-            display.warn(f"Agent '{agent}' not found in knowledge base — coach may improvise.")
+    if agent and not format_agent_context(agent):
+        display.warn(f"Agent '{agent}' not found in knowledge base — coach may improvise.")
+    if map_ and not format_map_context(map_):
+        display.warn(f"Map '{map_}' not found in knowledge base — coach may improvise.")
 
-    if map_:
-        map_ctx = format_map_context(map_)
-        if map_ctx:
-            parts.append(map_ctx)
-        else:
-            display.warn(f"Map '{map_}' not found in knowledge base — coach may improvise.")
-
-    parts.append(format_meta_context(agent=agent, map_name=map_))
-
-    # Vector search — supplemental patch notes, YouTube insights, etc.
-    # Non-fatal: if Ollama isn't running or the store is empty, skip silently.
-    try:
-        from valocoach.retrieval.searcher import search
-
-        query = " ".join(filter(None, [situation, agent, map_]))
-        hits = search(
-            query,
-            data_dir,
-            n_results=3,
-            doc_types=["patch_note", "youtube", "web"],
-            max_distance=0.45,
-        )
-        for hit in hits:
-            name = hit["metadata"].get("name", "supplemental")
-            parts.append(f"[{hit['metadata']['type'].upper()}: {name}]\n{hit['text']}")
-    except Exception:
-        pass  # Vector store is optional — static JSON is the baseline.
-
-    return "\n\n".join(parts) if parts else None
+    result = retrieve_static(situation, data_dir, agent=agent, map_=map_)
+    return result.to_context_string()
 
 
 def run_coach(

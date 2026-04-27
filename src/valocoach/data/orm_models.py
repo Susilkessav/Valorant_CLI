@@ -298,3 +298,49 @@ class SyncLog(Base):
             f"<SyncLog puuid={self.puuid[:8]} "
             f"new={self.matches_new}/{self.matches_fetched} err={self.error is not None}>"
         )
+
+
+# ---------------------------------------------------------------------------
+# meta_cache
+# ---------------------------------------------------------------------------
+
+
+class MetaCache(Base):
+    """Cache for scraped external content (patch notes, articles, etc.).
+
+    TTL tiers: stable (30d), semi_stable (5d), volatile (12h).
+    expires_at is ISO8601 UTC — compare lexicographically since SQLite has no
+    native TIMESTAMP. content_hash (SHA256 prefix) detects unchanged re-fetches.
+    """
+
+    __tablename__ = "meta_cache"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    url: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    source: Mapped[str] = mapped_column(String, nullable=False)  # "patch_note", "youtube", "web", …
+    content_hash: Mapped[str] = mapped_column(String, nullable=False)  # SHA256[:16]
+    ttl_tier: Mapped[str] = mapped_column(String, nullable=False)  # "stable" | "semi_stable" | "volatile"
+    fetched_at: Mapped[str] = mapped_column(String, default=_now_iso)
+    expires_at: Mapped[str] = mapped_column(String, nullable=False)
+    content_text: Mapped[str] = mapped_column(Text, nullable=False)  # extracted text, not raw HTML
+
+    def __repr__(self) -> str:
+        return f"<MetaCache {self.url[:40]} tier={self.ttl_tier} expires={self.expires_at[:10]}>"
+
+
+# ---------------------------------------------------------------------------
+# patch_versions
+# ---------------------------------------------------------------------------
+
+
+class PatchVersion(Base):
+    """Records each unique game version detected during a sync."""
+
+    __tablename__ = "patch_versions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    game_version: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    detected_at: Mapped[str] = mapped_column(String, default=_now_iso)
+
+    def __repr__(self) -> str:
+        return f"<PatchVersion {self.game_version} at {self.detected_at[:10]}>"

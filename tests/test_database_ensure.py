@@ -22,6 +22,8 @@ def _alembic_head() -> str:
     to fail if someone adds a migration but forgets to update this test,
     which only happens when the two sources drift apart.
     """
+    import re
+
     versions = Path(__file__).resolve().parents[1] / "alembic" / "versions"
     revs: dict[str, str | None] = {}
     for py in versions.glob("*.py"):
@@ -31,11 +33,13 @@ def _alembic_head() -> str:
         down: str | None = None
         for line in py.read_text().splitlines():
             if line.startswith("revision: "):
-                # revision: str = "abc123"
-                rev = line.split('"')[1]
+                # handles both "abc123" and 'abc123'
+                m = re.search(r'["\']([a-f0-9]+)["\']', line)
+                if m:
+                    rev = m.group(1)
             elif line.startswith("down_revision: "):
-                parts = line.split('"')
-                down = parts[1] if len(parts) > 1 else None
+                m = re.search(r'["\']([a-f0-9]+)["\']', line)
+                down = m.group(1) if m else None
         if rev:
             revs[rev] = down
 
