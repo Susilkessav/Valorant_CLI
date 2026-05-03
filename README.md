@@ -23,6 +23,7 @@ valocoach coach "we keep losing 8-12 on Ascent attack as Jett, they stack A"
 - [Prerequisites](#prerequisites)
 - [Install](#install)
 - [First-run setup](#first-run-setup)
+- [Full CLI guide](docs/CLI_GUIDE.md)
 - [Command reference](#command-reference)
   - [coach](#coach)
   - [interactive](#interactive)
@@ -79,6 +80,9 @@ uv run valocoach --version
 ## First-run setup
 
 Complete these steps once before using any data-backed commands (`coach`, `stats`, `sync`).
+
+For a detailed end-user walkthrough of every command, data path, and common
+troubleshooting case, see the [full CLI guide](docs/CLI_GUIDE.md).
 
 ### 1 — Create config
 

@@ -105,3 +105,65 @@ def test_missing_toml_is_not_an_error(tmp_path, monkeypatch):
     s = _isolated_settings_cls(missing)()
     assert s.riot_name == ""  # field default
     assert s.riot_region == "na"
+
+
+# ---------------------------------------------------------------------------
+# write_default_config — lines 101-113
+# ---------------------------------------------------------------------------
+
+
+def test_write_default_config_creates_file_when_missing(tmp_path, monkeypatch):
+    """write_default_config creates the TOML file when it doesn't exist yet."""
+    import tomllib
+
+    from valocoach.core.config import write_default_config
+
+    fake_dir = tmp_path / ".valocoach"
+    fake_path = fake_dir / "config.toml"
+    monkeypatch.setattr("valocoach.core.config.CONFIG_DIR", fake_dir)
+    monkeypatch.setattr("valocoach.core.config.CONFIG_PATH", fake_path)
+
+    result = write_default_config()
+
+    assert result == fake_path
+    assert fake_path.exists()
+    with fake_path.open("rb") as f:
+        data = tomllib.load(f)
+    assert data["riot_name"] == ""
+    assert data["riot_region"] == "na"
+    assert "ollama_model" in data
+
+
+def test_write_default_config_skips_existing_file(tmp_path, monkeypatch):
+    """write_default_config returns early without overwriting an existing config."""
+    from valocoach.core.config import write_default_config
+
+    fake_dir = tmp_path / ".valocoach"
+    fake_dir.mkdir()
+    fake_path = fake_dir / "config.toml"
+    original = b"riot_name = 'existing'\n"
+    fake_path.write_bytes(original)
+    monkeypatch.setattr("valocoach.core.config.CONFIG_DIR", fake_dir)
+    monkeypatch.setattr("valocoach.core.config.CONFIG_PATH", fake_path)
+
+    result = write_default_config()
+
+    assert result == fake_path
+    assert fake_path.read_bytes() == original  # content unchanged
+
+
+def test_write_default_config_creates_parent_dir(tmp_path, monkeypatch):
+    """write_default_config creates the config directory if it doesn't exist."""
+    from valocoach.core.config import write_default_config
+
+    fake_dir = tmp_path / "nested" / ".valocoach"
+    fake_path = fake_dir / "config.toml"
+    # Neither fake_dir nor its parent exist yet.
+    assert not fake_dir.exists()
+    monkeypatch.setattr("valocoach.core.config.CONFIG_DIR", fake_dir)
+    monkeypatch.setattr("valocoach.core.config.CONFIG_PATH", fake_path)
+
+    write_default_config()
+
+    assert fake_dir.exists()
+    assert fake_path.exists()

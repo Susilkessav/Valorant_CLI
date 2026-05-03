@@ -269,3 +269,104 @@ class TestFitPromptEdgeCases:
         # Empty strings are fine — nothing trimmed, nothing dropped.
         assert g_out == ""
         assert s_out == ""
+
+
+# ---------------------------------------------------------------------------
+# fit_prompt — actual trimming stages
+#
+# The existing Stage 1/2 tests never trigger trimming because _make_text(n)
+# produces only n/2 tokens, so even _make_text(GROUNDED_REDUCED_LIMIT+500)
+# yields ~1250 tokens — well below GROUNDED_REDUCED_LIMIT=2000. The happy
+# path fires every time. We use monkeypatch to lower GROUNDED_REDUCED_LIMIT
+# to 20 so small text fixtures exercise the real trimming code paths.
+# ---------------------------------------------------------------------------
+
+
+class TestFitPromptActualTrimming:
+    """Exercises lines 148-161 (the three trimming stages) via a patched limit."""
+
+    def test_stage1_trims_grounded_and_preserves_stats(self, monkeypatch):
+        """Stage 1: grounded trimmed to GROUNDED_REDUCED_LIMIT; stats preserved."""
+        monkeypatch.setattr("valocoach.core.context_budget.GROUNDED_REDUCED_LIMIT", 20)
+
+        # _make_text(50) ≈ 25 tokens  (> reduced limit 20)
+        # _make_text(10) ≈  5 tokens
+        # base+user = 2 tokens → available = hard_limit - 2 = 28
+        # g+s = 30 > 28 → overflow. After Stage 1 trim: 20+5=25 ≤ 28 → early return.
+        grounded = _make_text(50)
+        stats = _make_text(10)
+
+        g_out, s_out = fit_prompt(
+            system_base="x",
+            grounded_context=grounded,
+            stats_context=stats,
+            user_msg="q",
+            hard_limit=30,
+        )
+
+        assert g_out is not None
+        assert count_tokens(g_out) <= 20  # trimmed to GROUNDED_REDUCED_LIMIT=20
+        assert s_out == stats  # stats preserved (early return at line 152-153)
+
+    def test_stage1_with_early_return_line_covered(self, monkeypatch):
+        """Explicit check that the line-152 early return path fires."""
+        monkeypatch.setattr("valocoach.core.context_budget.GROUNDED_REDUCED_LIMIT", 20)
+
+        grounded = _make_text(60)  # ~30 tokens > 20
+        stats = "ok"  # ~1 token
+
+        # available = 32 - 2 = 30. After trim: 20 + 1 = 21 ≤ 30.
+        _g_out, s_out = fit_prompt(
+            system_base="x",
+            grounded_context=grounded,
+            stats_context=stats,
+            user_msg="q",
+            hard_limit=32,
+        )
+
+        assert s_out == stats  # stats kept → early return at line 152-153 fired
+
+    def test_stage2_drops_stats_when_still_overflows_after_stage1(self, monkeypatch):
+        """Stage 2: after Stage-1 trim, grounded alone fits but g+stats doesn't."""
+        monkeypatch.setattr("valocoach.core.context_budget.GROUNDED_REDUCED_LIMIT", 20)
+
+        # _make_text(50) ≈ 25 tokens, _make_text(10) ≈ 5 tokens
+        # available = 24 - 2 = 22. Stage 1 trims g to 20.
+        # After Stage 1: g(20) + s(5) = 25 > 22 still overflow.
+        # Stage 2: g(20) ≤ 22 ✓ → return (grounded_trimmed, None).
+        grounded = _make_text(50)
+        stats = _make_text(10)
+
+        g_out, s_out = fit_prompt(
+            system_base="x",
+            grounded_context=grounded,
+            stats_context=stats,
+            user_msg="q",
+            hard_limit=24,
+        )
+
+        assert g_out is not None
+        assert count_tokens(g_out) <= 20
+        assert s_out is None  # stats dropped (line 156-157)
+
+    def test_stage3_trims_grounded_further_when_still_too_big(self, monkeypatch):
+        """Stage 3: even after Stage-1 trim, grounded alone exceeds available."""
+        monkeypatch.setattr("valocoach.core.context_budget.GROUNDED_REDUCED_LIMIT", 20)
+
+        # _make_text(50) ≈ 25 tokens.
+        # available = 17 - 2 = 15. Stage 1 trims g to 20.
+        # After Stage 1: g(20) > 15 → Stage 2 check 20 ≤ 15 fails.
+        # Stage 3: trim g to 15.
+        grounded = _make_text(50)
+
+        g_out, s_out = fit_prompt(
+            system_base="x",
+            grounded_context=grounded,
+            stats_context=None,
+            user_msg="q",
+            hard_limit=17,
+        )
+
+        assert g_out is not None
+        assert count_tokens(g_out) <= 15  # trimmed to available (line 160-161)
+        assert s_out is None
