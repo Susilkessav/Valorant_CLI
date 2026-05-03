@@ -65,6 +65,7 @@ def _pct(ratio: float) -> str:
 def _warn(stat: object) -> str:
     """Return '⚠' when a StatResult is unreliable, '' otherwise."""
     from valocoach.stats.calculator import StatResult  # avoid circular at module level
+
     if isinstance(stat, StatResult) and not stat.is_reliable:
         return "⚠"
     return ""
@@ -92,10 +93,7 @@ def _format_round_line(analysis: RoundAnalysis, matches: int) -> str | None:
 
     side_str = ""
     if analysis.attack_win_rate is not None and analysis.defense_win_rate is not None:
-        side_str = (
-            f" · ATK {_pct(analysis.attack_win_rate)}"
-            f"/{_pct(analysis.defense_win_rate)} DEF"
-        )
+        side_str = f" · ATK {_pct(analysis.attack_win_rate)}/{_pct(analysis.defense_win_rate)} DEF"
 
     return (
         f"- Round play ({analysis.rounds} rounds): "
@@ -249,7 +247,8 @@ async def _build_stats_context_async(
     analysis = analyze_rounds(data.full_matches, data.player.puuid) if data.full_matches else None
     comparison = compare_baseline(data.rows)
     return _format_context(
-        data.player, data.rows,
+        data.player,
+        data.rows,
         top_n=top_n,
         round_analysis=analysis,
         baseline_comparison=comparison,

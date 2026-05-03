@@ -22,7 +22,7 @@ from valocoach.stats.round_analyzer import analyze_rounds
 
 P = "puuid-p"
 TEAMMATES = [f"puuid-m{i}" for i in range(1, 5)]  # M1..M4
-ENEMIES = [f"puuid-e{i}" for i in range(1, 6)]    # E1..E5
+ENEMIES = [f"puuid-e{i}" for i in range(1, 6)]  # E1..E5
 
 
 # ---------------------------------------------------------------------------
@@ -145,10 +145,14 @@ def test_puuid_not_in_match_is_skipped() -> None:
 
 def test_kast_kill_only() -> None:
     # P kills E1, then dies with no trade → K yes, S no, T no
-    r = _round(0, "Blue", [
-        _kill(killer=P, victim=ENEMIES[0], t_ms=1000),
-        _kill(killer=ENEMIES[1], victim=P, t_ms=90_000),  # no teammate avenge
-    ])
+    r = _round(
+        0,
+        "Blue",
+        [
+            _kill(killer=P, victim=ENEMIES[0], t_ms=1000),
+            _kill(killer=ENEMIES[1], victim=P, t_ms=90_000),  # no teammate avenge
+        ],
+    )
     a = analyze_rounds([_match([r])], P)
     assert a.rounds_with_kill == 1
     assert a.rounds_survived == 0
@@ -159,9 +163,13 @@ def test_kast_kill_only() -> None:
 
 def test_kast_assist_only() -> None:
     # M1 kills E1 with P assisting; P survives (no death event). A+S both fire.
-    r = _round(0, "Blue", [
-        _kill(killer=TEAMMATES[0], victim=ENEMIES[0], t_ms=1000, assistants=[P]),
-    ])
+    r = _round(
+        0,
+        "Blue",
+        [
+            _kill(killer=TEAMMATES[0], victim=ENEMIES[0], t_ms=1000, assistants=[P]),
+        ],
+    )
     a = analyze_rounds([_match([r])], P)
     assert a.rounds_with_assist == 1
     assert a.rounds_survived == 1
@@ -178,10 +186,14 @@ def test_kast_survive_only_no_combat() -> None:
 
 def test_kast_trade_only() -> None:
     # P dies at 10s, M1 kills E1 (the killer) 2s later → T fires.
-    r = _round(0, "Blue", [
-        _kill(killer=ENEMIES[0], victim=P, t_ms=10_000),
-        _kill(killer=TEAMMATES[0], victim=ENEMIES[0], t_ms=12_000),
-    ])
+    r = _round(
+        0,
+        "Blue",
+        [
+            _kill(killer=ENEMIES[0], victim=P, t_ms=10_000),
+            _kill(killer=TEAMMATES[0], victim=ENEMIES[0], t_ms=12_000),
+        ],
+    )
     a = analyze_rounds([_match([r])], P)
     assert a.rounds_traded_death == 1
     assert a.rounds_with_kill == 0
@@ -193,10 +205,14 @@ def test_kast_trade_only() -> None:
 def test_kast_trade_outside_window_does_not_count() -> None:
     # Revenge is TRADE_WINDOW_MS + 1 ms after the death → not traded.
     t_death = 10_000
-    r = _round(0, "Blue", [
-        _kill(killer=ENEMIES[0], victim=P, t_ms=t_death),
-        _kill(killer=TEAMMATES[0], victim=ENEMIES[0], t_ms=t_death + TRADE_WINDOW_MS + 1),
-    ])
+    r = _round(
+        0,
+        "Blue",
+        [
+            _kill(killer=ENEMIES[0], victim=P, t_ms=t_death),
+            _kill(killer=TEAMMATES[0], victim=ENEMIES[0], t_ms=t_death + TRADE_WINDOW_MS + 1),
+        ],
+    )
     a = analyze_rounds([_match([r])], P)
     assert a.rounds_traded_death == 0
     assert a.traded_deaths == 0
@@ -207,10 +223,14 @@ def test_kast_trade_outside_window_does_not_count() -> None:
 def test_kast_trade_boundary_counts() -> None:
     # Exactly TRADE_WINDOW_MS is still a trade (inclusive upper bound).
     t_death = 10_000
-    r = _round(0, "Blue", [
-        _kill(killer=ENEMIES[0], victim=P, t_ms=t_death),
-        _kill(killer=TEAMMATES[0], victim=ENEMIES[0], t_ms=t_death + TRADE_WINDOW_MS),
-    ])
+    r = _round(
+        0,
+        "Blue",
+        [
+            _kill(killer=ENEMIES[0], victim=P, t_ms=t_death),
+            _kill(killer=TEAMMATES[0], victim=ENEMIES[0], t_ms=t_death + TRADE_WINDOW_MS),
+        ],
+    )
     a = analyze_rounds([_match([r])], P)
     assert a.traded_deaths == 1
 
@@ -222,10 +242,14 @@ def test_kast_trade_boundary_counts() -> None:
 
 def test_trade_given_counts_when_player_avenges_teammate() -> None:
     # M1 dies to E1 at 5s; P kills E1 at 7s → trade given.
-    r = _round(0, "Blue", [
-        _kill(killer=ENEMIES[0], victim=TEAMMATES[0], t_ms=5_000),
-        _kill(killer=P, victim=ENEMIES[0], t_ms=7_000),
-    ])
+    r = _round(
+        0,
+        "Blue",
+        [
+            _kill(killer=ENEMIES[0], victim=TEAMMATES[0], t_ms=5_000),
+            _kill(killer=P, victim=ENEMIES[0], t_ms=7_000),
+        ],
+    )
     a = analyze_rounds([_match([r])], P)
     assert a.trades_given == 1
     assert a.teammate_deaths == 1
@@ -233,10 +257,14 @@ def test_trade_given_counts_when_player_avenges_teammate() -> None:
 
 
 def test_trade_given_not_counted_outside_window() -> None:
-    r = _round(0, "Blue", [
-        _kill(killer=ENEMIES[0], victim=TEAMMATES[0], t_ms=5_000),
-        _kill(killer=P, victim=ENEMIES[0], t_ms=5_000 + TRADE_WINDOW_MS + 1),
-    ])
+    r = _round(
+        0,
+        "Blue",
+        [
+            _kill(killer=ENEMIES[0], victim=TEAMMATES[0], t_ms=5_000),
+            _kill(killer=P, victim=ENEMIES[0], t_ms=5_000 + TRADE_WINDOW_MS + 1),
+        ],
+    )
     a = analyze_rounds([_match([r])], P)
     assert a.trades_given == 0
 
@@ -337,7 +365,7 @@ def test_kast_pct_across_rounds() -> None:
     rounds = [
         _round(0, "Blue", [_kill(killer=P, victim=ENEMIES[0], t_ms=1000)]),  # K
         _round(1, "Blue", []),  # S
-        _round(2, "Red", [_kill(killer=ENEMIES[0], victim=P, t_ms=1000)]),   # no KAST
+        _round(2, "Red", [_kill(killer=ENEMIES[0], victim=P, t_ms=1000)]),  # no KAST
     ]
     a = analyze_rounds([_match(rounds)], P)
     assert a.rounds == 3
@@ -348,13 +376,21 @@ def test_kast_pct_across_rounds() -> None:
 def test_trade_efficiency_rate() -> None:
     # P dies twice; one trade, one not → 50 %.
     rounds = [
-        _round(0, "Blue", [
-            _kill(killer=ENEMIES[0], victim=P, t_ms=1_000),
-            _kill(killer=TEAMMATES[0], victim=ENEMIES[0], t_ms=2_000),
-        ]),
-        _round(1, "Red", [
-            _kill(killer=ENEMIES[1], victim=P, t_ms=1_000),  # no avenge
-        ]),
+        _round(
+            0,
+            "Blue",
+            [
+                _kill(killer=ENEMIES[0], victim=P, t_ms=1_000),
+                _kill(killer=TEAMMATES[0], victim=ENEMIES[0], t_ms=2_000),
+            ],
+        ),
+        _round(
+            1,
+            "Red",
+            [
+                _kill(killer=ENEMIES[1], victim=P, t_ms=1_000),  # no avenge
+            ],
+        ),
     ]
     a = analyze_rounds([_match(rounds)], P)
     assert a.deaths == 2
@@ -386,10 +422,14 @@ class TestKASTTradeCorrectness:
         count — the T guard checks ``k.killer_puuid in teammates``, excluding all
         enemies regardless of timing.
         """
-        r = _round(0, "Red", [
-            _kill(killer=ENEMIES[0], victim=P, t_ms=5_000),           # P dies to E1
-            _kill(killer=ENEMIES[1], victim=ENEMIES[0], t_ms=7_000),  # E2 kills E1 (wrong side)
-        ])
+        r = _round(
+            0,
+            "Red",
+            [
+                _kill(killer=ENEMIES[0], victim=P, t_ms=5_000),  # P dies to E1
+                _kill(killer=ENEMIES[1], victim=ENEMIES[0], t_ms=7_000),  # E2 kills E1 (wrong side)
+            ],
+        )
         a = analyze_rounds([_match([r])], P)
 
         assert a.rounds_traded_death == 0, "enemy killing P's killer must NOT count as T"
@@ -409,14 +449,18 @@ class TestKASTTradeCorrectness:
         # Intentionally contradictory sequence: P kills E1, then E1 kills P.
         # A dead player can't kill anyone — this tests robustness to malformed
         # data, not a real-game scenario.
-        r = _round(0, "Red", [
-            _kill(killer=P,         victim=ENEMIES[0], t_ms=1_000),  # P kills E1 → K
-            _kill(killer=ENEMIES[0], victim=P,         t_ms=5_000),  # E1 "kills" P
-        ])
+        r = _round(
+            0,
+            "Red",
+            [
+                _kill(killer=P, victim=ENEMIES[0], t_ms=1_000),  # P kills E1 → K
+                _kill(killer=ENEMIES[0], victim=P, t_ms=5_000),  # E1 "kills" P
+            ],
+        )
         a = analyze_rounds([_match([r])], P)
 
         assert a.rounds_with_kill == 1, "P's kill of E1 should register as K"
-        assert a.rounds_survived == 0,  "P died so S must not fire"
+        assert a.rounds_survived == 0, "P died so S must not fire"
         assert a.rounds_traded_death == 0, "P killing own killer must NOT count as T"
         assert a.traded_deaths == 0
         # K carries the KAST round even though T did not fire.
@@ -429,10 +473,16 @@ class TestKASTTradeCorrectness:
         kill on a *different* enemy within the window is irrelevant, even if the
         teammate acted fast enough that the timing would have qualified.
         """
-        r = _round(0, "Red", [
-            _kill(killer=ENEMIES[0],  victim=P,         t_ms=5_000),  # P dies to E1
-            _kill(killer=TEAMMATES[0], victim=ENEMIES[1], t_ms=7_000),  # T1 kills E2 (wrong target)
-        ])
+        r = _round(
+            0,
+            "Red",
+            [
+                _kill(killer=ENEMIES[0], victim=P, t_ms=5_000),  # P dies to E1
+                _kill(
+                    killer=TEAMMATES[0], victim=ENEMIES[1], t_ms=7_000
+                ),  # T1 kills E2 (wrong target)
+            ],
+        )
         a = analyze_rounds([_match([r])], P)
 
         assert a.rounds_traded_death == 0, "teammate killing wrong enemy must NOT count as T"
@@ -454,12 +504,16 @@ class TestKASTTradeCorrectness:
         The T2→E2 kill does NOT interfere because E2 ≠ E1 (wrong victim).
         P did not personally avenge T1 → trades_given = 0.
         """
-        r = _round(0, "Red", [
-            _kill(killer=ENEMIES[1],   victim=TEAMMATES[0], t_ms=4_000),  # T1 dies to E2
-            _kill(killer=ENEMIES[0],   victim=P,            t_ms=5_000),  # P dies to E1
-            _kill(killer=TEAMMATES[1], victim=ENEMIES[1],   t_ms=6_000),  # T2 avenges T1 (not P)
-            _kill(killer=TEAMMATES[2], victim=ENEMIES[0],   t_ms=8_000),  # T3 avenges P ✓
-        ])
+        r = _round(
+            0,
+            "Red",
+            [
+                _kill(killer=ENEMIES[1], victim=TEAMMATES[0], t_ms=4_000),  # T1 dies to E2
+                _kill(killer=ENEMIES[0], victim=P, t_ms=5_000),  # P dies to E1
+                _kill(killer=TEAMMATES[1], victim=ENEMIES[1], t_ms=6_000),  # T2 avenges T1 (not P)
+                _kill(killer=TEAMMATES[2], victim=ENEMIES[0], t_ms=8_000),  # T3 avenges P ✓
+            ],
+        )
         a = analyze_rounds([_match([r])], P)
 
         # T fires for P (T3→E1 within 3 000ms).

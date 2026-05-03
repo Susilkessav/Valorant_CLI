@@ -202,7 +202,11 @@ def test_filter_by_agent_no_match_returns_empty() -> None:
 
 
 def test_filter_by_agent_multiple_matches() -> None:
-    rows = [_mp(agent="Jett", match_id="j1"), _mp(agent="Jett", match_id="j2"), _mp(agent="Reyna", match_id="r")]
+    rows = [
+        _mp(agent="Jett", match_id="j1"),
+        _mp(agent="Jett", match_id="j2"),
+        _mp(agent="Reyna", match_id="r"),
+    ]
     out = filter_by_agent(rows, "Jett")
     assert {mp.match_id for mp in out} == {"j1", "j2"}
 
@@ -301,9 +305,9 @@ def test_filter_by_tier_range_no_bounds_is_passthrough() -> None:
 
 def test_filter_by_tier_range_min_only() -> None:
     rows = [
-        _mp(competitive_tier=6, match_id="iron"),    # below
-        _mp(competitive_tier=12, match_id="gold"),   # at floor
-        _mp(competitive_tier=18, match_id="plat"),   # above
+        _mp(competitive_tier=6, match_id="iron"),  # below
+        _mp(competitive_tier=12, match_id="gold"),  # at floor
+        _mp(competitive_tier=18, match_id="plat"),  # above
     ]
     out = filter_by_tier_range(rows, min_tier=12, max_tier=None)
     assert {mp.match_id for mp in out} == {"gold", "plat"}
@@ -381,34 +385,58 @@ def test_apply_filters_all_filters_combined() -> None:
     """
     rows = [
         _mp(
-            agent="Jett", map_name="Ascent", queue_id="competitive",
-            won=True, competitive_tier=12,
-            started_at="2026-04-20T00:00:00+00:00", match_id="keep",
+            agent="Jett",
+            map_name="Ascent",
+            queue_id="competitive",
+            won=True,
+            competitive_tier=12,
+            started_at="2026-04-20T00:00:00+00:00",
+            match_id="keep",
         ),
         _mp(
-            agent="Reyna", map_name="Ascent", queue_id="competitive",
-            won=True, competitive_tier=12,
-            started_at="2026-04-20T00:00:00+00:00", match_id="wrong-agent",
+            agent="Reyna",
+            map_name="Ascent",
+            queue_id="competitive",
+            won=True,
+            competitive_tier=12,
+            started_at="2026-04-20T00:00:00+00:00",
+            match_id="wrong-agent",
         ),
         _mp(
-            agent="Jett", map_name="Haven", queue_id="competitive",
-            won=True, competitive_tier=12,
-            started_at="2026-04-20T00:00:00+00:00", match_id="wrong-map",
+            agent="Jett",
+            map_name="Haven",
+            queue_id="competitive",
+            won=True,
+            competitive_tier=12,
+            started_at="2026-04-20T00:00:00+00:00",
+            match_id="wrong-map",
         ),
         _mp(
-            agent="Jett", map_name="Ascent", queue_id="unrated",
-            won=True, competitive_tier=12,
-            started_at="2026-04-20T00:00:00+00:00", match_id="wrong-queue",
+            agent="Jett",
+            map_name="Ascent",
+            queue_id="unrated",
+            won=True,
+            competitive_tier=12,
+            started_at="2026-04-20T00:00:00+00:00",
+            match_id="wrong-queue",
         ),
         _mp(
-            agent="Jett", map_name="Ascent", queue_id="competitive",
-            won=False, competitive_tier=12,
-            started_at="2026-04-20T00:00:00+00:00", match_id="loss",
+            agent="Jett",
+            map_name="Ascent",
+            queue_id="competitive",
+            won=False,
+            competitive_tier=12,
+            started_at="2026-04-20T00:00:00+00:00",
+            match_id="loss",
         ),
         _mp(
-            agent="Jett", map_name="Ascent", queue_id="competitive",
-            won=True, competitive_tier=6,
-            started_at="2026-04-20T00:00:00+00:00", match_id="low-tier",
+            agent="Jett",
+            map_name="Ascent",
+            queue_id="competitive",
+            won=True,
+            competitive_tier=6,
+            started_at="2026-04-20T00:00:00+00:00",
+            match_id="low-tier",
         ),
     ]
     out = apply_filters(

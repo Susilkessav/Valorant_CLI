@@ -138,18 +138,18 @@ class Anomaly:
     aggregates used for display elsewhere -- they will differ slightly.
     """
 
-    metric: str                          # internal key: "acs", "kd", ...
-    label: str                           # display label: "ACS", "K/D", ...
-    baseline_val: float                  # per-match mean over baseline window
-    form_val: float                      # per-match mean over form window
-    delta: float                         # form_val - baseline_val
-    pct_delta: float | None              # delta / baseline_val (None if baseline = 0)
-    direction: Literal["up", "down"]     # "up" = form > baseline
+    metric: str  # internal key: "acs", "kd", ...
+    label: str  # display label: "ACS", "K/D", ...
+    baseline_val: float  # per-match mean over baseline window
+    form_val: float  # per-match mean over form window
+    delta: float  # form_val - baseline_val
+    pct_delta: float | None  # delta / baseline_val (None if baseline = 0)
+    direction: Literal["up", "down"]  # "up" = form > baseline
     severity: Literal["notable", "significant"]
-    is_improvement: bool                 # True = player got better
-    fmt: str                             # ".0f" | ".2f" | "pct"
-    z_score: float                       # (form_mean - baseline_mean) / eff_stddev
-    baseline_stddev: float               # raw population stddev of baseline
+    is_improvement: bool  # True = player got better
+    fmt: str  # ".0f" | ".2f" | "pct"
+    z_score: float  # (form_mean - baseline_mean) / eff_stddev
+    baseline_stddev: float  # raw population stddev of baseline
 
     # ------------------------------------------------------------------
     # Display helpers
@@ -252,7 +252,7 @@ def _per_match_metrics(rows: list[MatchPlayer]) -> dict[str, list[float]]:
         buckets["acs"].append(mp.score / rds)
         buckets["kd"].append(mp.kills / deaths)
         buckets["adr"].append(mp.damage_dealt / rds)
-        buckets["hs_pct"].append(mp.headshots / shots)       # 0.0-1.0
+        buckets["hs_pct"].append(mp.headshots / shots)  # 0.0-1.0
         buckets["win_rate"].append(1.0 if mp.won else 0.0)
     return buckets
 

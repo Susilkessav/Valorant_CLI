@@ -62,10 +62,10 @@ from valocoach.stats.round_analyzer import analyze_rounds
 # ---------------------------------------------------------------------------
 
 P_HERO = "p-hero"
-EPS = 1e-6   # tolerance for float comparisons
+EPS = 1e-6  # tolerance for float comparisons
 
 TEAMMATES = [f"gold-m{i}" for i in range(1, 5)]  # M1..M4
-ENEMIES   = [f"gold-e{i}" for i in range(1, 6)]  # E1..E5
+ENEMIES = [f"gold-e{i}" for i in range(1, 6)]  # E1..E5
 
 
 # ---------------------------------------------------------------------------
@@ -158,7 +158,7 @@ _MATCH_A = _mp(
     kills=18,
     deaths=8,
     assists=4,
-    headshots=36,    # 36/100 shots = 36% HS
+    headshots=36,  # 36/100 shots = 36% HS
     bodyshots=54,
     legshots=10,
     damage_dealt=3_000,
@@ -178,7 +178,7 @@ _MATCH_B = _mp(
     kills=15,
     deaths=14,
     assists=6,
-    headshots=28,    # 28/100 shots = 28% HS
+    headshots=28,  # 28/100 shots = 28% HS
     bodyshots=56,
     legshots=16,
     damage_dealt=3_500,
@@ -198,7 +198,7 @@ _MATCH_C = _mp(
     kills=10,
     deaths=4,
     assists=2,
-    headshots=20,    # 20/60 shots = 33.3% HS
+    headshots=20,  # 20/60 shots = 33.3% HS
     bodyshots=30,
     legshots=10,
     damage_dealt=2_080,
@@ -293,28 +293,48 @@ def _build_gold_match_d() -> Match:
     """
     rounds = [
         # Round 0: P double-kill, survives
-        _round(0, "Blue", [
-            _kill(killer=P_HERO,    victim=ENEMIES[0], t_ms=1_000),
-            _kill(killer=P_HERO,    victim=ENEMIES[1], t_ms=2_000),
-        ]),
+        _round(
+            0,
+            "Blue",
+            [
+                _kill(killer=P_HERO, victim=ENEMIES[0], t_ms=1_000),
+                _kill(killer=P_HERO, victim=ENEMIES[1], t_ms=2_000),
+            ],
+        ),
         # Round 1: P dies, M1 avenges within window
-        _round(1, "Red", [
-            _kill(killer=ENEMIES[2], victim=P_HERO,      t_ms=10_000),
-            _kill(killer=TEAMMATES[0], victim=ENEMIES[2], t_ms=13_000),
-        ]),
+        _round(
+            1,
+            "Red",
+            [
+                _kill(killer=ENEMIES[2], victim=P_HERO, t_ms=10_000),
+                _kill(killer=TEAMMATES[0], victim=ENEMIES[2], t_ms=13_000),
+            ],
+        ),
         # Round 2: P assists M1's kill, survives
-        _round(2, "Blue", [
-            _kill(killer=TEAMMATES[0], victim=ENEMIES[3], t_ms=5_000, assistants=[P_HERO]),
-        ]),
+        _round(
+            2,
+            "Blue",
+            [
+                _kill(killer=TEAMMATES[0], victim=ENEMIES[3], t_ms=5_000, assistants=[P_HERO]),
+            ],
+        ),
         # Round 3: P dies, no avenge — NOT KAST
-        _round(3, "Red", [
-            _kill(killer=ENEMIES[0], victim=P_HERO, t_ms=5_000),
-        ]),
+        _round(
+            3,
+            "Red",
+            [
+                _kill(killer=ENEMIES[0], victim=P_HERO, t_ms=5_000),
+            ],
+        ),
         # Round 4: M2 dies, P avenges within window, P survives
-        _round(4, "Blue", [
-            _kill(killer=ENEMIES[1], victim=TEAMMATES[1], t_ms=5_000),
-            _kill(killer=P_HERO,    victim=ENEMIES[1],   t_ms=7_000),
-        ]),
+        _round(
+            4,
+            "Blue",
+            [
+                _kill(killer=ENEMIES[1], victim=TEAMMATES[1], t_ms=5_000),
+                _kill(killer=P_HERO, victim=ENEMIES[1], t_ms=7_000),
+            ],
+        ),
     ]
 
     m = Match(
@@ -363,59 +383,63 @@ def _build_gold_match_d() -> Match:
         )
     ]
     for t in TEAMMATES:
-        players.append(MatchPlayer(
-            match_id="gold-d",
-            puuid=t,
-            agent_name="Sage",
-            agent_id=None,
-            team="Blue",
-            won=True,
-            score=0,
-            kills=0,
-            deaths=0,
-            assists=0,
-            rounds_played=5,
-            headshots=0,
-            bodyshots=0,
-            legshots=0,
-            damage_dealt=0,
-            damage_received=0,
-            first_bloods=0,
-            first_deaths=0,
-            plants=0,
-            defuses=0,
-            afk_rounds=0,
-            rounds_in_spawn=0,
-            competitive_tier=None,
-            started_at="2026-04-20T18:00:00+00:00",
-        ))
+        players.append(
+            MatchPlayer(
+                match_id="gold-d",
+                puuid=t,
+                agent_name="Sage",
+                agent_id=None,
+                team="Blue",
+                won=True,
+                score=0,
+                kills=0,
+                deaths=0,
+                assists=0,
+                rounds_played=5,
+                headshots=0,
+                bodyshots=0,
+                legshots=0,
+                damage_dealt=0,
+                damage_received=0,
+                first_bloods=0,
+                first_deaths=0,
+                plants=0,
+                defuses=0,
+                afk_rounds=0,
+                rounds_in_spawn=0,
+                competitive_tier=None,
+                started_at="2026-04-20T18:00:00+00:00",
+            )
+        )
     for e in ENEMIES:
-        players.append(MatchPlayer(
-            match_id="gold-d",
-            puuid=e,
-            agent_name="Reyna",
-            agent_id=None,
-            team="Red",
-            won=False,
-            score=0,
-            kills=0,
-            deaths=0,
-            assists=0,
-            rounds_played=5,
-            headshots=0,
-            bodyshots=0,
-            legshots=0,
-            damage_dealt=0,
-            damage_received=0,
-            first_bloods=0,
-            first_deaths=0,
-            plants=0,
-            defuses=0,
-            afk_rounds=0,
-            rounds_in_spawn=0,
-            competitive_tier=None,
-            started_at="2026-04-20T18:00:00+00:00",
-        ))
+        players.append(
+            MatchPlayer(
+                match_id="gold-d",
+                puuid=e,
+                agent_name="Reyna",
+                agent_id=None,
+                team="Red",
+                won=False,
+                score=0,
+                kills=0,
+                deaths=0,
+                assists=0,
+                rounds_played=5,
+                headshots=0,
+                bodyshots=0,
+                legshots=0,
+                damage_dealt=0,
+                damage_received=0,
+                first_bloods=0,
+                first_deaths=0,
+                plants=0,
+                defuses=0,
+                afk_rounds=0,
+                rounds_in_spawn=0,
+                competitive_tier=None,
+                started_at="2026-04-20T18:00:00+00:00",
+            )
+        )
     m.players = players
     m.rounds = rounds
     return m
@@ -493,13 +517,13 @@ class TestGoldenOverall:
     # ---- accuracy ----
 
     def test_headshots(self) -> None:
-        assert self.s.headshots == 84   # 36+28+20
+        assert self.s.headshots == 84  # 36+28+20
 
     def test_bodyshots(self) -> None:
         assert self.s.bodyshots == 140  # 54+56+30
 
     def test_legshots(self) -> None:
-        assert self.s.legshots == 36    # 10+16+10
+        assert self.s.legshots == 36  # 10+16+10
 
     def test_hs_pct(self) -> None:
         # HS% = headshots / total_shots = 84 / (84+140+36) = 84/260
@@ -508,13 +532,13 @@ class TestGoldenOverall:
     # ---- impact ----
 
     def test_first_bloods(self) -> None:
-        assert self.s.first_bloods == 9   # 4+3+2
+        assert self.s.first_bloods == 9  # 4+3+2
 
     def test_first_deaths(self) -> None:
-        assert self.s.first_deaths == 6   # 1+5+0
+        assert self.s.first_deaths == 6  # 1+5+0
 
     def test_fb_diff(self) -> None:
-        assert self.s.fb_diff == 3   # 9-6
+        assert self.s.fb_diff == 3  # 9-6
 
     def test_fb_rate(self) -> None:
         # fb_rate = first_bloods / rounds = 9/58
@@ -527,7 +551,7 @@ class TestGoldenOverall:
     # ---- objective ----
 
     def test_plants(self) -> None:
-        assert self.s.plants == 3   # 2+0+1
+        assert self.s.plants == 3  # 2+0+1
 
     def test_defuses(self) -> None:
         assert self.s.defuses == 1  # 0+1+0
@@ -872,23 +896,163 @@ class TestGoldenSpecificValues:
 #   ADR  damage dealt per round
 #   HS%  headshots / total shots fired
 
-_LOTUS_ROUNDS = 17   # len(d['rounds']) from sample_match.json
+_LOTUS_ROUNDS = 17  # len(d['rounds']) from sample_match.json
 
 # (display_name, puuid, team, won, score, kills, deaths, assists,
 #  headshots, bodyshots, legshots, damage_dealt, damage_received)
 #
 # Won  = True for Red players (Red won 13-4), False for Blue players.
 _LOTUS_PLAYERS: list[tuple] = [
-    ("dipp",         "77135f96-5842-5724-a0e2-606026886cd0", "Red",  True,  3811, 12, 10,  6,  6, 49,  2, 2430, 1897),
-    ("VBJ",          "1941b3d8-5021-5506-b47e-644266397fd6", "Red",  True,  3422, 12,  9,  5,  7, 37,  4, 2142, 1724),
-    ("Yoursaviour01","20905543-1b42-5f6f-8435-ab284a0094f8", "Blue", False, 4344, 14, 14,  1, 13, 32,  1, 2843, 2645),
-    ("Alphaxenon",   "533f3998-fbc2-5b8a-ad16-c89d05495020", "Blue", False, 2786,  8, 17,  2,  7, 28,  1, 2005, 2643),
-    ("sn0w",         "1b213c58-1258-5ba3-8404-c1e2130305fd", "Blue", False, 3178, 10, 15,  2,  4, 28,  0, 2203, 2478),
-    ("Yoursaviour02","e8523cfa-a69b-553f-960a-2269864cefc7", "Blue", False, 2346,  7, 15,  4,  7, 27,  3, 1632, 2376),
-    ("fairywink",    "8df719e4-2200-5510-ba82-d9bef41d5d8f", "Red",  True,  4225, 15,  8,  9,  9, 39,  3, 2767, 1987),
-    ("Shortbread",   "11d29861-9334-568d-8ffe-e25088e765c6", "Red",  True,  3684, 15,  8, 11,  7, 40,  2, 2236, 2113),
-    ("ElmoHadCrack", "9edd92d2-c582-5bf4-8950-7107b74c9450", "Red",  True,  4900, 20, 10,  5, 11, 27,  3, 2894, 2330),
-    ("ThunderMahou", "759a5eac-2faf-5417-9591-ba8cad376e06", "Blue", False, 1846,  6, 13,  1,  6, 14,  2, 1316, 2275),
+    (
+        "dipp",
+        "77135f96-5842-5724-a0e2-606026886cd0",
+        "Red",
+        True,
+        3811,
+        12,
+        10,
+        6,
+        6,
+        49,
+        2,
+        2430,
+        1897,
+    ),
+    (
+        "VBJ",
+        "1941b3d8-5021-5506-b47e-644266397fd6",
+        "Red",
+        True,
+        3422,
+        12,
+        9,
+        5,
+        7,
+        37,
+        4,
+        2142,
+        1724,
+    ),
+    (
+        "Yoursaviour01",
+        "20905543-1b42-5f6f-8435-ab284a0094f8",
+        "Blue",
+        False,
+        4344,
+        14,
+        14,
+        1,
+        13,
+        32,
+        1,
+        2843,
+        2645,
+    ),
+    (
+        "Alphaxenon",
+        "533f3998-fbc2-5b8a-ad16-c89d05495020",
+        "Blue",
+        False,
+        2786,
+        8,
+        17,
+        2,
+        7,
+        28,
+        1,
+        2005,
+        2643,
+    ),
+    (
+        "sn0w",
+        "1b213c58-1258-5ba3-8404-c1e2130305fd",
+        "Blue",
+        False,
+        3178,
+        10,
+        15,
+        2,
+        4,
+        28,
+        0,
+        2203,
+        2478,
+    ),
+    (
+        "Yoursaviour02",
+        "e8523cfa-a69b-553f-960a-2269864cefc7",
+        "Blue",
+        False,
+        2346,
+        7,
+        15,
+        4,
+        7,
+        27,
+        3,
+        1632,
+        2376,
+    ),
+    (
+        "fairywink",
+        "8df719e4-2200-5510-ba82-d9bef41d5d8f",
+        "Red",
+        True,
+        4225,
+        15,
+        8,
+        9,
+        9,
+        39,
+        3,
+        2767,
+        1987,
+    ),
+    (
+        "Shortbread",
+        "11d29861-9334-568d-8ffe-e25088e765c6",
+        "Red",
+        True,
+        3684,
+        15,
+        8,
+        11,
+        7,
+        40,
+        2,
+        2236,
+        2113,
+    ),
+    (
+        "ElmoHadCrack",
+        "9edd92d2-c582-5bf4-8950-7107b74c9450",
+        "Red",
+        True,
+        4900,
+        20,
+        10,
+        5,
+        11,
+        27,
+        3,
+        2894,
+        2330,
+    ),
+    (
+        "ThunderMahou",
+        "759a5eac-2faf-5417-9591-ba8cad376e06",
+        "Blue",
+        False,
+        1846,
+        6,
+        13,
+        1,
+        6,
+        14,
+        2,
+        1316,
+        2275,
+    ),
 ]
 
 
@@ -926,7 +1090,7 @@ def _lotus_mp(
     mp = MatchPlayer(
         match_id="lotus-b0c012f7",
         puuid=puuid,
-        agent_name="Unknown",   # not relevant for ACS/ADR/HS% calculation
+        agent_name="Unknown",  # not relevant for ACS/ADR/HS% calculation
         agent_id=None,
         team=team,
         won=won,
@@ -981,12 +1145,13 @@ def test_acs_matches_api_reported_value(
     every ACS number shown to users is wrong.  Pass means our numbers would
     match what a user sees on tracker.gg for this exact match.
     """
-    row = _lotus_mp(puuid, team, won, score, kills, deaths, assists, hs, body, leg, dmg_dealt, dmg_recv)
+    row = _lotus_mp(
+        puuid, team, won, score, kills, deaths, assists, hs, body, leg, dmg_dealt, dmg_recv
+    )
     s = compute_player_stats([row])
     expected = score / _LOTUS_ROUNDS
     assert abs(s.acs - expected) < 1e-9, (
-        f"{name}: acs={s.acs:.6f} expected={expected:.6f} "
-        f"(score={score} / rounds={_LOTUS_ROUNDS})"
+        f"{name}: acs={s.acs:.6f} expected={expected:.6f} (score={score} / rounds={_LOTUS_ROUNDS})"
     )
 
 
@@ -1011,7 +1176,9 @@ def test_adr_matches_api_reported_value(
     dmg_recv: int,
 ) -> None:
     """ADR = damage_dealt / rounds_played — verified against the API damage.dealt field."""
-    row = _lotus_mp(puuid, team, won, score, kills, deaths, assists, hs, body, leg, dmg_dealt, dmg_recv)
+    row = _lotus_mp(
+        puuid, team, won, score, kills, deaths, assists, hs, body, leg, dmg_dealt, dmg_recv
+    )
     s = compute_player_stats([row])
     expected = dmg_dealt / _LOTUS_ROUNDS
     assert abs(s.adr - expected) < 1e-9, (
@@ -1041,11 +1208,12 @@ def test_hs_pct_matches_api_reported_value(
     dmg_recv: int,
 ) -> None:
     """HS% = headshots / total_shots — verified against the API headshots/bodyshots/legshots fields."""
-    row = _lotus_mp(puuid, team, won, score, kills, deaths, assists, hs, body, leg, dmg_dealt, dmg_recv)
+    row = _lotus_mp(
+        puuid, team, won, score, kills, deaths, assists, hs, body, leg, dmg_dealt, dmg_recv
+    )
     s = compute_player_stats([row])
     total = hs + body + leg
     expected = hs / total if total else 0.0
     assert abs(s.hs_pct - expected) < 1e-9, (
-        f"{name}: hs_pct={s.hs_pct:.6f} expected={expected:.6f} "
-        f"(hs={hs} / total_shots={total})"
+        f"{name}: hs_pct={s.hs_pct:.6f} expected={expected:.6f} (hs={hs} / total_shots={total})"
     )

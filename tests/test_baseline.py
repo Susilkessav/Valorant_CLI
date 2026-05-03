@@ -43,14 +43,14 @@ def _mp(
     started_at: str = "2026-04-20T12:00:00+00:00",
     won: bool = True,
     rounds_played: int = 20,
-    score: int = 4000,        # ACS = 200
+    score: int = 4000,  # ACS = 200
     kills: int = 14,
     deaths: int = 10,
     assists: int = 3,
-    headshots: int = 20,      # HS% = 20/90 = 22.2%
+    headshots: int = 20,  # HS% = 20/90 = 22.2%
     bodyshots: int = 60,
     legshots: int = 10,
-    damage_dealt: int = 3000, # ADR = 150
+    damage_dealt: int = 3000,  # ADR = 150
 ) -> MatchPlayer:
     match = Match(
         match_id=match_id,
@@ -117,7 +117,9 @@ def _make_rows(
     ]
 
 
-def _rows_mixed(*, old_score: int, new_score: int, n_old: int = 15, n_new: int = 5) -> list[MatchPlayer]:
+def _rows_mixed(
+    *, old_score: int, new_score: int, n_old: int = 15, n_new: int = 5
+) -> list[MatchPlayer]:
     """Build a mixed window: n_old older rows with old_score, n_new newer with new_score."""
     old = [
         _mp(
@@ -381,10 +383,26 @@ class TestDetectAnomalies:
     def test_declines_before_improvements_within_tier(self) -> None:
         # old: ACS 200 + HS% 10%; new: ACS 100 + HS% 40%.
         # Both are anomalies -- ACS down (decline), HS% up (improvement).
-        old = [_mp(match_id=f"o-{i}", started_at=f"2026-03-{i+1:02d}T00:00:00+00:00",
-                   score=4000, headshots=9, bodyshots=81) for i in range(15)]
-        new = [_mp(match_id=f"n-{i}", started_at=f"2026-04-{15+i:02d}T00:00:00+00:00",
-                   score=2000, headshots=36, bodyshots=54) for i in range(5)]
+        old = [
+            _mp(
+                match_id=f"o-{i}",
+                started_at=f"2026-03-{i + 1:02d}T00:00:00+00:00",
+                score=4000,
+                headshots=9,
+                bodyshots=81,
+            )
+            for i in range(15)
+        ]
+        new = [
+            _mp(
+                match_id=f"n-{i}",
+                started_at=f"2026-04-{15 + i:02d}T00:00:00+00:00",
+                score=2000,
+                headshots=36,
+                bodyshots=54,
+            )
+            for i in range(5)
+        ]
         rows = old + new
         anomalies = detect_anomalies(rows, new)
         decline_indices = [i for i, a in enumerate(anomalies) if not a.is_improvement]
@@ -405,10 +423,14 @@ class TestDetectAnomalies:
 
     def test_win_rate_tracked(self) -> None:
         # 15 wins (historical), 5 losses (form) -- huge drop.
-        old = [_mp(match_id=f"o-{i}", started_at=f"2026-03-{i+1:02d}T00:00:00+00:00",
-                   won=True) for i in range(15)]
-        new = [_mp(match_id=f"n-{i}", started_at=f"2026-04-{15+i:02d}T00:00:00+00:00",
-                   won=False) for i in range(5)]
+        old = [
+            _mp(match_id=f"o-{i}", started_at=f"2026-03-{i + 1:02d}T00:00:00+00:00", won=True)
+            for i in range(15)
+        ]
+        new = [
+            _mp(match_id=f"n-{i}", started_at=f"2026-04-{15 + i:02d}T00:00:00+00:00", won=False)
+            for i in range(5)
+        ]
         rows = old + new
         anomalies = detect_anomalies(rows, new)
         wr = next((a for a in anomalies if a.metric == "win_rate"), None)
@@ -513,22 +535,26 @@ class TestFormatBaselineLines:
 
     def test_no_anomalies_returns_empty_list(self) -> None:
         from valocoach.coach.context import _format_baseline_lines
+
         assert _format_baseline_lines(self._comparison_no_anomalies()) == []
 
     def test_anomaly_lines_start_with_dash(self) -> None:
         from valocoach.coach.context import _format_baseline_lines
+
         lines = _format_baseline_lines(self._comparison_with_acs_drop())
         body = [ln for ln in lines if ln.startswith("-")]
         assert body
 
     def test_significant_anomaly_double_exclamation(self) -> None:
         from valocoach.coach.context import _format_baseline_lines
+
         lines = _format_baseline_lines(self._comparison_with_acs_drop())
         body = [ln for ln in lines if ln.startswith("-")]
         assert any("(!!)" in ln for ln in body)
 
     def test_header_contains_match_counts(self) -> None:
         from valocoach.coach.context import _format_baseline_lines
+
         comp = self._comparison_with_acs_drop()
         lines = _format_baseline_lines(comp)
         assert lines
@@ -538,6 +564,7 @@ class TestFormatBaselineLines:
 
     def test_one_liner_sigma_in_body(self) -> None:
         from valocoach.coach.context import _format_baseline_lines
+
         lines = _format_baseline_lines(self._comparison_with_acs_drop())
         body = [ln for ln in lines if ln.startswith("-")]
         assert any("\u03c3" in ln for ln in body)  # sigma

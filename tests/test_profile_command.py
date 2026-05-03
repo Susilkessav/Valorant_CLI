@@ -310,6 +310,7 @@ def test_summary_card_empty_returns_false() -> None:
 
 def _fake_settings(tmp_path):
     from valocoach.core.config import Settings
+
     return Settings(
         riot_name="Tester",
         riot_tag="NA1",

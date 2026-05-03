@@ -53,9 +53,7 @@ def parse_period(period: str) -> str | None:
     if p == "all":
         return None
     if not p.endswith("d") or not p[:-1].isdigit():
-        raise ValueError(
-            f"period must be 'Nd' (e.g. 7d, 30d) or 'all'; got {period!r}"
-        )
+        raise ValueError(f"period must be 'Nd' (e.g. 7d, 30d) or 'all'; got {period!r}")
     days = int(p[:-1])
     if days <= 0:
         raise ValueError(f"period must be positive; got {period!r}")
@@ -111,10 +109,7 @@ def filter_by_map(
     if map_name is None:
         return rows
     map_lc = map_name.lower()
-    return [
-        mp for mp in rows
-        if mp.match is not None and mp.match.map_name.lower() == map_lc
-    ]
+    return [mp for mp in rows if mp.match is not None and mp.match.map_name.lower() == map_lc]
 
 
 def filter_by_result(
@@ -144,10 +139,7 @@ def filter_by_queue(
     if queue_id is None:
         return rows
     q_lc = queue_id.lower()
-    return [
-        mp for mp in rows
-        if mp.match is not None and mp.match.queue_id.lower() == q_lc
-    ]
+    return [mp for mp in rows if mp.match is not None and mp.match.queue_id.lower() == q_lc]
 
 
 def filter_by_tier_range(

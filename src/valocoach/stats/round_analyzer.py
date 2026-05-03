@@ -225,9 +225,11 @@ def _infer_attacker_team(match: Match, team_map: dict[str, str]) -> str | None:
             # The planter is always an attacker. Back-calculate the first-half
             # attacker based on which half this round was in.
             if rnd.round_number <= FIRST_HALF_END:
-                return team              # planted in first half → team started attack
+                return team  # planted in first half → team started attack
             elif rnd.round_number <= SECOND_HALF_END:
-                return "Blue" if team == "Red" else "Red"  # planted in 2nd half → team swapped to attack
+                return (
+                    "Blue" if team == "Red" else "Red"
+                )  # planted in 2nd half → team swapped to attack
             else:
                 # OT is ambiguous — skip, try next round with a plant.
                 continue
@@ -559,7 +561,9 @@ class _Acc:
     rounds_kast: int = 0
 
     clutches_won: int = 0
-    clutch_breakdown: dict[int, tuple[int, int]] = field(default_factory=lambda: defaultdict(lambda: (0, 0)))
+    clutch_breakdown: dict[int, tuple[int, int]] = field(
+        default_factory=lambda: defaultdict(lambda: (0, 0))
+    )
 
     traded_deaths: int = 0
     trades_given: int = 0

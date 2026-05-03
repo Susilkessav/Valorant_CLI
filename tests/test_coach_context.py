@@ -552,12 +552,12 @@ def test_format_context_omits_round_line_on_empty_analysis() -> None:
 def test_format_context_includes_round_line_when_analysis_present() -> None:
     """Happy path: KAST + clutch + traded-deaths land on one dash line."""
     analysis = _round_analysis(
-        rounds=700,               # above every round floor (max is clutch: 600)
-        rounds_kast=490,          # 70 % KAST
+        rounds=700,  # above every round floor (max is clutch: 600)
+        rounds_kast=490,  # 70 % KAST
         clutches_won=2,
         clutch_opportunities=4,
         deaths=200,
-        traded_deaths=100,        # 50 % traded
+        traded_deaths=100,  # 50 % traded
         triples=3,
         aces=1,
     )
@@ -578,7 +578,7 @@ def test_format_context_round_line_tags_thin_sample() -> None:
     """Below matches+rounds floor → individual metrics get a ⚠ tag but
     the line still renders (LLM should see the data, down-weighted)."""
     analysis = _round_analysis(
-        rounds=50,        # well below KAST's 200-round floor
+        rounds=50,  # well below KAST's 200-round floor
         rounds_kast=30,
         clutches_won=0,
         clutch_opportunities=0,

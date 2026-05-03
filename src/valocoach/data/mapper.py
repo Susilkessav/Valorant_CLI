@@ -187,7 +187,9 @@ def _build_round_tree(details: MatchDetails, match_id: str) -> list[Round]:
             plant_site=rnd.plant.site if rnd.plant else None,
             planter_puuid=rnd.plant.player.puuid if rnd.plant and rnd.plant.player.puuid else None,
             bomb_defused=rnd.defuse is not None,
-            defuser_puuid=rnd.defuse.player.puuid if rnd.defuse and rnd.defuse.player.puuid else None,
+            defuser_puuid=rnd.defuse.player.puuid
+            if rnd.defuse and rnd.defuse.player.puuid
+            else None,
         )
         round_map[rnd.id] = orm_round
 

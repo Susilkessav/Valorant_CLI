@@ -65,7 +65,7 @@ def _raw(label: str, data: object, max_keys: int = 8) -> None:
     """Print a compact JSON preview — useful for inspecting uncertain models."""
     if isinstance(data, list):
         preview = data[0] if data else {}
-        suffix = f"  [dim](+ {len(data)-1} more)[/dim]" if len(data) > 1 else ""
+        suffix = f"  [dim](+ {len(data) - 1} more)[/dim]" if len(data) > 1 else ""
     else:
         preview = data
         suffix = ""
@@ -306,7 +306,7 @@ def print_summary() -> bool:
     if all_passed:
         console.print(
             Panel(
-                "[bold green]All checks passed.[/bold green]  " "Safe to write the sync pipeline.",
+                "[bold green]All checks passed.[/bold green]  Safe to write the sync pipeline.",
                 border_style="green",
             )
         )

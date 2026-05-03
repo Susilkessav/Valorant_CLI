@@ -247,7 +247,7 @@ class SyncOrchestrator:
                     new_ids.append(mid)
 
         self._con.print(
-            f"  [green]{len(new_ids)} new[/green]  /  " f"[dim]{skipped} already stored[/dim]"
+            f"  [green]{len(new_ids)} new[/green]  /  [dim]{skipped} already stored[/dim]"
         )
         return new_ids, fetched, skipped
 

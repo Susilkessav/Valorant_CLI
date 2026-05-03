@@ -69,8 +69,7 @@ class Player(Base):
 
     def __repr__(self) -> str:
         return (
-            f"<Player {self.riot_name}#{self.riot_tag} "
-            f"{self.current_tier_patched} ELO={self.elo}>"
+            f"<Player {self.riot_name}#{self.riot_tag} {self.current_tier_patched} ELO={self.elo}>"
         )
 
 

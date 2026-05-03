@@ -95,9 +95,11 @@ def _mp(match_id: str = "m-1") -> MatchPlayer:
 
 def _fake_session_scope(session: object):
     """Build an async context manager that yields *session*."""
+
     @asynccontextmanager
     async def _scope():
         yield session
+
     return _scope
 
 
@@ -111,6 +113,7 @@ class TestPlayerData:
         p = _player()
         data = PlayerData(player=p, rows=[], full_matches=[])
         from dataclasses import FrozenInstanceError
+
         with pytest.raises(FrozenInstanceError):
             data.rows = []  # type: ignore[misc]
 
@@ -258,7 +261,10 @@ class TestIncludeRounds:
             patch("valocoach.data.loader.session_scope", _fake_session_scope(session)),
             patch("valocoach.data.loader.get_player_by_name", AsyncMock(return_value=player)),
             patch("valocoach.data.loader.get_recent_matches", AsyncMock(return_value=rows)),
-            patch("valocoach.data.loader.get_recent_matches_full", AsyncMock(return_value=[full_match])),
+            patch(
+                "valocoach.data.loader.get_recent_matches_full",
+                AsyncMock(return_value=[full_match]),
+            ),
         ):
             result = await load_player_data_async(_settings(), include_rounds=True)
 

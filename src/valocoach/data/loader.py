@@ -148,17 +148,13 @@ async def load_player_data_async(
         if player is None:
             return None
 
-        rows = await get_recent_matches(
-            session, player.puuid, limit=limit, queue_id=queue_id
-        )
+        rows = await get_recent_matches(session, player.puuid, limit=limit, queue_id=queue_id)
 
         # Full-match fetch is a separate, heavier selectin query (rounds +
         # kills).  Only worth firing when the caller will actually use the
         # round data, and only when there are rows to annotate.
         full_matches: list[Match] = (
-            await get_recent_matches_full(
-                session, player.puuid, limit=limit, queue_id=queue_id
-            )
+            await get_recent_matches_full(session, player.puuid, limit=limit, queue_id=queue_id)
             if include_rounds and rows
             else []
         )

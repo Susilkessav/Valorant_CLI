@@ -344,10 +344,14 @@ class TestRenderBreakdown:
 
     def test_thin_split_warns_even_with_fat_overall(self) -> None:
         """3-game split must ⚠️ even when 30 total games are reliable."""
-        rows = _make_rows(27, agent="Jett") + [_mp(agent="Reyna", match_id=f"r-{i}") for i in range(3)]
+        rows = _make_rows(27, agent="Jett") + [
+            _mp(agent="Reyna", match_id=f"r-{i}") for i in range(3)
+        ]
         per_agent = compute_per_agent(rows)
         con = _con()
-        any_warn = render_breakdown(con, title="By agent", group_col="Agent", rows=per_agent, top_n=5)
+        any_warn = render_breakdown(
+            con, title="By agent", group_col="Agent", rows=per_agent, top_n=5
+        )
         out = _out(con)
         assert any_warn is True
         reyna_line = next(ln for ln in out.splitlines() if "Reyna" in ln)
@@ -402,7 +406,7 @@ class TestRenderWinLossSplit:
 
 def _round_analysis(
     *,
-    rounds: int = 600,       # 30 matches x 20 rounds -- clears all round-floor thresholds
+    rounds: int = 600,  # 30 matches x 20 rounds -- clears all round-floor thresholds
     deaths: int = 350,
     teammate_deaths: int = 240,
     clutch_opportunities: int = 30,
@@ -464,7 +468,9 @@ class TestRenderRoundStats:
 
     def test_shows_multi_kill_summary(self) -> None:
         con = _con()
-        render_round_stats(con, _round_analysis(double_kills=12, triple_kills=3, aces=1), matches=30)
+        render_round_stats(
+            con, _round_analysis(double_kills=12, triple_kills=3, aces=1), matches=30
+        )
         out = _out(con)
         assert "2K×12" in out
         assert "3K×3" in out
@@ -494,7 +500,9 @@ class TestRenderRoundStats:
         con = _con()
         render_round_stats(
             con,
-            _round_analysis(attack_rounds=None, attack_wins=None, defense_rounds=None, defense_wins=None),
+            _round_analysis(
+                attack_rounds=None, attack_wins=None, defense_rounds=None, defense_wins=None
+            ),
             matches=30,
         )
         out = _out(con)
