@@ -45,6 +45,10 @@ dev = [
     "ruff>=0.6.0",
     # LLM eval harness (scripts/run_eval.py)
     "pyyaml>=6.0.0",
+    # RAGAS RAG quality metrics (scripts/run_ragas_eval.py).
+    # Heavy optional dep — install explicitly: pip install ragas
+    # "ragas>=0.2.0",
+    # "datasets>=2.20.0",  # required by ragas
 ]
 
 [project.scripts]

@@ -1,0 +1,150 @@
+# ValoCoach RAGAS Evaluation Dataset
+#
+# Each sample provides a coaching question and a ground-truth reference answer.
+# At eval time the pipeline generates `response` and `retrieved_contexts` by
+# running run_coach(); these are then scored by RAGAS metrics.
+#
+# Fields
+# ------
+#   id           : unique identifier
+#   question     : coaching prompt sent to the LLM
+#   ground_truth : reference answer used by Context Recall and Faithfulness
+#   metadata     : optional filtering tags (agent, map, category)
+#
+# Run with:  python scripts/run_ragas_eval.py
+
+samples:
+
+  # ----------------------------------------------------------------
+  # Agent-specific
+  # ----------------------------------------------------------------
+
+  - id: jett_dash_ascent_a
+    question: "How should I use Jett's Tailwind to entry A site on Ascent?"
+    ground_truth: >
+      Activate Tailwind to dash aggressively through A Long, clearing the
+      entry corner before enemies can react. Pre-fire the CT-side angle
+      immediately after landing.  Combine with Updraft to gain elevation
+      and make Jett harder to counter-strafe.
+    metadata:
+      agent: Jett
+      map: Ascent
+      category: agent_ability
+
+  - id: omen_smoke_split_b
+    question: "Which spots should Omen smoke on a B execute on Split?"
+    ground_truth: >
+      Omen should use Dark Cover to smoke B Heaven and Mail to cut off
+      defenders from the site.  A third smoke on B Back site can prevent
+      flank from CT.  Smoke timings matter — throw before entry fraggers
+      commit so the smokes land simultaneously with the push.
+    metadata:
+      agent: Omen
+      map: Split
+      category: agent_ability
+
+  - id: sage_wall_bind_b
+    question: "Where should Sage place her Barrier Orb on Bind B site?"
+    ground_truth: >
+      A Barrier Orb at B Hookah exit blocks the common angle defenders use
+      to hold from that corner.  Alternatively, walling B Long forces
+      the defender holding there to reposition, buying time for teammates.
+      Do not wall short — it blocks teammate line-of-sight unnecessarily.
+    metadata:
+      agent: Sage
+      map: Bind
+      category: agent_ability
+
+  # ----------------------------------------------------------------
+  # Economy
+  # ----------------------------------------------------------------
+
+  - id: eco_round_pistol_buy
+    question: "My team lost the pistol round and has 800 credits. Should we buy or save?"
+    ground_truth: >
+      With 800 credits after losing the pistol round, the team should save
+      (full eco).  Buying Ghosts or Sheriffs rarely yields enough credits
+      for a proper rifle buy next round.  A full save means everyone can
+      afford rifles in round 3 or earlier if the opponents drop weapons.
+    metadata:
+      category: economy
+
+  - id: eco_half_buy_threshold
+    question: "At what credit threshold should a team consider a half-buy instead of full eco?"
+    ground_truth: >
+      Teams typically half-buy when they have 2000–2500 credits and cannot
+      full-buy.  Spectre + armor is an efficient half-buy.  Below 1800
+      credits the half-buy often wastes money on weapons that will not
+      be effective enough to swing the round.
+    metadata:
+      category: economy
+
+  # ----------------------------------------------------------------
+  # Tactical / map positioning
+  # ----------------------------------------------------------------
+
+  - id: attack_rotation_speed
+    question: "How should attackers rotate when B site is taken on Haven?"
+    ground_truth: >
+      Attackers holding B site on Haven must watch C Link and A Link
+      simultaneously to prevent CT and A-spawn rotation.  One player anchors
+      the spike plant, two hold rotations.  Rotate decisions should happen
+      before 45 seconds so the team has enough time to plant on a new site.
+    metadata:
+      map: Haven
+      category: tactical
+
+  - id: defense_anchor_vs_rotate
+    question: "When should a defender anchor a site instead of rotating on Bind?"
+    ground_truth: >
+      Anchor when you can stall three or more attackers long enough for
+      teammates to rotate (roughly 15–20 seconds of delay).  On Bind,
+      anchoring B site is easier because the tight angles near Hookah
+      favour the defender.  If only two attackers commit, rotating may
+      waste the anchor's delay advantage.
+    metadata:
+      map: Bind
+      category: tactical
+
+  # ----------------------------------------------------------------
+  # Side-specific
+  # ----------------------------------------------------------------
+
+  - id: attack_information_gathering
+    question: "What information should attackers gather before committing to a site on Ascent?"
+    ground_truth: >
+      Attackers should confirm defender positions on Mid (through mid-window
+      or B Garden), identify whether A or B is the weaker side, and drain
+      any utility such as Sage walls before full committing.  Sending one
+      player to poke mid early forces information without over-committing.
+    metadata:
+      map: Ascent
+      category: attack_side
+
+  - id: defense_first_blood_priority
+    question: "Why is the first kill so important on defense and how should it be prioritised?"
+    ground_truth: >
+      A first blood on defense creates a numbers advantage before attackers
+      commit utility.  Defenders should prioritize opening picks from
+      predictable, off-angle positions rather than holding the exact same
+      spot every round.  A 5v4 disadvantage for attackers often forces a
+      reset or a desperate execute into a prepared defense.
+    metadata:
+      category: defense_side
+
+  # ----------------------------------------------------------------
+  # Hallucination guards
+  # ----------------------------------------------------------------
+
+  - id: no_crossover_ability_names
+    question: "How do I use Phoenix's Curveball ability on Ascent A site?"
+    ground_truth: >
+      Phoenix's Curveball is a curved flash that can be thrown around corners
+      to blind enemies holding A site. Flash the CT angle or main entry before
+      pushing; the curve allows Phoenix to stay behind cover while activating
+      the flash. Combine with Run It Back for aggressive entry where a kill
+      resets the ult if Phoenix dies.
+    metadata:
+      agent: Phoenix
+      map: Ascent
+      category: hallucination_guard
