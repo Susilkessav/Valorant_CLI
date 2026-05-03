@@ -32,6 +32,7 @@ valocoach coach "we keep losing 8-12 on Ascent attack as Jett, they stack A"
   - [meta](#meta)
   - [ingest](#ingest)
   - [config](#config)
+- [Shell completion](#shell-completion)
 - [Configuration file](#configuration-file)
 - [Troubleshooting](#troubleshooting)
 - [Architecture](#architecture)
@@ -389,6 +390,56 @@ Manage the configuration file at `~/.valocoach/config.toml`.
 valocoach config init    # create default config
 valocoach config show    # print current effective settings
 ```
+
+---
+
+## Shell completion
+
+`valocoach` supports tab completion for **bash**, **zsh**, **fish**, and **PowerShell** via Typer's built-in shell completion.
+
+### One-time installation
+
+```bash
+# Bash  (~/.bashrc)
+valocoach --install-completion bash
+
+# Zsh   (~/.zshrc)
+valocoach --install-completion zsh
+
+# Fish  (~/.config/fish/completions/)
+valocoach --install-completion fish
+
+# PowerShell  ($PROFILE)
+valocoach --install-completion powershell
+```
+
+After running the command, **restart your terminal** (or `source` your shell's rc file) to activate.
+
+### Manual / custom installation
+
+Print the completion script to stdout instead of writing it automatically:
+
+```bash
+valocoach --show-completion bash   # prints the bash script
+valocoach --show-completion zsh    # prints the zsh script
+```
+
+Redirect the output into a file or paste it into your rc file to integrate with
+a custom completion setup (e.g. a shared dotfiles repo).
+
+### What gets completed
+
+| Context | Completions |
+|---------|-------------|
+| `valocoach <TAB>` | All sub-commands |
+| `coach --agent <TAB>` | Agent names (Jett, Sage, …) |
+| `coach --map <TAB>` | Map names (Ascent, Bind, …) |
+| `coach --side <TAB>` | `attack`, `defense` |
+| `interactive` REPL prompt | Agent names, map names, slash commands |
+
+> **Note** — interactive-mode REPL completion (agent/map/slash-command hints)
+> is handled by `prompt_toolkit`'s `WordCompleter` and works independently of
+> shell completion.
 
 ---
 
