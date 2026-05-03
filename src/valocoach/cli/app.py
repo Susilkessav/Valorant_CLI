@@ -213,9 +213,17 @@ def index() -> None:
 
 
 @app.command()
-def patch() -> None:
-    """Show current patch info. (stub — week 4)"""
-    display.warn("patch: not implemented yet (week 4)")
+def patch(
+    check: bool = typer.Option(
+        False,
+        "--check",
+        help="Refresh patch version from the Henrik API before displaying.",
+    ),
+) -> None:
+    """Show the current Valorant patch / game version."""
+    from valocoach.cli.commands.patch import run_patch
+
+    run_patch(check=check)
 
 
 @app.command()

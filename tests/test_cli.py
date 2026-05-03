@@ -20,11 +20,22 @@ def test_help_shows_all_commands():
         assert cmd in result.stdout
 
 
-def test_unimplemented_stub_exits_cleanly():
-    # `patch` and `interactive` are still stubs — pick one to track stub→real migrations.
-    result = runner.invoke(app, ["patch"])
+def test_patch_command_exits_cleanly():
+    # `patch` is now a real command — verify it exits 0 with mocked DB.
+    from unittest.mock import AsyncMock, MagicMock, patch as mock_patch
+
+    with (
+        mock_patch("valocoach.data.database.ensure_db", new_callable=AsyncMock),
+        mock_patch(
+            "valocoach.retrieval.patch_tracker.get_current_patch",
+            new_callable=AsyncMock,
+            return_value="10.09",
+        ),
+        mock_patch("valocoach.core.config.load_settings", return_value=MagicMock()),
+    ):
+        result = runner.invoke(app, ["patch"])
     assert result.exit_code == 0
-    assert "not implemented" in result.stdout.lower()
+    assert "10.09" in result.stdout
 
 
 def test_meta_command_runs_without_args():
