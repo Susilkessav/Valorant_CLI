@@ -49,6 +49,7 @@ from valocoach.data.database import session_scope
 from valocoach.data.models import AccountData, MMRData
 from valocoach.data.orm_models import SyncLog
 from valocoach.data.repository import (
+    close_stale_syncs,
     complete_sync,
     match_exists,
     start_sync,
@@ -148,9 +149,17 @@ class SyncOrchestrator:
             result.puuid = account.puuid
             sync_log_id = await self._open_log(account, mmr)
 
+            # ── Phase 1b: resume detection ────────────────────────────────
+            resume_mode = await self._check_resume(account.puuid, sync_log_id)
+            if resume_mode:
+                self._con.print(
+                    "[yellow]⚡ Previous sync was interrupted — "
+                    "resuming (scanning all matches to find gaps).[/yellow]"
+                )
+
             # ── Phase 2: discover which match IDs are new ─────────────────
             new_ids, result.matches_fetched, result.matches_skipped = await self._discover(
-                region, name, tag, limit=limit, full=full, mode=mode
+                region, name, tag, limit=limit, full=full or resume_mode, mode=mode
             )
 
             # ── Phase 3: fetch details + upsert ───────────────────────────
@@ -198,6 +207,22 @@ class SyncOrchestrator:
             await upsert_player(session, account, mmr)
             sync_log = await start_sync(session, account.puuid)
         return sync_log.id  # id populated by flush() inside start_sync
+
+    async def _check_resume(self, puuid: str, current_log_id: int) -> bool:
+        """Detect and close any incomplete prior sync for *puuid*.
+
+        Returns True when at least one stale SyncLog was found (meaning the
+        previous sync was interrupted and the caller should switch to full-scan
+        mode so no unfetched matches are skipped).
+
+        Stale rows are closed immediately (error="interrupted") so that
+        subsequent calls to this method do not trigger resume mode again.
+        """
+        async with session_scope() as session:
+            count = await close_stale_syncs(session, puuid, exclude_id=current_log_id)
+        if count:
+            log.debug("closed %d stale sync log(s) for puuid %s…", count, puuid[:8])
+        return count > 0
 
     # ------------------------------------------------------------------
     # Phase 2 — discover

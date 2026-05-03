@@ -18,6 +18,7 @@ Public API:
     await get_match(session, match_id)                        -> Match | None
     await start_sync(session, puuid)                          -> SyncLog
     complete_sync(session, log, ...)                          -> None
+    await close_stale_syncs(session, puuid, exclude_id)      -> int
 """
 
 from __future__ import annotations
@@ -339,3 +340,29 @@ def complete_sync(
     log.matches_fetched = matches_fetched
     log.matches_new = matches_new
     log.error = error
+
+
+async def close_stale_syncs(
+    session: AsyncSession,
+    puuid: str,
+    exclude_id: int,
+) -> int:
+    """Mark all incomplete SyncLog rows (other than *exclude_id*) as interrupted.
+
+    Returns the number of rows closed.  A row is "incomplete" when its
+    completed_at is NULL — meaning the previous sync process was killed or
+    crashed before _finalise() could run.
+    """
+    stmt = (
+        select(SyncLog)
+        .where(SyncLog.puuid == puuid)
+        .where(SyncLog.completed_at.is_(None))
+        .where(SyncLog.id != exclude_id)
+    )
+    result = await session.scalars(stmt)
+    stale = list(result.all())
+    now = _now_iso()
+    for log in stale:
+        log.completed_at = now
+        log.error = "interrupted"
+    return len(stale)

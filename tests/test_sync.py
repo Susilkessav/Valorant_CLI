@@ -34,6 +34,7 @@ _P_START_SYNC = "valocoach.data.sync.start_sync"
 _P_MATCH_EXISTS = "valocoach.data.sync.match_exists"
 _P_UPSERT_DETAILS = "valocoach.data.sync.upsert_match_details"
 _P_COMPLETE_SYNC = "valocoach.data.sync.complete_sync"
+_P_CLOSE_STALE = "valocoach.data.sync.close_stale_syncs"
 
 # Stable fake IDs
 PUUID = "20905543-1b42-5f6f-8435-ab284a0094f8"
@@ -164,6 +165,7 @@ class TestSyncOrchestratorRun:
             patch(_P_MATCH_EXISTS, new_callable=AsyncMock, return_value=False),
             patch(_P_UPSERT_DETAILS, new_callable=AsyncMock, return_value=fake_match),
             patch(_P_COMPLETE_SYNC),
+            patch(_P_CLOSE_STALE, new=AsyncMock(return_value=0)),
         ):
             orch = SyncOrchestrator(client, console=_quiet_console())
             result = await orch.run("na", "Yoursaviour01", "SK04", limit=20)
@@ -191,6 +193,7 @@ class TestSyncOrchestratorRun:
             patch(_P_MATCH_EXISTS, new_callable=AsyncMock, return_value=True),  # already stored
             patch(_P_UPSERT_DETAILS, new_callable=AsyncMock) as mock_upsert,
             patch(_P_COMPLETE_SYNC),
+            patch(_P_CLOSE_STALE, new=AsyncMock(return_value=0)),
         ):
             orch = SyncOrchestrator(client, console=_quiet_console())
             result = await orch.run("na", "Yoursaviour01", "SK04")
@@ -222,6 +225,7 @@ class TestSyncOrchestratorRun:
             patch(_P_MATCH_EXISTS, new_callable=AsyncMock, return_value=False),
             patch(_P_UPSERT_DETAILS, new_callable=AsyncMock, return_value=MagicMock()),
             patch(_P_COMPLETE_SYNC),
+            patch(_P_CLOSE_STALE, new=AsyncMock(return_value=0)),
         ):
             orch = SyncOrchestrator(client, console=_quiet_console())
             result = await orch.run("na", "Yoursaviour01", "SK04")
@@ -262,6 +266,7 @@ class TestSyncOrchestratorRun:
             patch(_P_UPSERT_PLAYER, new_callable=AsyncMock),
             patch(_P_START_SYNC, new_callable=AsyncMock, return_value=_sync_log_mock()),
             patch(_P_COMPLETE_SYNC),
+            patch(_P_CLOSE_STALE, new=AsyncMock(return_value=0)),
         ):
             orch = SyncOrchestrator(client, console=_quiet_console())
             with pytest.raises(SyncError, match="Cannot fetch match list"):
@@ -280,6 +285,7 @@ class TestSyncOrchestratorRun:
             patch(_P_UPSERT_PLAYER, new_callable=AsyncMock),
             patch(_P_START_SYNC, new_callable=AsyncMock, return_value=_sync_log_mock()),
             patch(_P_COMPLETE_SYNC, complete_sync_mock),
+            patch(_P_CLOSE_STALE, new=AsyncMock(return_value=0)),
         ):
             orch = SyncOrchestrator(client, console=_quiet_console())
             with pytest.raises(SyncError):
@@ -307,6 +313,7 @@ class TestSyncOrchestratorRun:
             patch(_P_MATCH_EXISTS, new_callable=AsyncMock, return_value=False),
             patch(_P_UPSERT_DETAILS, new_callable=AsyncMock, return_value=None),  # already stored
             patch(_P_COMPLETE_SYNC),
+            patch(_P_CLOSE_STALE, new=AsyncMock(return_value=0)),
         ):
             orch = SyncOrchestrator(client, console=_quiet_console())
             result = await orch.run("na", "Yoursaviour01", "SK04")
