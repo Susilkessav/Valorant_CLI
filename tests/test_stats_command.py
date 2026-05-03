@@ -452,3 +452,190 @@ def test_legend_mentions_the_warn_glyph() -> None:
     # Ensure `stats` imported above is actually used (keeps ruff happy on
     # this explicitly-structured test without suppressing a lint).
     assert stats.matches == 3
+
+
+# ---------------------------------------------------------------------------
+# run_stats — previously-uncovered branches
+# ---------------------------------------------------------------------------
+
+# Shared infra (mirrors the block in test_run_stats_shows_legend_only_…)
+_FAKE_SETTINGS_PATCH = "valocoach.cli.commands.stats.load_settings"
+_FAKE_DATA_PATCH = "valocoach.cli.commands.stats.load_player_data"
+
+
+class _FakePlayer:
+    riot_name = "Tester"
+    riot_tag = "NA1"
+    current_tier_patched = "Gold 1"
+    region = "na"
+    puuid = "p-tracked"
+
+
+def _fake_settings(tmp_path=None) -> object:
+    from valocoach.core.config import Settings
+
+    return Settings(
+        riot_name="Tester",
+        riot_tag="NA1",
+        riot_region="na",
+        henrikdev_api_key="fake",
+    )
+
+
+def _run(
+    *,
+    rows: list,
+    full_matches: list | None = None,
+    result: str | None = None,
+    agent: str | None = None,
+    map_: str | None = None,
+    period: str = "all",
+) -> str:
+    """Helper: run_stats with mocked settings+data; return captured output."""
+    import contextlib
+    from unittest.mock import patch
+
+    import click
+
+    from valocoach.data.loader import PlayerData
+
+    con = _capture_console()
+
+    def _fetch(_s, **_kw):
+        return PlayerData(player=_FakePlayer(), rows=rows, full_matches=full_matches or [])
+
+    with (
+        patch(_FAKE_SETTINGS_PATCH, return_value=_fake_settings()),
+        patch(_FAKE_DATA_PATCH, side_effect=_fetch),
+        contextlib.suppress(SystemExit, click.exceptions.Exit),
+    ):
+        run_stats(period=period, result=result, agent=agent, map_=map_, console=con)
+
+    return con.file.getvalue()
+
+
+def test_run_stats_result_win_covers_won_true_branch():
+    """result='win' assigns won=True (line 97) and skips the win/loss split."""
+    rows = _make_rows(10, won=True) + _make_rows(5, won=False)
+    out = _run(rows=rows, result="win")
+    # Only wins in the output — can assert we at least got output without error.
+    assert "Tester" in out
+    # The split section is skipped when won is not None — "Win" and "Loss"
+    # sub-headers should NOT both appear (no side-by-side split).
+    # (A crude check: the split renders two W% rows; one would still appear
+    # in the overall. We just verify no crash + the command produced output.)
+    assert len(out) > 0
+
+
+def test_run_stats_result_loss_covers_won_false_branch():
+    """result='loss' assigns won=False (line 99)."""
+    # Rows must have won=False so the loss filter keeps them (not empties them).
+    rows = _make_rows(10, won=False)
+    out = _run(rows=rows, result="loss")
+    assert "Tester" in out
+
+
+def test_run_stats_result_lose_alias():
+    """'lose' is an accepted alias for 'loss' (also line 99)."""
+    rows = _make_rows(10, won=False)
+    out = _run(rows=rows, result="lose")
+    assert "Tester" in out
+
+
+def test_run_stats_no_matches_after_filter_exits():
+    """Lines 139-147: warn + Exit(0) when every row is filtered out."""
+    from unittest.mock import MagicMock, patch
+
+    import click
+
+    from valocoach.data.loader import PlayerData
+
+    con = _capture_console()
+    warn_mock = MagicMock()
+
+    def _fetch(_s, **_kw):
+        return PlayerData(player=_FakePlayer(), rows=_make_rows(5), full_matches=[])
+
+    exited = False
+    with (
+        patch(_FAKE_SETTINGS_PATCH, return_value=_fake_settings()),
+        patch(_FAKE_DATA_PATCH, side_effect=_fetch),
+        patch("valocoach.cli.commands.stats.display.warn", warn_mock),
+    ):
+        try:
+            # Agent filter "Killjoy" matches nothing — empty result triggers warn.
+            run_stats(period="all", agent="Killjoy", console=con)
+        except (SystemExit, click.exceptions.Exit) as exc:
+            exited = True
+            assert getattr(exc, "code", 0) == 0 or getattr(exc, "exit_code", 0) == 0
+
+    assert exited, "Expected Exit to be raised"
+    warn_mock.assert_called_once()
+    assert "No matches after filters" in warn_mock.call_args[0][0]
+
+
+def test_run_stats_agent_filter_skips_per_agent_table():
+    """Lines 180→185: per-agent breakdown omitted when agent filter active."""
+    rows = _make_rows(20, agent="Jett")
+    out = _run(rows=rows, agent="Jett")
+    # With agent filter active, the "By agent" table must NOT appear.
+    assert "By agent" not in out
+    # But the per-map table should still appear (map_ is None).
+    assert "By map" in out
+
+
+def test_run_stats_map_filter_skips_per_map_table():
+    """Lines 185→194: per-map breakdown omitted when map filter active."""
+    rows = _make_rows(20, map_name="Ascent")
+    out = _run(rows=rows, map_="Ascent")
+    # With map filter active, "By map" table must NOT appear.
+    assert "By map" not in out
+    # Per-agent table should still appear (agent is None).
+    assert "By agent" in out
+
+
+def test_run_stats_round_stats_rendered_when_full_matches_available():
+    """Lines 195-198: round analysis section shown when full_matches has data."""
+    from unittest.mock import patch
+
+    from valocoach.data.loader import PlayerData
+    from valocoach.stats.round_analyzer import RoundAnalysis
+
+    rows = _make_rows(20)
+    # Build a stub RoundAnalysis with rounds > 0 so render_round_stats fires.
+    stub_analysis = RoundAnalysis(
+        rounds=40,
+        deaths=10,
+        teammate_deaths=15,
+        clutch_opportunities=3,
+        rounds_with_kill=20,
+        rounds_with_assist=5,
+        rounds_survived=25,
+        rounds_traded_death=4,
+        rounds_kast=30,
+        clutches_won=1,
+        traded_deaths=4,
+        trades_given=6,
+        double_kills=3,
+        triple_kills=1,
+        quadra_kills=0,
+        aces=0,
+    )
+
+    con = _capture_console()
+
+    def _fetch(_s, **_kw):
+        # full_matches must be non-empty to enter the if-block.
+        fake_match = object()  # analyze_rounds is mocked — shape doesn't matter.
+        return PlayerData(player=_FakePlayer(), rows=rows, full_matches=[fake_match])
+
+    with (
+        patch(_FAKE_SETTINGS_PATCH, return_value=_fake_settings()),
+        patch(_FAKE_DATA_PATCH, side_effect=_fetch),
+        patch("valocoach.cli.commands.stats.analyze_rounds", return_value=stub_analysis),
+    ):
+        run_stats(period="all", console=con)
+
+    out = con.file.getvalue()
+    # render_round_stats should have added KAST or round-related content.
+    assert "KAST" in out or "Round" in out or "Clutch" in out
