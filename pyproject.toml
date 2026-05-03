@@ -45,6 +45,8 @@ dev = [
     "ruff>=0.6.0",
     # LLM eval harness (scripts/run_eval.py)
     "pyyaml>=6.0.0",
+    # Coverage reporting.
+    "pytest-cov>=7.1.0",
     # RAGAS RAG quality metrics (scripts/run_ragas_eval.py).
     # Heavy optional dep — install explicitly: pip install ragas
     # "ragas>=0.2.0",
@@ -72,3 +74,36 @@ quote-style = "double"
 testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+addopts = "--tb=short"
+
+[tool.coverage.run]
+source = ["valocoach"]
+branch = true
+omit = [
+    "src/valocoach/__init__.py",
+    "src/valocoach/cli/__init__.py",
+    "src/valocoach/cli/commands/__init__.py",
+    "src/valocoach/coach/__init__.py",
+    "src/valocoach/core/__init__.py",
+    "src/valocoach/data/__init__.py",
+    "src/valocoach/llm/__init__.py",
+    "src/valocoach/retrieval/__init__.py",
+    "src/valocoach/stats/__init__.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+precision = 1
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@overload",
+    "\\.\\.\\.",
+]
+
+[dependency-groups]
+dev = [
+    "pytest-cov>=7.1.0",
+]
