@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from valocoach.core.session_store import (
@@ -194,6 +195,51 @@ class TestSessionSummary:
         summary = session_summary(bad)
         assert "corrupt" in summary
 
+    # ------------------------------------------------------------------
+    # Relative-time branches (lines 145-152): min ago / h ago / day(s) ago
+    # and the inner except that falls back to path.stem.
+    # ------------------------------------------------------------------
+
+    def _write_with_saved_at(self, tmp_path: Path, saved_at: str) -> Path:
+        """Write a minimal but valid session file with a custom saved_at."""
+        p = tmp_path / "session.json"
+        p.write_text(
+            json.dumps(
+                {
+                    "saved_at": saved_at,
+                    "turns": [
+                        {"role": "user", "content": "q"},
+                        {"role": "assistant", "content": "a"},
+                    ],
+                }
+            )
+        )
+        return p
+
+    def test_min_ago_branch(self, tmp_path: Path):
+        """70 seconds old → 'min ago'."""
+        saved_at = (datetime.now(tz=UTC) - timedelta(seconds=70)).isoformat()
+        path = self._write_with_saved_at(tmp_path, saved_at)
+        assert "min ago" in session_summary(path)
+
+    def test_h_ago_branch(self, tmp_path: Path):
+        """2 hours old → 'h ago'."""
+        saved_at = (datetime.now(tz=UTC) - timedelta(hours=2)).isoformat()
+        path = self._write_with_saved_at(tmp_path, saved_at)
+        assert "h ago" in session_summary(path)
+
+    def test_days_ago_branch(self, tmp_path: Path):
+        """3 days old → 'day(s) ago'."""
+        saved_at = (datetime.now(tz=UTC) - timedelta(days=3)).isoformat()
+        path = self._write_with_saved_at(tmp_path, saved_at)
+        assert "day" in session_summary(path)
+
+    def test_invalid_saved_at_falls_back_to_stem(self, tmp_path: Path):
+        """An unparseable saved_at triggers the inner except → stem used as fallback."""
+        path = self._write_with_saved_at(tmp_path, "not-a-valid-datetime-at-all")
+        summary = session_summary(path)
+        assert path.stem in summary
+
 
 # ---------------------------------------------------------------------------
 # _prune (internal)
@@ -225,3 +271,16 @@ class TestPrune:
             (tmp_path / f"2026-01-0{i + 1}T00-00-00.json").write_text("{}")
         _prune(tmp_path)
         assert len(list(tmp_path.glob("*.json"))) == 5
+
+    def test_prune_exception_is_swallowed(self, tmp_path: Path):
+        """PermissionError on unlink must not propagate — covers lines 171-172."""
+        # Create MAX_SESSIONS + 2 files so the pruning loop will attempt unlink.
+        for i in range(MAX_SESSIONS + 2):
+            f = tmp_path / f"2026-01-{i + 1:02d}T00-00-00.json"
+            f.write_text("{}")
+        # Make the directory read-only so unlink raises PermissionError.
+        tmp_path.chmod(0o555)
+        try:
+            _prune(tmp_path)  # must not raise
+        finally:
+            tmp_path.chmod(0o755)  # restore so pytest can clean up tmp_path
