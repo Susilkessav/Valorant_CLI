@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import Literal
 
@@ -22,21 +23,41 @@ def _upsert_batch(
     metadatas: list[dict],
     batch_size: int = 32,
     collection_name: str = STATIC_COLLECTION,
+    on_progress: Callable[[int, int], None] | None = None,
 ) -> int:
+    """Embed and upsert documents in batches.
+
+    Args:
+        on_progress: Optional callback invoked after each batch with
+                     ``(completed_count, total_count)`` so callers can
+                     drive a progress bar without coupling this module to
+                     any specific UI library.
+    """
     collection = get_collection(data_dir, collection_name)
-    total = 0
-    for i in range(0, len(texts), batch_size):
+    total_docs = len(texts)
+    done = 0
+    for i in range(0, total_docs, batch_size):
         t = texts[i : i + batch_size]
         d = ids[i : i + batch_size]
         m = metadatas[i : i + batch_size]
         embeddings = embed(t)
         collection.upsert(ids=d, documents=t, embeddings=embeddings, metadatas=m)
-        total += len(t)
-    return total
+        done += len(t)
+        if on_progress is not None:
+            on_progress(done, total_docs)
+    return done
 
 
-def ingest_knowledge_base(data_dir: Path) -> dict[str, int]:
-    """Embed and upsert all static JSON knowledge into the vector store."""
+def ingest_knowledge_base(
+    data_dir: Path,
+    on_progress: Callable[[int, int], None] | None = None,
+) -> dict[str, int]:
+    """Embed and upsert all static JSON knowledge into the vector store.
+
+    Args:
+        on_progress: Optional progress callback forwarded to ``_upsert_batch``.
+                     Receives ``(completed_docs, total_docs)`` after each batch.
+    """
     from valocoach.retrieval.agents import format_agent_context
     from valocoach.retrieval.maps import format_map_context
     from valocoach.retrieval.meta import format_meta_context
@@ -85,7 +106,7 @@ def ingest_knowledge_base(data_dir: Path) -> dict[str, int]:
 
     n_meta = 1 + len(map_meta_entries)
 
-    total = _upsert_batch(data_dir, texts, ids, metas)
+    total = _upsert_batch(data_dir, texts, ids, metas, on_progress=on_progress)
     return {"agents": n_agents, "maps": n_maps, "meta": n_meta, "total": total}
 
 
