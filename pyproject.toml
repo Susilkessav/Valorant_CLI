@@ -75,6 +75,9 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 addopts = "--tb=short"
+markers = [
+    "live: requires Ollama running locally (opt-in: pass --live to pytest)",
+]
 
 [tool.coverage.run]
 source = ["valocoach"]

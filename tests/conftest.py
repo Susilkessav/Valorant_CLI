@@ -38,6 +38,31 @@ from valocoach.data.models import (
 )
 
 # ---------------------------------------------------------------------------
+# --live flag: opt-in gate for tests that require a running Ollama instance.
+# Tests marked with @pytest.mark.live are skipped by default and only run
+# when the caller passes --live to pytest.
+# ---------------------------------------------------------------------------
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--live",
+        action="store_true",
+        default=False,
+        help="Run live tests that require a local Ollama instance.",
+    )
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    if config.getoption("--live"):
+        return  # --live passed: run everything, no skipping
+    skip_live = pytest.mark.skip(reason="live test — pass --live to run")
+    for item in items:
+        if item.get_closest_marker("live"):
+            item.add_marker(skip_live)
+
+
+# ---------------------------------------------------------------------------
 # App settings
 # ---------------------------------------------------------------------------
 
