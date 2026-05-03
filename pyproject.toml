@@ -104,6 +104,7 @@ exclude_lines = [
     "raise NotImplementedError",
     "@overload",
     "\\.\\.\\.",
+    "if __name__ == .__main__.:",
 ]
 
 [dependency-groups]
