@@ -111,8 +111,7 @@ class ConversationMemory:
         single message is dropped instead.
         """
         while self._turns and (
-            len(self._turns) > self._max_turns
-            or self.token_count > self._max_tokens
+            len(self._turns) > self._max_turns or self.token_count > self._max_tokens
         ):
             # Try to drop a complete user+assistant exchange from the front.
             if (

@@ -96,9 +96,7 @@ def retrieve_static(
         from valocoach.retrieval.vector_store import LIVE_COLLECTION, STATIC_COLLECTION
 
         agents_list = [agent] if agent else None
-        queries = build_retrieval_queries(
-            situation, map_name=map_, agents=agents_list, side=side
-        )
+        queries = build_retrieval_queries(situation, map_name=map_, agents=agents_list, side=side)
 
         seen: set[str] = set()
         vector_parts: list[str] = []
@@ -194,10 +192,12 @@ async def _fetch_live_meta(
 
     urls_to_try: list[tuple[str, str]] = []
     if map_:
-        urls_to_try.append((
-            f"https://www.metasrc.com/valorant/map/{map_.lower()}",
-            "web",
-        ))
+        urls_to_try.append(
+            (
+                f"https://www.metasrc.com/valorant/map/{map_.lower()}",
+                "web",
+            )
+        )
 
     chunks: list[str] = []
     sources: list[str] = []
@@ -211,9 +211,13 @@ async def _fetch_live_meta(
             text = scraped.text
             await store_cached(url, text, source=source, ttl_tier="volatile")
             from valocoach.retrieval.vector_store import LIVE_COLLECTION
+
             ingest_text(
-                settings.data_dir, text,
-                doc_type="web", name=url, source=url,
+                settings.data_dir,
+                text,
+                doc_type="web",
+                name=url,
+                source=url,
                 collection_name=LIVE_COLLECTION,
             )
 

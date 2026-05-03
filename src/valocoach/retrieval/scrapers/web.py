@@ -53,7 +53,9 @@ def scrape_url(url: str, source: str = "web", timeout: int = 20) -> ScrapedConte
         return None
 
     meta = trafilatura.extract_metadata(html)
-    title = (meta.title if meta and meta.title else None) or url.split("/")[-1].replace("-", " ").title()
+    title = (meta.title if meta and meta.title else None) or url.split("/")[-1].replace(
+        "-", " "
+    ).title()
 
     return ScrapedContent(
         url=url,

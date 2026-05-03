@@ -8,11 +8,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from valocoach.core.config import Settings
 from valocoach.core.preflight import CheckResult, check_ollama, check_riot_id, check_vector_store
-
 
 # ---------------------------------------------------------------------------
 # Helpers

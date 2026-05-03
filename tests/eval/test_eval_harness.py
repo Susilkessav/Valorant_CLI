@@ -20,8 +20,7 @@ SCRIPTS_DIR = REPO_ROOT / "scripts"
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
-from run_eval import Scenario, ScenarioResult, _check_assertions, load_scenarios
-
+from run_eval import Scenario, ScenarioResult, _check_assertions, load_scenarios  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -122,9 +121,7 @@ class TestLoadScenarios:
         real_path = REPO_ROOT / "tests" / "eval" / "scenarios.yaml"
         assert real_path.exists(), "tests/eval/scenarios.yaml not found"
         scenarios = load_scenarios(real_path)
-        assert len(scenarios) >= 20, (
-            f"Expected at least 20 scenarios, got {len(scenarios)}"
-        )
+        assert len(scenarios) >= 20, f"Expected at least 20 scenarios, got {len(scenarios)}"
 
     def test_real_scenarios_have_ids(self):
         real_path = REPO_ROOT / "tests" / "eval" / "scenarios.yaml"
@@ -136,10 +133,7 @@ class TestLoadScenarios:
         """Every scenario should have at least one assertion."""
         real_path = REPO_ROOT / "tests" / "eval" / "scenarios.yaml"
         scenarios = load_scenarios(real_path)
-        missing = [
-            s.id for s in scenarios
-            if not s.must_contain and not s.must_not_contain
-        ]
+        missing = [s.id for s in scenarios if not s.must_contain and not s.must_not_contain]
         assert not missing, f"Scenarios missing assertions: {missing}"
 
 

@@ -192,7 +192,7 @@ class TestFitPromptStage2:
         # We use a tiny hard_limit to make this easy to trigger.
         small_limit = 50
         grounded = _make_text(45)  # just fits in 50 minus base+user
-        stats = _make_text(20)     # won't fit alongside grounded
+        stats = _make_text(20)  # won't fit alongside grounded
 
         base = "ok"
         user = "q"
@@ -208,7 +208,10 @@ class TestFitPromptStage2:
         # Stats may be None because there's no room.
         base_tokens = count_tokens(base) + count_tokens(user)
         if g_out is not None:
-            assert count_tokens(g_out) + (count_tokens(s_out) if s_out else 0) <= small_limit - base_tokens
+            assert (
+                count_tokens(g_out) + (count_tokens(s_out) if s_out else 0)
+                <= small_limit - base_tokens
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -219,7 +222,7 @@ class TestFitPromptStage2:
 class TestFitPromptEdgeCases:
     def test_base_plus_user_already_over_limit_returns_none_none(self):
         """When system_base + user_msg alone exceed hard_limit, return (None, None)."""
-        long_base = "word " * 200   # ~400 tokens
+        long_base = "word " * 200  # ~400 tokens
         long_user = "word " * 200
         # hard_limit=10 is tiny — base+user blow it immediately
         g_out, s_out = fit_prompt(
@@ -236,9 +239,9 @@ class TestFitPromptEdgeCases:
         """After fit_prompt, the combined prompt must be ≤ hard_limit."""
         hard_limit = 200
         system_base = "You are a coach."  # ~5 tokens
-        user_msg = "push A"              # ~3 tokens
-        grounded = _make_text(170)       # large — needs trimming
-        stats = "stats here"             # ~3 tokens
+        user_msg = "push A"  # ~3 tokens
+        grounded = _make_text(170)  # large — needs trimming
+        stats = "stats here"  # ~3 tokens
 
         g_out, s_out = fit_prompt(
             system_base=system_base,

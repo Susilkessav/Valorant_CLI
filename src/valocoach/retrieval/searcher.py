@@ -46,11 +46,13 @@ def search(
     for i, doc in enumerate(results["documents"][0]):
         distance = results["distances"][0][i]
         if distance <= max_distance:
-            docs.append({
-                "text": doc,
-                "metadata": results["metadatas"][0][i],
-                "distance": distance,
-            })
+            docs.append(
+                {
+                    "text": doc,
+                    "metadata": results["metadatas"][0][i],
+                    "distance": distance,
+                }
+            )
     return docs
 
 

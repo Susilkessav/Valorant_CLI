@@ -16,7 +16,6 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from typer.testing import CliRunner
 
 from valocoach.cli.app import app
@@ -66,57 +65,71 @@ class TestCoachCommand:
         assert result.exit_code != 0
 
     def test_ollama_down_exits_nonzero_with_message(self):
-        with patch("valocoach.core.preflight.check_ollama", return_value=_fail_ollama()):
-            with patch("valocoach.core.config.load_settings", return_value=_fake_settings()):
-                result = runner.invoke(app, ["coach", "test situation"])
+        with (
+            patch("valocoach.core.preflight.check_ollama", return_value=_fail_ollama()),
+            patch("valocoach.core.config.load_settings", return_value=_fake_settings()),
+        ):
+            result = runner.invoke(app, ["coach", "test situation"])
         assert result.exit_code != 0
         assert "not reachable" in result.output.lower() or "ollama" in result.output.lower()
 
     def test_ollama_down_hint_shown(self):
-        with patch("valocoach.core.preflight.check_ollama", return_value=_fail_ollama()):
-            with patch("valocoach.core.config.load_settings", return_value=_fake_settings()):
-                result = runner.invoke(app, ["coach", "test situation"])
+        with (
+            patch("valocoach.core.preflight.check_ollama", return_value=_fail_ollama()),
+            patch("valocoach.core.config.load_settings", return_value=_fake_settings()),
+        ):
+            result = runner.invoke(app, ["coach", "test situation"])
         assert "ollama serve" in result.output
 
     def test_routes_to_run_coach_when_ollama_ok(self):
-        with patch("valocoach.core.preflight.check_ollama", return_value=_ok_ollama()):
-            with patch("valocoach.core.config.load_settings", return_value=_fake_settings()):
-                with patch("valocoach.cli.commands.coach.run_coach") as mock_run:
-                    mock_run.return_value = None
-                    result = runner.invoke(app, ["coach", "push A on Ascent"])
+        with (
+            patch("valocoach.core.preflight.check_ollama", return_value=_ok_ollama()),
+            patch("valocoach.core.config.load_settings", return_value=_fake_settings()),
+            patch("valocoach.cli.commands.coach.run_coach") as mock_run,
+        ):
+            mock_run.return_value = None
+            runner.invoke(app, ["coach", "push A on Ascent"])
         mock_run.assert_called_once()
 
     def test_situation_text_passed_to_run_coach(self):
-        with patch("valocoach.core.preflight.check_ollama", return_value=_ok_ollama()):
-            with patch("valocoach.core.config.load_settings", return_value=_fake_settings()):
-                with patch("valocoach.cli.commands.coach.run_coach") as mock_run:
-                    mock_run.return_value = None
-                    runner.invoke(app, ["coach", "push A on Ascent"])
+        with (
+            patch("valocoach.core.preflight.check_ollama", return_value=_ok_ollama()),
+            patch("valocoach.core.config.load_settings", return_value=_fake_settings()),
+            patch("valocoach.cli.commands.coach.run_coach") as mock_run,
+        ):
+            mock_run.return_value = None
+            runner.invoke(app, ["coach", "push A on Ascent"])
         call_kwargs = mock_run.call_args.kwargs
         assert call_kwargs["situation"] == "push A on Ascent"
 
     def test_agent_flag_passed_to_run_coach(self):
-        with patch("valocoach.core.preflight.check_ollama", return_value=_ok_ollama()):
-            with patch("valocoach.core.config.load_settings", return_value=_fake_settings()):
-                with patch("valocoach.cli.commands.coach.run_coach") as mock_run:
-                    mock_run.return_value = None
-                    runner.invoke(app, ["coach", "--agent", "Jett", "test"])
+        with (
+            patch("valocoach.core.preflight.check_ollama", return_value=_ok_ollama()),
+            patch("valocoach.core.config.load_settings", return_value=_fake_settings()),
+            patch("valocoach.cli.commands.coach.run_coach") as mock_run,
+        ):
+            mock_run.return_value = None
+            runner.invoke(app, ["coach", "--agent", "Jett", "test"])
         assert mock_run.call_args.kwargs["agent"] == "Jett"
 
     def test_no_stats_flag_disables_stats(self):
-        with patch("valocoach.core.preflight.check_ollama", return_value=_ok_ollama()):
-            with patch("valocoach.core.config.load_settings", return_value=_fake_settings()):
-                with patch("valocoach.cli.commands.coach.run_coach") as mock_run:
-                    mock_run.return_value = None
-                    runner.invoke(app, ["coach", "--no-stats", "test"])
+        with (
+            patch("valocoach.core.preflight.check_ollama", return_value=_ok_ollama()),
+            patch("valocoach.core.config.load_settings", return_value=_fake_settings()),
+            patch("valocoach.cli.commands.coach.run_coach") as mock_run,
+        ):
+            mock_run.return_value = None
+            runner.invoke(app, ["coach", "--no-stats", "test"])
         assert mock_run.call_args.kwargs["with_stats"] is False
 
     def test_map_and_side_flags_forwarded(self):
-        with patch("valocoach.core.preflight.check_ollama", return_value=_ok_ollama()):
-            with patch("valocoach.core.config.load_settings", return_value=_fake_settings()):
-                with patch("valocoach.cli.commands.coach.run_coach") as mock_run:
-                    mock_run.return_value = None
-                    runner.invoke(app, ["coach", "--map", "Haven", "--side", "defense", "test"])
+        with (
+            patch("valocoach.core.preflight.check_ollama", return_value=_ok_ollama()),
+            patch("valocoach.core.config.load_settings", return_value=_fake_settings()),
+            patch("valocoach.cli.commands.coach.run_coach") as mock_run,
+        ):
+            mock_run.return_value = None
+            runner.invoke(app, ["coach", "--map", "Haven", "--side", "defense", "test"])
         kw = mock_run.call_args.kwargs
         assert kw["map_"] == "Haven"
         assert kw["side"] == "defense"
@@ -154,9 +167,11 @@ class TestStatsCommand:
     def test_no_local_data_exits_with_sync_hint(self):
         settings = _fake_settings(riot_name="Player", riot_tag="NA1")
         # stats.py imports load_settings at module top-level, so patch there.
-        with patch("valocoach.cli.commands.stats.load_settings", return_value=settings):
-            with patch("valocoach.data.loader.load_player_data", return_value=None):
-                result = runner.invoke(app, ["stats"])
+        with (
+            patch("valocoach.cli.commands.stats.load_settings", return_value=settings),
+            patch("valocoach.data.loader.load_player_data", return_value=None),
+        ):
+            result = runner.invoke(app, ["stats"])
         assert result.exit_code != 0
         assert "sync" in result.output.lower()
 
@@ -194,14 +209,16 @@ class TestSyncCommand:
             ok=True,
             error=None,
         )
-        with patch("valocoach.core.config.load_settings", return_value=settings):
-            with patch("valocoach.data.database.ensure_db", new_callable=AsyncMock):
-                with patch(
-                    "valocoach.data.sync.sync_player_matches",
-                    new_callable=AsyncMock,
-                    return_value=mock_result,
-                ):
-                    result = runner.invoke(app, ["sync", "--limit", "5", "--mode", "unrated"])
+        with (
+            patch("valocoach.core.config.load_settings", return_value=settings),
+            patch("valocoach.data.database.ensure_db", new_callable=AsyncMock),
+            patch(
+                "valocoach.data.sync.sync_player_matches",
+                new_callable=AsyncMock,
+                return_value=mock_result,
+            ),
+        ):
+            result = runner.invoke(app, ["sync", "--limit", "5", "--mode", "unrated"])
         assert result.exit_code == 0
         assert "3" in result.output  # matches_new shown
 
@@ -276,20 +293,24 @@ class TestIngestCommand:
 
     def test_stats_flag_shows_collection_info(self):
         settings = _fake_settings(data_dir=Path("/tmp/valocoach_test"))
-        with patch("valocoach.core.config.load_settings", return_value=settings):
-            with patch(
+        with (
+            patch("valocoach.core.config.load_settings", return_value=settings),
+            patch(
                 "valocoach.retrieval.searcher.collection_stats",
                 return_value={"total": 42, "by_type": {"[static] agent": 22}},
-            ):
-                result = runner.invoke(app, ["ingest", "--stats"])
+            ),
+        ):
+            result = runner.invoke(app, ["ingest", "--stats"])
         assert result.exit_code == 0
         assert "42" in result.output
 
     def test_clear_and_seed_flags_route_to_handlers(self):
         settings = _fake_settings(data_dir=Path("/tmp/valocoach_test"))
-        with patch("valocoach.core.config.load_settings", return_value=settings):
-            with patch("valocoach.retrieval.vector_store.clear_collection"):
-                result = runner.invoke(app, ["ingest", "--clear"])
+        with (
+            patch("valocoach.core.config.load_settings", return_value=settings),
+            patch("valocoach.retrieval.vector_store.clear_collection"),
+        ):
+            result = runner.invoke(app, ["ingest", "--clear"])
         assert result.exit_code == 0
 
 
@@ -305,9 +326,11 @@ class TestInteractiveCommand:
 
     def test_ollama_down_exits_with_error_not_repl(self):
         """When Ollama is unreachable, the REPL should abort at startup."""
-        with patch("valocoach.core.preflight.check_ollama", return_value=_fail_ollama()):
-            with patch("valocoach.core.config.load_settings", return_value=_fake_settings()):
-                result = runner.invoke(app, ["interactive"])
+        with (
+            patch("valocoach.core.preflight.check_ollama", return_value=_fail_ollama()),
+            patch("valocoach.core.config.load_settings", return_value=_fake_settings()),
+        ):
+            result = runner.invoke(app, ["interactive"])
         # Should exit cleanly (return 0) but show the error message.
         # The REPL must NOT have started (no "valocoach>" prompt).
         assert "valocoach>" not in result.output

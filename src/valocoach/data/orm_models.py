@@ -318,7 +318,9 @@ class MetaCache(Base):
     url: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     source: Mapped[str] = mapped_column(String, nullable=False)  # "patch_note", "youtube", "web", …
     content_hash: Mapped[str] = mapped_column(String, nullable=False)  # SHA256[:16]
-    ttl_tier: Mapped[str] = mapped_column(String, nullable=False)  # "stable" | "semi_stable" | "volatile"
+    ttl_tier: Mapped[str] = mapped_column(
+        String, nullable=False
+    )  # "stable" | "semi_stable" | "volatile"
     fetched_at: Mapped[str] = mapped_column(String, default=_now_iso)
     expires_at: Mapped[str] = mapped_column(String, nullable=False)
     content_text: Mapped[str] = mapped_column(Text, nullable=False)  # extracted text, not raw HTML

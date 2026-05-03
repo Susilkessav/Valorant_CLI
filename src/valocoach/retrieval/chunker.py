@@ -69,12 +69,14 @@ def chunk_markdown(
 
     def emit(parts: list[str]) -> None:
         nonlocal idx
-        chunks.append(Chunk(
-            text="\n\n".join(parts),
-            source=source,
-            chunk_index=idx,
-            metadata={**base_meta, "chunk_index": idx},
-        ))
+        chunks.append(
+            Chunk(
+                text="\n\n".join(parts),
+                source=source,
+                chunk_index=idx,
+                metadata={**base_meta, "chunk_index": idx},
+            )
+        )
         idx += 1
 
     for section in sections:
@@ -95,7 +97,11 @@ def chunk_markdown(
             emit(current_parts)
             # Carry a token-level overlap tail from the last accumulated part
             tail_tokens = enc.encode(current_parts[-1])
-            overlap_text = enc.decode(tail_tokens[-overlap:]) if len(tail_tokens) > overlap else current_parts[-1]
+            overlap_text = (
+                enc.decode(tail_tokens[-overlap:])
+                if len(tail_tokens) > overlap
+                else current_parts[-1]
+            )
             current_parts = [overlap_text, section]
         else:
             current_parts.append(section)

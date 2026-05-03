@@ -45,7 +45,9 @@ def _build_system_prompt(
 ) -> str:
     parts = [base_prompt]
     if grounded_context:
-        parts.append(f"---\n\nGROUNDED CONTEXT (use these facts verbatim — do not hallucinate abilities or callouts):\n\n{grounded_context}")
+        parts.append(
+            f"---\n\nGROUNDED CONTEXT (use these facts verbatim — do not hallucinate abilities or callouts):\n\n{grounded_context}"
+        )
     if stats_context:
         parts.append(f"---\n\n{stats_context}")
     return "\n\n".join(parts)
@@ -173,11 +175,13 @@ def run_coach(
     resolved_agents: list[str] = parsed.agents
     if agent and agent not in parsed.agents:
         resolved_agents = [agent, *parsed.agents]
-    resolved_display = parsed.model_copy(update={
-        "agents": resolved_agents,
-        "map": map_,
-        "side": side,
-    })
+    resolved_display = parsed.model_copy(
+        update={
+            "agents": resolved_agents,
+            "map": map_,
+            "side": side,
+        }
+    )
     user_msg_parts: list[str] = []
     metadata_block = resolved_display.to_metadata_block()
     if metadata_block:

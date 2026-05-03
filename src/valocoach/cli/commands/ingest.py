@@ -109,8 +109,11 @@ def _do_url(data_dir: Path, url: str) -> None:
 
     with display.console.status("Embedding and indexing…"):
         n = ingest_text(
-            data_dir, content.text, doc_type="patch_note",
-            name=content.title, source=content.url,
+            data_dir,
+            content.text,
+            doc_type="patch_note",
+            name=content.title,
+            source=content.url,
             extra_metadata={"fetched_at": content.fetched_at, "ttl_tier": "live"},
         )
     display.success(f"Ingested {n} chunk(s) from URL.")
@@ -151,7 +154,11 @@ def _do_corpus(data_dir: Path, corpus_root: Path | None = None) -> None:
             folder = path.parent.name.rstrip("s")  # agents→agent, maps→map, concepts→concept
             doc_type = folder if folder in ("agent", "map", "meta", "concept") else "web"
             n = ingest_text(
-                data_dir, text, doc_type=doc_type, name=path.stem, source=str(path),
+                data_dir,
+                text,
+                doc_type=doc_type,
+                name=path.stem,
+                source=str(path),
                 extra_metadata={"content_type": path.parent.name, "ttl_tier": "stable"},
             )
             total += n
@@ -174,8 +181,11 @@ def _do_youtube(data_dir: Path, youtube: str) -> None:
     try:
         with display.console.status("Embedding and indexing…"):
             n = ingest_text(
-                data_dir, content.text, doc_type="youtube",
-                name=content.title, source=content.url,
+                data_dir,
+                content.text,
+                doc_type="youtube",
+                name=content.title,
+                source=content.url,
                 extra_metadata={"fetched_at": content.fetched_at, "ttl_tier": "live"},
             )
         display.success(f"Ingested {n} chunk(s) from YouTube video.")

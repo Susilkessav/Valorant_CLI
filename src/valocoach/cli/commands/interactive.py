@@ -37,13 +37,13 @@ from valocoach.core.session_store import (
 # WordCompleter pulls keys from this dict so adding a command here is enough
 # to make it tab-completable.
 _SLASH_HELP: dict[str, str] = {
-    "/help":     "Show this help message.",
-    "/clear":    "Clear conversation memory — start a fresh session.",
-    "/memory":   "Show turn count and token usage in the current window.",
-    "/save":     "Save the current session to disk immediately.",
+    "/help": "Show this help message.",
+    "/clear": "Clear conversation memory — start a fresh session.",
+    "/memory": "Show turn count and token usage in the current window.",
+    "/save": "Save the current session to disk immediately.",
     "/sessions": "List previously saved sessions.",
-    "/stats":    "Display your recent stats card.",
-    "/quit":     "Exit the REPL (also: Ctrl-D, Ctrl-C).",
+    "/stats": "Display your recent stats card.",
+    "/quit": "Exit the REPL (also: Ctrl-D, Ctrl-C).",
 }
 
 _WELCOME = """
@@ -94,12 +94,15 @@ def _handle_slash(cmd: str, memory: ConversationMemory) -> None:
         else:
             display.console.print("\n[bold]Saved sessions:[/bold]")
             for i, p in enumerate(sessions[:10], 1):
-                display.console.print(f"  [cyan]{i:>2}.[/cyan] {p.name}  [dim]{session_summary(p)}[/dim]")
+                display.console.print(
+                    f"  [cyan]{i:>2}.[/cyan] {p.name}  [dim]{session_summary(p)}[/dim]"
+                )
             display.console.print()
 
     elif cmd == "/stats":
         try:
             from valocoach.cli.commands.stats import run_stats
+
             run_stats()
         except Exception as exc:
             display.warn(f"Couldn't load stats: {exc}")
@@ -122,11 +125,7 @@ def _build_completer():
 
         from valocoach.retrieval import list_agent_names, list_map_names
 
-        words = (
-            list(list_agent_names())
-            + list(list_map_names())
-            + list(_SLASH_HELP.keys())
-        )
+        words = list(list_agent_names()) + list(list_map_names()) + list(_SLASH_HELP.keys())
         return WordCompleter(words, ignore_case=True, sentence=True)
     except Exception:
         return None
@@ -172,9 +171,7 @@ def run_interactive() -> None:
     last = latest_session()
     if last:
         summary = session_summary(last)
-        display.console.print(
-            f"\n[dim]Previous session found:[/dim] [cyan]{summary}[/cyan]"
-        )
+        display.console.print(f"\n[dim]Previous session found:[/dim] [cyan]{summary}[/cyan]")
         try:
             answer = input("Resume? [y/N] ").strip().lower()
         except (EOFError, KeyboardInterrupt):
@@ -249,10 +246,7 @@ def run_interactive() -> None:
                 err_lower = str(exc).lower()
                 if any(kw in err_lower for kw in _OLLAMA_RECONNECT_KEYWORDS):
                     display.error("LLM call failed — Ollama may have stopped.")
-                    display.warn(
-                        "Check with:  ollama list"
-                        "  |  Restart with:  ollama serve"
-                    )
+                    display.warn("Check with:  ollama list  |  Restart with:  ollama serve")
                 else:
                     display.error(f"Coaching failed: {exc}")
                 continue

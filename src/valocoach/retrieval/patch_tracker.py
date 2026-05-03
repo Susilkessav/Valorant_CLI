@@ -30,9 +30,7 @@ async def check_patch_update(settings: Settings) -> tuple[str, bool]:
     current = version_data.get("version", "unknown")
 
     async with session_scope() as s:
-        latest = await s.scalar(
-            select(PatchVersion).order_by(PatchVersion.detected_at.desc())
-        )
+        latest = await s.scalar(select(PatchVersion).order_by(PatchVersion.detected_at.desc()))
 
         if latest is None or latest.game_version != current:
             s.add(PatchVersion(game_version=current))
@@ -69,7 +67,5 @@ async def get_current_patch() -> str | None:
     has never been called successfully).
     """
     async with session_scope() as s:
-        latest = await s.scalar(
-            select(PatchVersion).order_by(PatchVersion.detected_at.desc())
-        )
+        latest = await s.scalar(select(PatchVersion).order_by(PatchVersion.detected_at.desc()))
         return latest.game_version if latest else None

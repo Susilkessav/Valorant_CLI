@@ -109,7 +109,7 @@ class TestChunkMarkdown:
 
         for c in chunks:
             # Overlap can carry up to `overlap` extra tokens from the tail,
-            # so allow a small buffer (2×overlap) above max_tokens.
+            # so allow a small buffer (2x overlap) above max_tokens.
             assert count_tokens(c.text) <= 100 + 20, (
                 f"chunk {c.chunk_index} has {count_tokens(c.text)} tokens (max 120)"
             )
@@ -190,14 +190,18 @@ class TestIngestText:
     def test_ingest_returns_chunk_count(self, tmp_path, fake_embed):
         from valocoach.retrieval.ingester import ingest_text
 
-        n = ingest_text(tmp_path, "Jett dash ability text", doc_type="agent", name="Jett", source="jett")
+        n = ingest_text(
+            tmp_path, "Jett dash ability text", doc_type="agent", name="Jett", source="jett"
+        )
         assert n >= 1
 
     def test_collection_count_reflects_ingest(self, tmp_path, fake_embed):
         from valocoach.retrieval.ingester import ingest_text
         from valocoach.retrieval.vector_store import collection_count
 
-        n = ingest_text(tmp_path, "Jett dash ability text", doc_type="agent", name="Jett", source="jett")
+        n = ingest_text(
+            tmp_path, "Jett dash ability text", doc_type="agent", name="Jett", source="jett"
+        )
         assert collection_count(tmp_path) == n
 
     def test_upsert_is_idempotent(self, tmp_path, fake_embed):
@@ -205,9 +209,13 @@ class TestIngestText:
         from valocoach.retrieval.ingester import ingest_text
         from valocoach.retrieval.vector_store import collection_count
 
-        ingest_text(tmp_path, "Economy concepts text", doc_type="concept", name="eco", source="eco_src")
+        ingest_text(
+            tmp_path, "Economy concepts text", doc_type="concept", name="eco", source="eco_src"
+        )
         first = collection_count(tmp_path)
-        ingest_text(tmp_path, "Economy concepts text", doc_type="concept", name="eco", source="eco_src")
+        ingest_text(
+            tmp_path, "Economy concepts text", doc_type="concept", name="eco", source="eco_src"
+        )
         assert collection_count(tmp_path) == first
 
     def test_extra_metadata_stored_in_collection(self, tmp_path, fake_embed):
@@ -232,7 +240,9 @@ class TestIngestText:
         from valocoach.retrieval.ingester import ingest_text
         from valocoach.retrieval.searcher import search
 
-        ingest_text(tmp_path, "Patch note 9.08 changes", doc_type="patch_note", name="9.08", source="pn_src")
+        ingest_text(
+            tmp_path, "Patch note 9.08 changes", doc_type="patch_note", name="9.08", source="pn_src"
+        )
         results = search("patch changes", tmp_path, n_results=5, max_distance=0.5)
         assert all(r["metadata"]["type"] == "patch_note" for r in results)
 
@@ -243,7 +253,9 @@ class TestVectorStoreOperations:
         from valocoach.retrieval.vector_store import collection_count, delete_by_metadata
 
         ingest_text(tmp_path, "Jett ability text", doc_type="agent", name="Jett", source="jett_src")
-        ingest_text(tmp_path, "Ascent callouts text", doc_type="map", name="Ascent", source="ascent_src")
+        ingest_text(
+            tmp_path, "Ascent callouts text", doc_type="map", name="Ascent", source="ascent_src"
+        )
 
         before = collection_count(tmp_path)
         assert before > 0
@@ -254,6 +266,7 @@ class TestVectorStoreOperations:
         assert after < before
         # Only map docs remain
         from valocoach.retrieval.searcher import search
+
         remaining = search("anything", tmp_path, n_results=10, max_distance=0.5)
         assert all(r["metadata"]["type"] == "map" for r in remaining)
 
@@ -288,7 +301,9 @@ class TestSearch:
         from valocoach.retrieval.ingester import ingest_text
         from valocoach.retrieval.searcher import search
 
-        ingest_text(tmp_path, "Jett dash repositions quickly", doc_type="agent", name="Jett", source="jett")
+        ingest_text(
+            tmp_path, "Jett dash repositions quickly", doc_type="agent", name="Jett", source="jett"
+        )
         results = search("how to reposition with Jett", tmp_path, n_results=5, max_distance=0.5)
 
         assert len(results) > 0
@@ -299,7 +314,9 @@ class TestSearch:
         from valocoach.retrieval.searcher import search
 
         ingest_text(tmp_path, "Jett dash text", doc_type="agent", name="Jett", source="jett_src")
-        ingest_text(tmp_path, "Ascent A Long callout", doc_type="map", name="Ascent", source="ascent_src")
+        ingest_text(
+            tmp_path, "Ascent A Long callout", doc_type="map", name="Ascent", source="ascent_src"
+        )
 
         results = search("query", tmp_path, n_results=10, doc_types=["agent"], max_distance=0.5)
         assert len(results) > 0
@@ -310,7 +327,9 @@ class TestSearch:
         from valocoach.retrieval.searcher import search
 
         ingest_text(tmp_path, "Jett dash text", doc_type="agent", name="Jett", source="jett_src")
-        ingest_text(tmp_path, "Ascent A Long callout", doc_type="map", name="Ascent", source="ascent_src")
+        ingest_text(
+            tmp_path, "Ascent A Long callout", doc_type="map", name="Ascent", source="ascent_src"
+        )
 
         results = search("query", tmp_path, n_results=10, doc_types=["map"], max_distance=0.5)
         assert len(results) > 0
@@ -324,7 +343,9 @@ class TestSearch:
         ingest_text(tmp_path, "concept text", doc_type="concept", name="eco", source="eco_src")
         ingest_text(tmp_path, "agent text", doc_type="agent", name="Sage", source="sage_src")
 
-        results = search("query", tmp_path, n_results=10, doc_types=["patch_note", "concept"], max_distance=0.5)
+        results = search(
+            "query", tmp_path, n_results=10, doc_types=["patch_note", "concept"], max_distance=0.5
+        )
         returned_types = {r["metadata"]["type"] for r in results}
         assert returned_types <= {"patch_note", "concept"}
         assert "agent" not in returned_types
@@ -350,8 +371,11 @@ class TestSearch:
 
         for i in range(5):
             ingest_text(
-                tmp_path, f"doc text number {i}",
-                doc_type="concept", name=f"doc{i}", source=f"src{i}"
+                tmp_path,
+                f"doc text number {i}",
+                doc_type="concept",
+                name=f"doc{i}",
+                source=f"src{i}",
             )
 
         results = search("query", tmp_path, n_results=3, max_distance=0.5)
@@ -576,15 +600,17 @@ class TestCache:
 
         past = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
         async with session_scope() as s:
-            s.add(MetaCache(
-                url="https://expired.example.com",
-                source="web",
-                content_hash="deadbeef",
-                ttl_tier="volatile",
-                fetched_at=past,
-                expires_at=past,
-                content_text="stale data",
-            ))
+            s.add(
+                MetaCache(
+                    url="https://expired.example.com",
+                    source="web",
+                    content_hash="deadbeef",
+                    ttl_tier="volatile",
+                    fetched_at=past,
+                    expires_at=past,
+                    content_text="stale data",
+                )
+            )
 
         # get_cached must not return stale data
         result = await get_cached("https://expired.example.com")
@@ -596,9 +622,15 @@ class TestCache:
     async def test_invalidate_volatile_only_removes_volatile(self, cache_db):
         from valocoach.retrieval.cache import get_cached, invalidate_volatile, store_cached
 
-        await store_cached("https://volatile.example.com", "live stats", source="web", ttl_tier="volatile")
-        await store_cached("https://stable.example.com", "stable facts", source="web", ttl_tier="stable")
-        await store_cached("https://semi.example.com", "semi data", source="web", ttl_tier="semi_stable")
+        await store_cached(
+            "https://volatile.example.com", "live stats", source="web", ttl_tier="volatile"
+        )
+        await store_cached(
+            "https://stable.example.com", "stable facts", source="web", ttl_tier="stable"
+        )
+        await store_cached(
+            "https://semi.example.com", "semi data", source="web", ttl_tier="semi_stable"
+        )
 
         count = await invalidate_volatile()
         assert count == 1
@@ -621,20 +653,24 @@ class TestCache:
         from valocoach.retrieval.cache import get_cached, purge_expired, store_cached
 
         # Fresh entry via normal path
-        await store_cached("https://fresh.example.com", "fresh content", source="web", ttl_tier="semi_stable")
+        await store_cached(
+            "https://fresh.example.com", "fresh content", source="web", ttl_tier="semi_stable"
+        )
 
         # Manually insert an already-expired entry
         past = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
         async with session_scope() as s:
-            s.add(MetaCache(
-                url="https://expired2.example.com",
-                source="web",
-                content_hash="abc123",
-                ttl_tier="volatile",
-                fetched_at=past,
-                expires_at=past,
-                content_text="stale",
-            ))
+            s.add(
+                MetaCache(
+                    url="https://expired2.example.com",
+                    source="web",
+                    content_hash="abc123",
+                    ttl_tier="volatile",
+                    fetched_at=past,
+                    expires_at=past,
+                    content_text="stale",
+                )
+            )
 
         count = await purge_expired()
         assert count == 1
@@ -696,7 +732,9 @@ class TestCollectionStats:
         from valocoach.retrieval.searcher import collection_stats
 
         for i in range(3):
-            ingest_text(tmp_path, f"agent text {i}", doc_type="agent", name=f"agent{i}", source=f"s{i}")
+            ingest_text(
+                tmp_path, f"agent text {i}", doc_type="agent", name=f"agent{i}", source=f"s{i}"
+            )
 
         stats = collection_stats(tmp_path)
         assert stats["by_type"]["[static] agent"] == 3

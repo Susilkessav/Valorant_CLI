@@ -73,7 +73,14 @@ def ingest_knowledge_base(
         text = format_agent_context(agent["name"]) or ""
         texts.append(text)
         ids.append(f"agent:{agent['name'].lower()}")
-        metas.append({"type": "agent", "name": agent["name"], "role": agent["role"], "source": "knowledge_base"})
+        metas.append(
+            {
+                "type": "agent",
+                "name": agent["name"],
+                "role": agent["role"],
+                "source": "knowledge_base",
+            }
+        )
 
     n_agents = len(agents)
 

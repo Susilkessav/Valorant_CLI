@@ -12,9 +12,9 @@ from valocoach.data.orm_models import MetaCache
 log = logging.getLogger(__name__)
 
 TTL_HOURS: dict[str, int] = {
-    "stable": 24 * 30,     # 30 days — corpus/static knowledge
-    "semi_stable": 24 * 5, # 5 days  — patch notes, meta articles
-    "volatile": 12,        # 12 hours — live standings, pick rates
+    "stable": 24 * 30,  # 30 days — corpus/static knowledge
+    "semi_stable": 24 * 5,  # 5 days  — patch notes, meta articles
+    "volatile": 12,  # 12 hours — live standings, pick rates
 }
 
 
@@ -64,15 +64,17 @@ async def store_cached(
             existing.expires_at = expires
             log.debug("Cache updated for %s (tier=%s)", url, ttl_tier)
         else:
-            s.add(MetaCache(
-                url=url,
-                source=source,
-                content_hash=content_hash,
-                ttl_tier=ttl_tier,
-                fetched_at=_now_iso(),
-                expires_at=expires,
-                content_text=text,
-            ))
+            s.add(
+                MetaCache(
+                    url=url,
+                    source=source,
+                    content_hash=content_hash,
+                    ttl_tier=ttl_tier,
+                    fetched_at=_now_iso(),
+                    expires_at=expires,
+                    content_text=text,
+                )
+            )
             log.debug("Cache stored for %s (tier=%s, expires %s)", url, ttl_tier, expires[:10])
 
 
@@ -83,9 +85,7 @@ async def invalidate_volatile() -> int:
     pick rates, standings) becomes stale immediately on patch day.
     """
     async with session_scope() as s:
-        entries = (
-            await s.scalars(select(MetaCache).where(MetaCache.ttl_tier == "volatile"))
-        ).all()
+        entries = (await s.scalars(select(MetaCache).where(MetaCache.ttl_tier == "volatile"))).all()
         count = len(entries)
         for entry in entries:
             await s.delete(entry)
@@ -101,9 +101,7 @@ async def purge_expired() -> int:
     """
     now = _now_iso()
     async with session_scope() as s:
-        entries = (
-            await s.scalars(select(MetaCache).where(MetaCache.expires_at < now))
-        ).all()
+        entries = (await s.scalars(select(MetaCache).where(MetaCache.expires_at < now))).all()
         count = len(entries)
         for entry in entries:
             await s.delete(entry)

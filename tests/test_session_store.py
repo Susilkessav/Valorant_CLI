@@ -204,14 +204,14 @@ class TestPrune:
     def test_prune_removes_oldest_files(self, tmp_path: Path):
         # Create MAX_SESSIONS + 3 files manually.
         for i in range(MAX_SESSIONS + 3):
-            f = tmp_path / f"2026-01-{i+1:02d}T00-00-00.json"
+            f = tmp_path / f"2026-01-{i + 1:02d}T00-00-00.json"
             f.write_text("{}")
         _prune(tmp_path)
         remaining = list(tmp_path.glob("*.json"))
         assert len(remaining) == MAX_SESSIONS
 
     def test_prune_keeps_newest(self, tmp_path: Path):
-        names = [f"2026-01-{i+1:02d}T00-00-00.json" for i in range(MAX_SESSIONS + 3)]
+        names = [f"2026-01-{i + 1:02d}T00-00-00.json" for i in range(MAX_SESSIONS + 3)]
         for name in names:
             (tmp_path / name).write_text("{}")
         _prune(tmp_path)
@@ -222,6 +222,6 @@ class TestPrune:
 
     def test_prune_is_noop_when_under_limit(self, tmp_path: Path):
         for i in range(5):
-            (tmp_path / f"2026-01-0{i+1}T00-00-00.json").write_text("{}")
+            (tmp_path / f"2026-01-0{i + 1}T00-00-00.json").write_text("{}")
         _prune(tmp_path)
         assert len(list(tmp_path.glob("*.json"))) == 5

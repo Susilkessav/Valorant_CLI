@@ -173,8 +173,12 @@ def profile(
 
 @app.command()
 def meta(
-    agent: str | None = typer.Option(None, "--agent", "-a", help="Agent name for ability and meta info."),
-    map_: str | None = typer.Option(None, "--map", "-m", help="Map name for callouts and meta info."),
+    agent: str | None = typer.Option(
+        None, "--agent", "-a", help="Agent name for ability and meta info."
+    ),
+    map_: str | None = typer.Option(
+        None, "--map", "-m", help="Map name for callouts and meta info."
+    ),
 ) -> None:
     """Show current meta: tier list, agent abilities, or map callouts."""
     from valocoach.cli.commands.meta import run_meta
@@ -184,17 +188,30 @@ def meta(
 
 @app.command()
 def ingest(
-    url: str | None = typer.Option(None, "--url", "-u", help="Scrape and ingest a URL (patch notes, blog post, etc.)."),
-    youtube: str | None = typer.Option(None, "--youtube", "-y", help="Fetch and ingest a YouTube video transcript."),
-    corpus: bool = typer.Option(False, "--corpus", "-c", help="Embed markdown files from corpus/ (built by scripts/build_corpus.py)."),
+    url: str | None = typer.Option(
+        None, "--url", "-u", help="Scrape and ingest a URL (patch notes, blog post, etc.)."
+    ),
+    youtube: str | None = typer.Option(
+        None, "--youtube", "-y", help="Fetch and ingest a YouTube video transcript."
+    ),
+    corpus: bool = typer.Option(
+        False,
+        "--corpus",
+        "-c",
+        help="Embed markdown files from corpus/ (built by scripts/build_corpus.py).",
+    ),
     seed: bool = typer.Option(False, "--seed", help="Re-embed the built-in JSON knowledge base."),
     clear: bool = typer.Option(False, "--clear", help="Wipe the vector store before ingesting."),
-    show_stats: bool = typer.Option(False, "--stats", help="Show what's currently in the vector store."),
+    show_stats: bool = typer.Option(
+        False, "--stats", help="Show what's currently in the vector store."
+    ),
 ) -> None:
     """Populate the vector store (run once, then augmented by --url / --youtube / --corpus)."""
     from valocoach.cli.commands.ingest import run_ingest
 
-    run_ingest(url=url, youtube=youtube, corpus=corpus, seed=seed, clear=clear, show_stats=show_stats)
+    run_ingest(
+        url=url, youtube=youtube, corpus=corpus, seed=seed, clear=clear, show_stats=show_stats
+    )
 
 
 @app.command()

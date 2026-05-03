@@ -43,8 +43,11 @@ def test_stream_completion_inserts_conversation_history_between_system_and_user(
 
     with patch("valocoach.llm.provider.litellm.completion") as mock_call:
         mock_call.return_value = iter([])
-        list(stream_completion(settings, "sys prompt", "current question",
-                               conversation_history=history))
+        list(
+            stream_completion(
+                settings, "sys prompt", "current question", conversation_history=history
+            )
+        )
 
     messages = mock_call.call_args.kwargs["messages"]
     # system first, then all history in order, then current user message last.

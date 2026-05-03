@@ -18,7 +18,9 @@ from valocoach.core.memory import ConversationMemory
 # ---------------------------------------------------------------------------
 
 
-def _add_exchange(mem: ConversationMemory, user: str = "question", assistant: str = "answer") -> None:
+def _add_exchange(
+    mem: ConversationMemory, user: str = "question", assistant: str = "answer"
+) -> None:
     mem.add("user", user)
     mem.add("assistant", assistant)
 

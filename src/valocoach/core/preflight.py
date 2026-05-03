@@ -70,10 +70,7 @@ def check_ollama(settings) -> CheckResult:
 
     # Empty means no models at all; non-empty but not matching is also a miss.
     model_available = any(
-        n == model
-        or n.startswith(f"{model}:")
-        or model.startswith(f"{n}:")
-        for n in names
+        n == model or n.startswith(f"{model}:") or model.startswith(f"{n}:") for n in names
     )
     if not names:
         return CheckResult(
@@ -138,8 +135,7 @@ def check_vector_store(settings) -> CheckResult:
             return CheckResult(
                 ok=False,
                 message=(
-                    "Vector store is empty — the LLM will not have grounded"
-                    " ability/callout facts."
+                    "Vector store is empty — the LLM will not have grounded ability/callout facts."
                 ),
                 hint="Seed it once with:  valocoach ingest --seed",
             )

@@ -203,7 +203,10 @@ class TestBuildRagasDataset:
         assert ds[0]["reference"] == minimal_results[0]["ground_truth"]
 
     def test_raises_import_error_without_datasets(self, minimal_results):
-        with patch.dict("sys.modules", {"datasets": None}), pytest.raises(ImportError, match="datasets"):
+        with (
+            patch.dict("sys.modules", {"datasets": None}),
+            pytest.raises(ImportError, match="datasets"),
+        ):
             build_ragas_dataset(minimal_results)
 
 
@@ -261,8 +264,11 @@ class TestRunRagasEval:
             import importlib
 
             import run_ragas_eval as rre
+
             importlib.reload(rre)
-            scores = rre.run_ragas_eval(MagicMock(), metric_names=["faithfulness", "answer_relevancy"])
+            scores = rre.run_ragas_eval(
+                MagicMock(), metric_names=["faithfulness", "answer_relevancy"]
+            )
         assert isinstance(scores, dict)
         # After mock module teardown, just verify the function returned something dict-like.
         assert all(isinstance(v, float) for v in scores.values())
@@ -271,7 +277,10 @@ class TestRunRagasEval:
         # Temporarily remove ragas from sys.modules
         saved = sys.modules.pop("ragas", None)
         try:
-            with patch.dict("sys.modules", {"ragas": None}), pytest.raises(ImportError, match="RAGAS"):
+            with (
+                patch.dict("sys.modules", {"ragas": None}),
+                pytest.raises(ImportError, match="RAGAS"),
+            ):
                 run_ragas_eval(MagicMock())
         finally:
             if saved is not None:

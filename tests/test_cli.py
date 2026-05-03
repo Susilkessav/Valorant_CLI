@@ -22,7 +22,8 @@ def test_help_shows_all_commands():
 
 def test_patch_command_exits_cleanly():
     # `patch` is now a real command — verify it exits 0 with mocked DB.
-    from unittest.mock import AsyncMock, MagicMock, patch as mock_patch
+    from unittest.mock import AsyncMock, MagicMock
+    from unittest.mock import patch as mock_patch
 
     with (
         mock_patch("valocoach.data.database.ensure_db", new_callable=AsyncMock),

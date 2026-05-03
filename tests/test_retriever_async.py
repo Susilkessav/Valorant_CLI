@@ -94,9 +94,7 @@ class TestRetrieveContext:
                 new=AsyncMock(return_value=(["live meta text for Ascent"], ["https://src"])),
             ),
         ):
-            result = await retrieve_context(
-                _fake_settings(tmp_path), "push A site", map_="Ascent"
-            )
+            result = await retrieve_context(_fake_settings(tmp_path), "push A site", map_="Ascent")
 
         assert "live meta text for Ascent" in result.meta_chunks
         assert "https://src" in result.sources
@@ -119,9 +117,7 @@ class TestRetrieveContext:
         with (
             patch(_RETRIEVE_STATIC, return_value=_fake_static_result()),
             patch(_GET_CURRENT_PATCH, new=AsyncMock(return_value="10.09")),
-            patch(
-                _FETCH_LIVE_META, new=AsyncMock(side_effect=RuntimeError("meta DB down"))
-            ),
+            patch(_FETCH_LIVE_META, new=AsyncMock(side_effect=RuntimeError("meta DB down"))),
         ):
             result = await retrieve_context(_fake_settings(tmp_path), "push A")
 
