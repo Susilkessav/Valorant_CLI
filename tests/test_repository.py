@@ -17,11 +17,13 @@ from valocoach.data.models import (
 )
 from valocoach.data.orm_models import Match, MatchPlayer, Player
 from valocoach.data.repository import (
+    close_stale_syncs,
     complete_sync,
     get_match,
     get_player,
     get_player_by_name,
     get_recent_matches,
+    get_recent_matches_full,
     match_exists,
     start_sync,
     upsert_match,
@@ -477,3 +479,132 @@ async def test_upsert_match_details_match_exists(db_session, match_details):
     await upsert_match_details(db_session, match_details)
     await db_session.flush()
     assert await match_exists(db_session, MATCH_ID) is True
+
+
+# ---------------------------------------------------------------------------
+# upsert_match — uncovered branches
+# ---------------------------------------------------------------------------
+
+
+async def test_upsert_match_skips_unavailable(db_session, match_data):
+    """Lines 126-127: is_available=False returns None immediately."""
+    match_data.is_available = False
+    result = await upsert_match(db_session, match_data)
+    assert result is None
+    # Nothing should have been persisted.
+    assert await match_exists(db_session, MATCH_ID) is False
+
+
+async def test_upsert_match_integrity_error_path(db_session, match_data):
+    """Lines 184-186: IntegrityError guard — duplicate insert returns None.
+
+    We insert the match directly first, then patch session.get to return None
+    so upsert_match passes the existence pre-check and tries to flush again.
+    The resulting IntegrityError is caught and None is returned.
+    """
+    from unittest.mock import AsyncMock, patch
+
+    # Store the match legitimately so the row exists in the DB.
+    await upsert_match(db_session, match_data)
+    await db_session.flush()
+
+    # Now call again but trick the pre-check into thinking the row is absent.
+    with patch.object(db_session, "get", new=AsyncMock(return_value=None)):
+        result = await upsert_match(db_session, match_data)
+
+    assert result is None
+
+
+# ---------------------------------------------------------------------------
+# upsert_match_details — IntegrityError path
+# ---------------------------------------------------------------------------
+
+
+async def test_upsert_match_details_integrity_error_path(db_session, match_details):
+    """Lines 222-224: IntegrityError guard in upsert_match_details."""
+    from unittest.mock import AsyncMock, patch
+
+    # Store the match legitimately first.
+    await upsert_match_details(db_session, match_details)
+    await db_session.flush()
+
+    # Bypass the pre-check to force the flush to hit the unique constraint.
+    with patch.object(db_session, "get", new=AsyncMock(return_value=None)):
+        result = await upsert_match_details(db_session, match_details)
+
+    assert result is None
+
+
+# ---------------------------------------------------------------------------
+# get_recent_matches — queue_id=None branch (line 264→266)
+# ---------------------------------------------------------------------------
+
+
+async def test_get_recent_matches_no_queue_filter(db_session, match_data):
+    """queue_id=None skips the queue_id WHERE clause — all modes returned."""
+    await upsert_match(db_session, match_data)
+    await db_session.flush()
+
+    rows = await get_recent_matches(db_session, PUUID, queue_id=None)
+    assert len(rows) == 1  # our competitive match is still returned
+
+
+# ---------------------------------------------------------------------------
+# get_recent_matches_full (lines 297-314)
+# ---------------------------------------------------------------------------
+
+
+async def test_get_recent_matches_full_returns_matches(db_session, match_details):
+    """get_recent_matches_full returns Match trees with rounds pre-loaded."""
+    await upsert_match_details(db_session, match_details)
+    await db_session.flush()
+
+    matches = await get_recent_matches_full(db_session, PUUID)
+    assert len(matches) == 1
+    assert matches[0].match_id == MATCH_ID
+    # Rounds should be eagerly loaded.
+    assert len(matches[0].rounds) == 2
+
+
+async def test_get_recent_matches_full_no_queue_filter(db_session, match_details):
+    """queue_id=None variant still returns the match."""
+    await upsert_match_details(db_session, match_details)
+    await db_session.flush()
+
+    matches = await get_recent_matches_full(db_session, PUUID, queue_id=None)
+    assert len(matches) == 1
+
+
+async def test_get_recent_matches_full_empty(db_session):
+    """Returns empty list for an unknown puuid."""
+    matches = await get_recent_matches_full(db_session, "unknown-puuid")
+    assert matches == []
+
+
+# ---------------------------------------------------------------------------
+# close_stale_syncs (repository-level unit — complements test_sync_cursor.py)
+# ---------------------------------------------------------------------------
+
+
+async def test_close_stale_syncs_closes_incomplete_rows(db_session):
+    """close_stale_syncs marks all NULL-completed rows (except current) done."""
+    from valocoach.data.orm_models import SyncLog
+
+    # Two stale syncs.
+    stale1 = await start_sync(db_session, PUUID)
+    stale2 = await start_sync(db_session, PUUID)
+    # Current sync.
+    current = await start_sync(db_session, PUUID)
+    await db_session.flush()
+
+    count = await close_stale_syncs(db_session, PUUID, exclude_id=current.id)
+    await db_session.flush()
+
+    assert count == 2
+    row1 = await db_session.get(SyncLog, stale1.id)
+    row2 = await db_session.get(SyncLog, stale2.id)
+    assert row1.error == "interrupted"
+    assert row2.error == "interrupted"
+    # Current must be untouched.
+    cur_row = await db_session.get(SyncLog, current.id)
+    assert cur_row.completed_at is None
