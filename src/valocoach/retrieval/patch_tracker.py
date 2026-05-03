@@ -36,12 +36,8 @@ async def check_patch_update(settings: Settings) -> tuple[str, bool]:
 
         if latest is None or latest.game_version != current:
             s.add(PatchVersion(game_version=current))
-
-            if latest is not None:
-                # Patch changed — volatile cache is immediately stale.
-                # Run invalidation inside a fresh session after this one commits.
-                pass
-
+            # Volatile cache invalidation runs *after* this session commits
+            # (see below) so the two writes never share a transaction.
             log.info(
                 "New patch detected: %s (previous: %s)",
                 current,
