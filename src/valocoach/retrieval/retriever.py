@@ -87,11 +87,13 @@ def retrieve_static(
     parts.append(meta_ctx)
     sources.append("knowledge_base/meta")
 
-    # 2. Multi-query vector search — patch notes, YouTube, concept docs.
+    # 2. Multi-query vector search — searches BOTH the static corpus and the
+    #    live-scrape collection so per-query scraped meta is also surfaced.
     #    Each query targets a different semantic angle; results are deduplicated
-    #    across queries before being appended.
+    #    across queries and collections before being appended.
     try:
         from valocoach.retrieval.searcher import search
+        from valocoach.retrieval.vector_store import LIVE_COLLECTION, STATIC_COLLECTION
 
         agents_list = [agent] if agent else None
         queries = build_retrieval_queries(
@@ -102,21 +104,23 @@ def retrieve_static(
         vector_parts: list[str] = []
 
         for query in queries:
-            hits = search(
-                query,
-                data_dir,
-                n_results=3,
-                doc_types=["patch_note", "youtube", "web", "concept"],
-                max_distance=0.45,
-            )
-            for hit in hits:
-                text = hit["text"]
-                if text not in seen:
-                    seen.add(text)
-                    name = hit["metadata"].get("name", "supplemental")
-                    doc_type = hit["metadata"]["type"].upper()
-                    vector_parts.append(f"[{doc_type}: {name}]\n{text}")
-                    sources.append(hit["metadata"].get("source", "vector_store"))
+            for cname in (STATIC_COLLECTION, LIVE_COLLECTION):
+                hits = search(
+                    query,
+                    data_dir,
+                    n_results=3,
+                    doc_types=["patch_note", "youtube", "web", "concept"],
+                    max_distance=0.45,
+                    collection_name=cname,
+                )
+                for hit in hits:
+                    text = hit["text"]
+                    if text not in seen:
+                        seen.add(text)
+                        name = hit["metadata"].get("name", "supplemental")
+                        doc_type = hit["metadata"]["type"].upper()
+                        vector_parts.append(f"[{doc_type}: {name}]\n{text}")
+                        sources.append(hit["metadata"].get("source", "vector_store"))
 
         parts.extend(vector_parts[:n_results])
 
@@ -206,9 +210,11 @@ async def _fetch_live_meta(
                 continue
             text = scraped.text
             await store_cached(url, text, source=source, ttl_tier="volatile")
+            from valocoach.retrieval.vector_store import LIVE_COLLECTION
             ingest_text(
                 settings.data_dir, text,
                 doc_type="web", name=url, source=url,
+                collection_name=LIVE_COLLECTION,
             )
 
         chunks.append(text[:2000])

@@ -8,7 +8,14 @@ from chromadb.config import Settings as ChromaSettings
 
 log = logging.getLogger(__name__)
 
-COLLECTION_NAME = "valocoach_knowledge"
+# Two separate collections so static corpus and live-scraped meta are
+# independently manageable.  ``valocoach index`` only touches STATIC;
+# per-query web scraping only touches LIVE; ``--clear`` knows which to nuke.
+STATIC_COLLECTION = "valocoach_static"
+LIVE_COLLECTION = "valocoach_live"
+
+# Backward-compat alias — prefer the explicit constants above in new code.
+COLLECTION_NAME = STATIC_COLLECTION
 
 
 def get_client(data_dir: Path) -> chromadb.PersistentClient:
@@ -20,32 +27,49 @@ def get_client(data_dir: Path) -> chromadb.PersistentClient:
     )
 
 
-def get_collection(data_dir: Path) -> chromadb.Collection:
+def get_collection(
+    data_dir: Path,
+    collection_name: str = STATIC_COLLECTION,
+) -> chromadb.Collection:
     client = get_client(data_dir)
     return client.get_or_create_collection(
-        name=COLLECTION_NAME,
+        name=collection_name,
         metadata={"hnsw:space": "cosine"},
     )
 
 
-def clear_collection(data_dir: Path) -> None:
-    """Delete and recreate the collection (full reset)."""
+def clear_collection(
+    data_dir: Path,
+    collection_name: str = STATIC_COLLECTION,
+) -> None:
+    """Delete and recreate *one* collection (full reset for that collection)."""
+    import contextlib
+
     client = get_client(data_dir)
-    client.delete_collection(COLLECTION_NAME)
+    with contextlib.suppress(Exception):
+        # Silently skip if the collection didn't exist yet.
+        client.delete_collection(collection_name)
     client.get_or_create_collection(
-        name=COLLECTION_NAME,
+        name=collection_name,
         metadata={"hnsw:space": "cosine"},
     )
-    log.debug("Collection %r cleared and recreated.", COLLECTION_NAME)
+    log.debug("Collection %r cleared and recreated.", collection_name)
 
 
-def delete_by_metadata(data_dir: Path, where: dict) -> None:
+def delete_by_metadata(
+    data_dir: Path,
+    where: dict,
+    collection_name: str = STATIC_COLLECTION,
+) -> None:
     """Delete all documents matching a metadata filter without resetting the collection."""
-    collection = get_collection(data_dir)
+    collection = get_collection(data_dir, collection_name)
     collection.delete(where=where)
-    log.debug("Deleted documents matching %r from %r.", where, COLLECTION_NAME)
+    log.debug("Deleted documents matching %r from %r.", where, collection_name)
 
 
-def collection_count(data_dir: Path) -> int:
-    """Return the total number of documents in the collection."""
-    return get_collection(data_dir).count()
+def collection_count(
+    data_dir: Path,
+    collection_name: str = STATIC_COLLECTION,
+) -> int:
+    """Return the number of documents in the specified collection."""
+    return get_collection(data_dir, collection_name).count()

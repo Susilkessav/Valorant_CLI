@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from rich.columns import Columns
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text

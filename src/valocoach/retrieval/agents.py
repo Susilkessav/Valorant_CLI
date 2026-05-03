@@ -16,6 +16,11 @@ def _load() -> list[dict]:
     return _cache
 
 
+def list_agent_names() -> list[str]:
+    """Return canonical agent names from the bundled JSON, in source order."""
+    return [a["name"] for a in _load()]
+
+
 def get_agent(name: str) -> dict | None:
     """Return agent data by name — case-insensitive, fuzzy-matched."""
     agents = _load()

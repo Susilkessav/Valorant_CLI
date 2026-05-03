@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from valocoach.retrieval.scrapers import ScrapedContent
 
@@ -57,6 +57,6 @@ def fetch_transcript(
         url=f"https://www.youtube.com/watch?v={video_id}",
         title=f"YouTube transcript — {video_id}",
         text=text,
-        fetched_at=datetime.now(tz=timezone.utc).isoformat(),
+        fetched_at=datetime.now(tz=UTC).isoformat(),
         source="youtube",
     )

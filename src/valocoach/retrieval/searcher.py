@@ -3,7 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from valocoach.retrieval.embedder import embed_one
-from valocoach.retrieval.vector_store import get_collection
+from valocoach.retrieval.vector_store import (
+    LIVE_COLLECTION,
+    STATIC_COLLECTION,
+    get_collection,
+)
 
 
 def search(
@@ -12,13 +16,18 @@ def search(
     n_results: int = 5,
     doc_types: list[str] | None = None,
     max_distance: float = 0.5,
+    collection_name: str = STATIC_COLLECTION,
 ) -> list[dict]:
-    """Semantic search over the vector store.
+    """Semantic search over a single ChromaDB collection.
 
     Returns a list of ``{text, metadata, distance}`` dicts ordered by relevance,
     filtered to those with cosine distance ≤ max_distance.
+
+    Pass ``collection_name=LIVE_COLLECTION`` to query the live-scrape bucket.
+    Most callers should use ``retrieve_static`` (which searches both collections)
+    rather than calling this directly.
     """
-    collection = get_collection(data_dir)
+    collection = get_collection(data_dir, collection_name)
     count = collection.count()
     if count == 0:
         return []
@@ -46,16 +55,21 @@ def search(
 
 
 def collection_stats(data_dir: Path) -> dict:
-    """Return total doc count and per-type breakdown."""
-    collection = get_collection(data_dir)
-    total = collection.count()
-    if total == 0:
-        return {"total": 0, "by_type": {}}
+    """Return total doc count and per-type breakdown across both collections.
 
-    all_items = collection.get(include=["metadatas"])
+    Keys in ``by_type`` are prefixed with the collection label so the caller
+    can see which bucket each type lives in, e.g. ``"[static] concept"``.
+    """
     by_type: dict[str, int] = {}
-    for meta in all_items["metadatas"]:
-        t = meta.get("type", "unknown")
-        by_type[t] = by_type.get(t, 0) + 1
+    total = 0
+
+    for label, cname in (("static", STATIC_COLLECTION), ("live", LIVE_COLLECTION)):
+        coll = get_collection(data_dir, cname)
+        count = coll.count()
+        total += count
+        if count > 0:
+            for meta in coll.get(include=["metadatas"])["metadatas"]:
+                key = f"[{label}] {meta.get('type', 'unknown')}"
+                by_type[key] = by_type.get(key, 0) + 1
 
     return {"total": total, "by_type": by_type}

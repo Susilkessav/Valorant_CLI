@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from valocoach.retrieval.agents import format_agent_context, get_agent
+from valocoach.retrieval.agents import format_agent_context, get_agent, list_agent_names
 from valocoach.retrieval.maps import format_map_context, get_map, list_map_names
 from valocoach.retrieval.meta import format_meta_context, get_meta
 
@@ -15,5 +15,6 @@ __all__ = [
     "get_agent",
     "get_map",
     "get_meta",
+    "list_agent_names",
     "list_map_names",
 ]

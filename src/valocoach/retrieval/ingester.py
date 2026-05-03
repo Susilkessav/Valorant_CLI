@@ -6,7 +6,7 @@ from typing import Literal
 
 from valocoach.retrieval.chunker import chunk_markdown
 from valocoach.retrieval.embedder import embed
-from valocoach.retrieval.vector_store import get_collection
+from valocoach.retrieval.vector_store import STATIC_COLLECTION, get_collection
 
 DocType = Literal["agent", "map", "meta", "concept", "patch_note", "youtube", "web"]
 
@@ -21,8 +21,9 @@ def _upsert_batch(
     ids: list[str],
     metadatas: list[dict],
     batch_size: int = 32,
+    collection_name: str = STATIC_COLLECTION,
 ) -> int:
-    collection = get_collection(data_dir)
+    collection = get_collection(data_dir, collection_name)
     total = 0
     for i in range(0, len(texts), batch_size):
         t = texts[i : i + batch_size]
@@ -96,11 +97,16 @@ def ingest_text(
     source: str,
     max_tokens: int = 400,
     extra_metadata: dict | None = None,
+    collection_name: str = STATIC_COLLECTION,
 ) -> int:
-    """Chunk a raw text block and upsert into the vector store."""
+    """Chunk a raw text block and upsert into the vector store.
+
+    Pass ``collection_name=LIVE_COLLECTION`` for per-query scraped content
+    so it lives in a separate bucket from the stable indexed corpus.
+    """
     chunks = chunk_markdown(text, source=source, max_tokens=max_tokens)
     texts = [c.text for c in chunks]
     ids = [f"{doc_type}:{source}:{c.chunk_index}" for c in chunks]
     base = {"type": doc_type, "name": name, "source": source, **(extra_metadata or {})}
     metadatas = [{**base, "chunk": c.chunk_index} for c in chunks]
-    return _upsert_batch(data_dir, texts, ids, metadatas)
+    return _upsert_batch(data_dir, texts, ids, metadatas, collection_name=collection_name)

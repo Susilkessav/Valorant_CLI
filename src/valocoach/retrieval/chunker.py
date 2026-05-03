@@ -90,7 +90,7 @@ def chunk_markdown(
             continue
 
         # Check whether adding this section would overflow the current chunk
-        candidate = "\n\n".join(current_parts + [section]) if current_parts else section
+        candidate = "\n\n".join([*current_parts, section]) if current_parts else section
         if count_tokens(candidate) > max_tokens:
             emit(current_parts)
             # Carry a token-level overlap tail from the last accumulated part

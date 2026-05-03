@@ -264,7 +264,7 @@ def test_run_coach_injects_context_into_system_prompt() -> None:
     assert "PLAYER CONTEXT — injected" in kwargs["system_prompt"]
     assert kwargs["system_prompt"].startswith(SYSTEM_PROMPT_STUB)
     assert "Situation: push A site" in kwargs["user_message"]
-    assert "Agent: Jett" in kwargs["user_message"]
+    assert "Agent(s): Jett" in kwargs["user_message"]
 
 
 def test_run_coach_skips_context_when_with_stats_false() -> None:
@@ -342,6 +342,83 @@ def test_run_coach_survives_context_builder_exception() -> None:
     assert prompt.startswith(SYSTEM_PROMPT_STUB)
     assert "PLAYER CONTEXT —" not in prompt
     assert "GROUNDED CONTEXT" in prompt
+
+
+def test_run_coach_returns_assistant_text() -> None:
+    """run_coach must return whatever stream_to_panel produced — the interactive
+    REPL relies on this to capture the assistant turn for ConversationMemory."""
+    with (
+        patch("valocoach.cli.commands.coach.load_settings", return_value=_settings()),
+        patch("valocoach.cli.commands.coach.build_stats_context", return_value=None),
+        patch(
+            "valocoach.cli.commands.coach.stream_completion",
+            return_value=_stream(["unused — stream_to_panel is mocked"]),
+        ),
+        patch(
+            "valocoach.cli.commands.coach.display.stream_to_panel",
+            return_value="full assistant response",
+        ),
+    ):
+        result = run_coach("any situation", with_stats=False)
+
+    assert result == "full assistant response"
+
+
+def test_run_coach_returns_none_for_empty_stream() -> None:
+    """Empty stream_to_panel return ('') must surface as None so callers can
+    cleanly skip storing an empty assistant turn."""
+    with (
+        patch("valocoach.cli.commands.coach.load_settings", return_value=_settings()),
+        patch("valocoach.cli.commands.coach.build_stats_context", return_value=None),
+        patch(
+            "valocoach.cli.commands.coach.stream_completion",
+            return_value=_stream([]),
+        ),
+        patch(
+            "valocoach.cli.commands.coach.display.stream_to_panel",
+            return_value="",
+        ),
+    ):
+        result = run_coach("situation", with_stats=False)
+
+    assert result is None
+
+
+def test_run_coach_forwards_conversation_history() -> None:
+    """When the REPL passes prior turns, they must reach stream_completion as-is.
+    Without this plumbing, multi-turn coaching falls back to single-turn behaviour."""
+    history = [
+        {"role": "user", "content": "first question"},
+        {"role": "assistant", "content": "first answer"},
+    ]
+    with (
+        patch("valocoach.cli.commands.coach.load_settings", return_value=_settings()),
+        patch("valocoach.cli.commands.coach.build_stats_context", return_value=None),
+        patch(
+            "valocoach.cli.commands.coach.stream_completion",
+            return_value=_stream(["ok"]),
+        ) as mock_stream,
+        patch("valocoach.cli.commands.coach.display.stream_to_panel"),
+    ):
+        run_coach("follow-up", with_stats=False, conversation_history=history)
+
+    assert mock_stream.call_args.kwargs["conversation_history"] == history
+
+
+def test_run_coach_default_conversation_history_is_none() -> None:
+    """One-shot CLI invocations must pass None — prior_history is REPL-only."""
+    with (
+        patch("valocoach.cli.commands.coach.load_settings", return_value=_settings()),
+        patch("valocoach.cli.commands.coach.build_stats_context", return_value=None),
+        patch(
+            "valocoach.cli.commands.coach.stream_completion",
+            return_value=_stream(["ok"]),
+        ) as mock_stream,
+        patch("valocoach.cli.commands.coach.display.stream_to_panel"),
+    ):
+        run_coach("situation", with_stats=False)
+
+    assert mock_stream.call_args.kwargs["conversation_history"] is None
 
 
 # ---------------------------------------------------------------------------

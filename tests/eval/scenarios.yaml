@@ -1,0 +1,241 @@
+# ValoCoach LLM Eval Scenarios
+#
+# Each scenario is a coaching prompt with assertions on the output:
+#
+#   must_contain    — at least one phrase from this list must appear
+#                     (case-insensitive substring match)
+#   must_not_contain — none of these phrases may appear
+#                     (hallucination / confusion guard)
+#
+# Run with:  python scripts/run_eval.py
+#
+# The scenarios are grouped by coaching category so failures are easy
+# to triage.  Agent/map references use canonical JSON names so the
+# grounded context retrieval picks up the right facts.
+
+scenarios:
+
+  # ----------------------------------------------------------------
+  # 1. Agent-specific — abilities named and costed correctly
+  # ----------------------------------------------------------------
+
+  - id: jett_dash_angles
+    description: "Jett dash entry on Ascent A site"
+    situation: "How should I use Jett's dash to entry A site on Ascent?"
+    agent: Jett
+    map: Ascent
+    must_contain:
+      - Tailwind
+      - A Long
+    must_not_contain:
+      - "Paranoia"      # Omen ability, not Jett
+      - "Barrier Orb"   # Sage ability, not Jett
+
+  - id: omen_smoke_split
+    description: "Omen smokes on Split B execute"
+    situation: "Which smokes should Omen throw on a B execute on Split?"
+    agent: Omen
+    map: Split
+    must_contain:
+      - "Dark Cover"
+      - "B"
+    must_not_contain:
+      - "Bladestorm"    # Jett ult, not Omen
+      - "Updraft"       # Jett ability, not Omen
+
+  - id: sage_wall_bind
+    description: "Sage wall placement on Bind A"
+    situation: "Best Sage wall placements to support an A execute on Bind."
+    agent: Sage
+    map: Bind
+    must_contain:
+      - "Barrier Orb"
+    must_not_contain:
+      - "Dark Cover"    # Omen ability
+      - "Tailwind"      # Jett ability
+
+  - id: sova_recon_haven
+    description: "Sova recon bolt lineups on Haven A"
+    situation: "What Sova recon bolt lineups are useful for A site on Haven?"
+    agent: Sova
+    map: Haven
+    must_contain:
+      - "Recon Bolt"
+    must_not_contain:
+      - "Paranoia"      # Omen ability
+      - "Bladestorm"    # Jett ult
+
+  - id: killjoy_lockdown_bind
+    description: "Killjoy lockdown stall on Bind B"
+    situation: "How do I use Killjoy's lockdown to stall a B site retake on Bind?"
+    agent: Killjoy
+    map: Bind
+    must_contain:
+      - "Lockdown"
+    must_not_contain:
+      - "Barrier Orb"   # Sage ability
+      - "Healing Orb"   # Sage ability
+
+  # ----------------------------------------------------------------
+  # 2. Map-specific — correct callout names
+  # ----------------------------------------------------------------
+
+  - id: ascent_a_callouts
+    description: "Ascent A site callouts used correctly"
+    situation: "Give me a default A execute on Ascent for a 5-man stack."
+    map: Ascent
+    must_contain:
+      - "A Long"
+    must_not_contain:
+      - "A Heaven"      # Haven callout, not Ascent
+      - "Hookah"        # Bind callout, not Ascent
+
+  - id: bind_b_callouts
+    description: "Bind B site callouts correct"
+    situation: "Best way to execute onto B site on Bind from B Short."
+    map: Bind
+    must_contain:
+      - "Hookah"
+    must_not_contain:
+      - "B Garage"      # Split callout
+      - "B Main"        # Generic, but check Hookah is mentioned as entry
+
+  - id: haven_c_callouts
+    description: "Haven C site approach callouts"
+    situation: "How should we set up a C execute on Haven?"
+    map: Haven
+    must_contain:
+      - "C Long"
+    must_not_contain:
+      - "Showers"       # Bind callout, not Haven
+      - "CT Spawn"      # Vague, but shouldn't replace correct Haven callouts
+
+  - id: split_mid_control
+    description: "Split mid control callouts"
+    situation: "How do we take mid control on Split to enable both sites?"
+    map: Split
+    must_contain:
+      - "Mid"
+    must_not_contain:
+      - "Sewer"         # Bind-specific callout, wrong map
+      - "Hookah"        # Bind-specific callout, wrong map
+
+  # ----------------------------------------------------------------
+  # 3. Economy — correct thresholds and buy decisions
+  # ----------------------------------------------------------------
+
+  - id: eco_round_buy_decision
+    description: "Eco round buy strategy"
+    situation: "We just lost the pistol round and the bonus round. Eco or force next?"
+    must_contain:
+      - "eco"
+    must_not_contain:
+      - "full buy"      # Wrong advice for second-round eco after two losses
+
+  - id: force_buy_threshold
+    description: "Force buy vs save decision"
+    situation: "We lost the round and have 2400 credits. Should we force or save?"
+    must_contain:
+      - "force"
+    must_not_contain:
+      - "pistol"        # Pistol answer is for <800cr, not 2400cr
+
+  - id: full_buy_round
+    description: "Full buy round with rifles"
+    situation: "We have 5000 credits, what should everyone buy for a full buy round?"
+    must_contain:
+      - "Vandal"
+    must_not_contain:
+      - "Spectre"       # Not a full-buy rifle
+      - "Stinger"       # Not a full-buy rifle
+
+  # ----------------------------------------------------------------
+  # 4. Tactical scenarios — post-plant, retake, clutch
+  # ----------------------------------------------------------------
+
+  - id: post_plant_1v2
+    description: "Post-plant 1v2 with spike on B"
+    situation: "I'm 1v2 post plant on B site on Ascent with the spike on B Main boxes. What do I do?"
+    map: Ascent
+    must_contain:
+      - "spike"
+    must_not_contain:
+      - "defuse"        # Wrong role — attacker should protect spike, not defuse it
+
+  - id: retake_2v3
+    description: "2v3 retake on A site"
+    situation: "We're 2v3 and need to retake A site on Split. How do we coordinate?"
+    map: Split
+    must_contain:
+      - "retake"
+    must_not_contain:
+      - "eco"           # Economy advice is irrelevant in a retake scenario
+
+  - id: clutch_1v3_offense
+    description: "1v3 clutch on offense"
+    situation: "1v3 clutch, I have the spike, 40 seconds left, on Haven A site. What's the play?"
+    map: Haven
+    must_contain:
+      - "spike"
+    must_not_contain:
+      - "rotate"        # Rotating with spike as solo carrier is incorrect
+
+  # ----------------------------------------------------------------
+  # 5. Side-specific — attack vs defense differentiation
+  # ----------------------------------------------------------------
+
+  - id: attack_default_setup
+    description: "Attack-side default setup basics"
+    situation: "How should we set up a default attack-side round on Ascent?"
+    map: Ascent
+    side: attack
+    must_contain:
+      - "attack"
+    must_not_contain:
+      - "hold"          # Holding angles is defense language, not attack default
+
+  - id: defense_setup_haven
+    description: "Defense-side setup on Haven"
+    situation: "How should we set up default defense on Haven with three sites?"
+    map: Haven
+    side: defense
+    must_contain:
+      - "defense"
+    must_not_contain:
+      - "spike"         # Spike is irrelevant for pure defense setup
+
+  # ----------------------------------------------------------------
+  # 6. Hallucination guards — things that must never appear
+  # ----------------------------------------------------------------
+
+  - id: no_invented_abilities
+    description: "Coach must not invent ability names"
+    situation: "What abilities should Jett use for a B execute on Bind?"
+    agent: Jett
+    map: Bind
+    must_contain:
+      - "Tailwind"
+    must_not_contain:
+      - "Flash Dash"    # Invented Jett ability
+      - "Smoke Jump"    # Invented ability name
+      - "Recon Blast"   # Invented ability name
+
+  - id: no_wrong_agent_abilities
+    description: "Coach must not attribute one agent's ability to another"
+    situation: "How does Omen use his smokes on defense?"
+    agent: Omen
+    must_contain:
+      - "Dark Cover"
+    must_not_contain:
+      - "Fog of War"    # Viper ability incorrectly attributed to Omen
+      - "Stasis"        # Sage ability
+
+  - id: no_cs_terminology
+    description: "Coach must not use Counter-Strike terminology for Valorant"
+    situation: "How should we execute onto A site on Ascent as the attacking team?"
+    map: Ascent
+    side: attack
+    must_not_contain:
+      - "T-side"        # CS:GO side name
+      - "terrorists"    # CS:GO faction name
+      - "CT-side"       # CS:GO side name

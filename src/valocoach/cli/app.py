@@ -47,6 +47,16 @@ def coach(
 ) -> None:
     """Get tactical coaching for a match situation."""
     from valocoach.cli.commands.coach import run_coach
+    from valocoach.core.config import load_settings
+    from valocoach.core.preflight import check_ollama
+
+    settings = load_settings()
+    ollama_result = check_ollama(settings)
+    if not ollama_result.ok:
+        display.error(ollama_result.message)
+        if ollama_result.hint:
+            display.warn(ollama_result.hint)
+        raise typer.Exit(1)
 
     run_coach(
         situation=situation,
@@ -210,8 +220,10 @@ def patch() -> None:
 
 @app.command()
 def interactive() -> None:
-    """Start interactive coaching REPL. (stub — week 5)"""
-    display.warn("interactive: not implemented yet (week 5)")
+    """Start an interactive multi-turn coaching session (REPL)."""
+    from valocoach.cli.commands.interactive import run_interactive
+
+    run_interactive()
 
 
 config_app = typer.Typer(help="Manage configuration")

@@ -32,6 +32,8 @@ dependencies = [
     "ollama>=0.3.0",
     "tiktoken>=0.7.0",
     "youtube-transcript-api>=0.6.0",
+    # week 5 — interactive REPL
+    "prompt-toolkit>=3.0.50",
 ]
 
 [project.optional-dependencies]
@@ -41,6 +43,8 @@ dev = [
     # Mock HenrikDev HTTP requests without live API calls.
     "pytest-httpx==0.34.0",
     "ruff>=0.6.0",
+    # LLM eval harness (scripts/run_eval.py)
+    "pyyaml>=6.0.0",
 ]
 
 [project.scripts]

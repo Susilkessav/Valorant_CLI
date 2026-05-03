@@ -30,10 +30,15 @@ def run_ingest(
         return
 
     if clear:
-        from valocoach.retrieval.vector_store import clear_collection
+        from valocoach.retrieval.vector_store import (
+            LIVE_COLLECTION,
+            STATIC_COLLECTION,
+            clear_collection,
+        )
 
-        clear_collection(data_dir)
-        display.success("Vector store cleared.")
+        clear_collection(data_dir, STATIC_COLLECTION)
+        clear_collection(data_dir, LIVE_COLLECTION)
+        display.success("Vector store cleared (static + live collections).")
         return
 
     nothing_specified = not corpus and url is None and youtube is None

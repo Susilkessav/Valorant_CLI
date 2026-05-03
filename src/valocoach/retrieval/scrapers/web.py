@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 import trafilatura
@@ -59,6 +59,6 @@ def scrape_url(url: str, source: str = "web", timeout: int = 20) -> ScrapedConte
         url=url,
         title=title,
         text=text,
-        fetched_at=datetime.now(tz=timezone.utc).isoformat(),
+        fetched_at=datetime.now(tz=UTC).isoformat(),
         source=source,
     )
