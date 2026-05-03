@@ -5,6 +5,8 @@ Covers:
   - ingest_knowledge_base threads on_progress through to _upsert_batch
   - _do_seed passes a progress callback to ingest_knowledge_base
   - _do_corpus renders per-file progress (one call per .md file)
+  - _do_url: success path, scrape failure → Exit(1)
+  - _do_youtube: success path, fetch failure → Exit(1), ingest error → Exit(1)
   - CLI integration: valocoach ingest --seed exits 0 and shows success
 
 Patch targets
@@ -31,6 +33,8 @@ _GET_COLLECTION = "valocoach.retrieval.ingester.get_collection"
 _UPSERT_BATCH = "valocoach.retrieval.ingester._upsert_batch"
 _INGEST_KB_SRC = "valocoach.retrieval.ingester.ingest_knowledge_base"
 _INGEST_TEXT_SRC = "valocoach.retrieval.ingester.ingest_text"
+_SCRAPE_URL_SRC = "valocoach.retrieval.scrapers.web.scrape_url"
+_FETCH_TRANSCRIPT_SRC = "valocoach.retrieval.scrapers.youtube.fetch_transcript"
 _LOAD_SETTINGS = "valocoach.core.config.load_settings"
 
 
@@ -290,3 +294,170 @@ class TestDoCorpusProgress:
         empty_corpus.mkdir()
         # Should return without raising
         _do_corpus(tmp_path, corpus_root=empty_corpus)
+
+
+# ---------------------------------------------------------------------------
+# _do_url — scrape a URL and ingest its text
+# ---------------------------------------------------------------------------
+
+
+class TestDoUrl:
+    def _make_content(self):
+        from valocoach.retrieval.scrapers import ScrapedContent
+
+        return ScrapedContent(
+            url="https://valorant.com/patch-notes",
+            title="Patch Notes",
+            text="Some long patch note content here.",
+            fetched_at="2026-01-01T00:00:00+00:00",
+            source="patch_note",
+        )
+
+    def test_success_exits_cleanly(self, tmp_path: Path):
+        from valocoach.cli.commands.ingest import _do_url
+
+        with (
+            patch(_SCRAPE_URL_SRC, return_value=self._make_content()),
+            patch(_INGEST_TEXT_SRC, return_value=3),
+        ):
+            # Must not raise
+            _do_url(tmp_path, "https://valorant.com/patch-notes")
+
+    def test_success_calls_ingest_text_with_patch_note_type(self, tmp_path: Path):
+        from valocoach.cli.commands.ingest import _do_url
+
+        ingest_calls = []
+
+        def capture(data_dir, text, **kw):
+            ingest_calls.append(kw)
+            return 3
+
+        with (
+            patch(_SCRAPE_URL_SRC, return_value=self._make_content()),
+            patch(_INGEST_TEXT_SRC, side_effect=capture),
+        ):
+            _do_url(tmp_path, "https://valorant.com/patch-notes")
+
+        assert len(ingest_calls) == 1
+        assert ingest_calls[0]["doc_type"] == "patch_note"
+
+    def test_scrape_failure_raises_exit_1(self, tmp_path: Path):
+        import click
+
+        from valocoach.cli.commands.ingest import _do_url
+
+        with (
+            patch(_SCRAPE_URL_SRC, return_value=None),
+            pytest.raises(click.exceptions.Exit) as exc_info,
+        ):
+            _do_url(tmp_path, "https://example.com/bad-url")
+
+        assert exc_info.value.exit_code == 1
+
+    def test_ingest_called_with_fetched_at_metadata(self, tmp_path: Path):
+        from valocoach.cli.commands.ingest import _do_url
+
+        captured = {}
+
+        def capture(data_dir, text, **kw):
+            captured.update(kw)
+            return 1
+
+        with (
+            patch(_SCRAPE_URL_SRC, return_value=self._make_content()),
+            patch(_INGEST_TEXT_SRC, side_effect=capture),
+        ):
+            _do_url(tmp_path, "https://valorant.com/patch-notes")
+
+        assert "extra_metadata" in captured
+        assert "fetched_at" in captured["extra_metadata"]
+        assert captured["extra_metadata"]["ttl_tier"] == "live"
+
+
+# ---------------------------------------------------------------------------
+# _do_youtube — fetch a YouTube transcript and ingest it
+# ---------------------------------------------------------------------------
+
+
+class TestDoYoutube:
+    def _make_content(self):
+        from valocoach.retrieval.scrapers import ScrapedContent
+
+        return ScrapedContent(
+            url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            title="YouTube transcript — dQw4w9WgXcQ",
+            text="Valorant coaching tips transcript content here.",
+            fetched_at="2026-01-01T00:00:00+00:00",
+            source="youtube",
+        )
+
+    def test_success_exits_cleanly(self, tmp_path: Path):
+        from valocoach.cli.commands.ingest import _do_youtube
+
+        with (
+            patch(_FETCH_TRANSCRIPT_SRC, return_value=self._make_content()),
+            patch(_INGEST_TEXT_SRC, return_value=4),
+        ):
+            _do_youtube(tmp_path, "dQw4w9WgXcQ")
+
+    def test_success_calls_ingest_text_with_youtube_type(self, tmp_path: Path):
+        from valocoach.cli.commands.ingest import _do_youtube
+
+        ingest_calls = []
+
+        def capture(data_dir, text, **kw):
+            ingest_calls.append(kw)
+            return 4
+
+        with (
+            patch(_FETCH_TRANSCRIPT_SRC, return_value=self._make_content()),
+            patch(_INGEST_TEXT_SRC, side_effect=capture),
+        ):
+            _do_youtube(tmp_path, "dQw4w9WgXcQ")
+
+        assert len(ingest_calls) == 1
+        assert ingest_calls[0]["doc_type"] == "youtube"
+
+    def test_fetch_failure_raises_exit_1(self, tmp_path: Path):
+        import click
+
+        from valocoach.cli.commands.ingest import _do_youtube
+
+        with (
+            patch(_FETCH_TRANSCRIPT_SRC, return_value=None),
+            pytest.raises(click.exceptions.Exit) as exc_info,
+        ):
+            _do_youtube(tmp_path, "dQw4w9WgXcQ")
+
+        assert exc_info.value.exit_code == 1
+
+    def test_ingest_error_raises_exit_1(self, tmp_path: Path):
+        import click
+
+        from valocoach.cli.commands.ingest import _do_youtube
+
+        with (
+            patch(_FETCH_TRANSCRIPT_SRC, return_value=self._make_content()),
+            patch(_INGEST_TEXT_SRC, side_effect=RuntimeError("embed failed")),
+            pytest.raises(click.exceptions.Exit) as exc_info,
+        ):
+            _do_youtube(tmp_path, "dQw4w9WgXcQ")
+
+        assert exc_info.value.exit_code == 1
+
+    def test_ingest_called_with_live_ttl_metadata(self, tmp_path: Path):
+        from valocoach.cli.commands.ingest import _do_youtube
+
+        captured = {}
+
+        def capture(data_dir, text, **kw):
+            captured.update(kw)
+            return 1
+
+        with (
+            patch(_FETCH_TRANSCRIPT_SRC, return_value=self._make_content()),
+            patch(_INGEST_TEXT_SRC, side_effect=capture),
+        ):
+            _do_youtube(tmp_path, "dQw4w9WgXcQ")
+
+        assert captured.get("extra_metadata", {}).get("ttl_tier") == "live"

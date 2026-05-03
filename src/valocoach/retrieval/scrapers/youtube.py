@@ -43,12 +43,13 @@ def fetch_transcript(
     langs = languages or ["en", "en-US", "en-GB"]
 
     try:
-        entries = YouTubeTranscriptApi.get_transcript(video_id, languages=langs)
+        transcript = YouTubeTranscriptApi().fetch(video_id, languages=langs)
+        entries = list(transcript)
     except Exception as exc:
         log.warning("Transcript fetch failed for %s: %s", video_id, exc)
         return None
 
-    text = " ".join(e["text"].strip() for e in entries if e["text"].strip())
+    text = " ".join(e.text.strip() for e in entries if e.text.strip())
     if len(text) < 200:
         log.warning("Transcript too short for %s (%d chars)", video_id, len(text))
         return None

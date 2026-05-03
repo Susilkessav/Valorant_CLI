@@ -647,3 +647,57 @@ class TestCache:
         await store_cached("https://ok.example.com", "ok", source="web", ttl_tier="stable")
         count = await purge_expired()
         assert count == 0
+
+
+# ===========================================================================
+# 6. collection_stats — searcher
+# ===========================================================================
+
+
+class TestCollectionStats:
+    def test_empty_store_returns_zero_total(self, tmp_path, fake_embed):
+        from valocoach.retrieval.searcher import collection_stats
+
+        stats = collection_stats(tmp_path)
+        assert stats["total"] == 0
+        assert stats["by_type"] == {}
+
+    def test_populated_store_sums_counts_correctly(self, tmp_path, fake_embed):
+        from valocoach.retrieval.ingester import ingest_text
+        from valocoach.retrieval.searcher import collection_stats
+
+        ingest_text(tmp_path, "agent tactics text", doc_type="agent", name="jett", source="s1")
+        ingest_text(tmp_path, "map callouts text", doc_type="map", name="ascent", source="s2")
+
+        stats = collection_stats(tmp_path)
+        assert stats["total"] == 2
+
+    def test_by_type_groups_per_doc_type(self, tmp_path, fake_embed):
+        from valocoach.retrieval.ingester import ingest_text
+        from valocoach.retrieval.searcher import collection_stats
+
+        ingest_text(tmp_path, "agent text", doc_type="agent", name="jett", source="s1")
+        ingest_text(tmp_path, "map text", doc_type="map", name="ascent", source="s2")
+
+        stats = collection_stats(tmp_path)
+        assert stats["by_type"]["[static] agent"] == 1
+        assert stats["by_type"]["[static] map"] == 1
+
+    def test_by_type_keys_have_collection_prefix(self, tmp_path, fake_embed):
+        from valocoach.retrieval.ingester import ingest_text
+        from valocoach.retrieval.searcher import collection_stats
+
+        ingest_text(tmp_path, "concept text", doc_type="concept", name="economy", source="s1")
+        stats = collection_stats(tmp_path)
+        assert all(k.startswith("[static]") or k.startswith("[live]") for k in stats["by_type"])
+
+    def test_multiple_docs_same_type_accumulate(self, tmp_path, fake_embed):
+        from valocoach.retrieval.ingester import ingest_text
+        from valocoach.retrieval.searcher import collection_stats
+
+        for i in range(3):
+            ingest_text(tmp_path, f"agent text {i}", doc_type="agent", name=f"agent{i}", source=f"s{i}")
+
+        stats = collection_stats(tmp_path)
+        assert stats["by_type"]["[static] agent"] == 3
+        assert stats["total"] == 3
