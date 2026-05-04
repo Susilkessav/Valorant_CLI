@@ -36,6 +36,7 @@ import logging
 from collections import defaultdict
 from dataclasses import dataclass
 
+from valocoach.core.exceptions import MapperError
 from valocoach.data.api_models import MatchDetails, MatchDetailsKill, MatchDetailsPlayer
 from valocoach.data.models import AccountData, MMRData
 from valocoach.data.orm_models import Kill, Match, OrmMatchPlayer, Player, Round
@@ -244,7 +245,16 @@ def match_from_details(details: MatchDetails) -> Match:
     winning_team = "Red" if red_won else ("Blue" if blue_won else None)
 
     rounds_played = len(details.rounds)
-    started_at = meta.started_at or ""
+    # started_at is the ORDER BY key for every recent-match query and the
+    # bucket boundary for daily aggregates.  An empty string sorts before
+    # every valid ISO8601 timestamp, so a match with no started_at would
+    # silently corrupt "last N matches" results.  Refuse to map.
+    if not meta.started_at:
+        raise MapperError(
+            f"MatchDetails {match_id[:8]}… has no started_at timestamp — "
+            "refusing to map (would corrupt ORDER BY started_at queries)."
+        )
+    started_at = meta.started_at
 
     # Per-player impact stats derived from the kill + round lists
     impact = _compute_impact(details)

@@ -24,7 +24,16 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from valocoach.data.database import Base
@@ -132,6 +141,9 @@ class OrmMatchPlayer(Base):
         UniqueConstraint("match_id", "puuid", name="uq_match_player"),
         Index("idx_mp_puuid_started", "puuid", "started_at"),
         Index("idx_mp_puuid_agent", "puuid", "agent_name", "started_at"),
+        # team must be exactly "Red" or "Blue" — silent typos in the mapper
+        # would otherwise corrupt every side-split calculation.
+        CheckConstraint("team IN ('Red', 'Blue')", name="ck_match_player_team"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -217,7 +229,11 @@ class Round(Base):
     """One row per round — outcome + bomb events."""
 
     __tablename__ = "rounds"
-    __table_args__ = (UniqueConstraint("match_id", "round_number", name="uq_match_round"),)
+    __table_args__ = (
+        UniqueConstraint("match_id", "round_number", name="uq_match_round"),
+        # winning_team must be "Red" or "Blue" (no draws at the round level).
+        CheckConstraint("winning_team IN ('Red', 'Blue')", name="ck_round_winning_team"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     match_id: Mapped[str] = mapped_column(
@@ -249,7 +265,13 @@ class Kill(Base):
     """One row per kill event within a round."""
 
     __tablename__ = "kills"
-    __table_args__ = (Index("idx_kills_killer", "killer_puuid", "match_id"),)
+    __table_args__ = (
+        Index("idx_kills_killer", "killer_puuid", "match_id"),
+        # round_id is the FK loaded by `selectinload(Round.kills)` for every
+        # round during round-level analysis.  Without this index, that query
+        # degrades to a full kills-table scan per round.
+        Index("idx_kills_round", "round_id"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     round_id: Mapped[int] = mapped_column(

@@ -47,9 +47,12 @@ async def check_patch_update(settings: Settings) -> tuple[str, bool]:
             is_new = False
 
     # Invalidate volatile entries after the PatchVersion row is committed,
-    # so the two writes don't share a transaction.
+    # so the two writes don't share a transaction.  Passing ``data_dir``
+    # also nukes the corresponding live ChromaDB documents — patch-day
+    # invalidation must clear BOTH halves of the cache or stale meta keeps
+    # leaking into coach prompts via vector search.
     if is_new and latest is not None:
-        count = await invalidate_volatile()
+        count = await invalidate_volatile(settings.data_dir)
         log.info(
             "Patch %s → %s: invalidated %d volatile cache entries.",
             latest.game_version,

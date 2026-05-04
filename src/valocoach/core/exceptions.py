@@ -32,5 +32,15 @@ class SyncError(ValocoachError):
     """Match sync pipeline failure."""
 
 
+class MapperError(SyncError):
+    """API-to-ORM mapping rejected this match.
+
+    Raised when the API response is well-formed Pydantic but logically
+    invalid for storage (e.g. missing ``started_at``, which would corrupt
+    ``ORDER BY started_at`` queries by sorting before all valid ISO
+    timestamps).  Per-match failure — sync skips the offender and continues.
+    """
+
+
 class ConfigError(ValocoachError):
     """Configuration is missing or invalid."""

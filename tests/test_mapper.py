@@ -10,13 +10,26 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
+from valocoach.core.exceptions import MapperError
 from valocoach.data.mapper import (
     _compute_impact,
+    _econ_int,
     _tier_int,
     match_from_details,
     player_from_account_mmr,
 )
-from valocoach.data.orm_models import Kill, Match, OrmMatchPlayer, Player
+from valocoach.data.orm_models import (
+    Kill,
+    Match,
+    MetaCache,
+    OrmMatchPlayer,
+    PatchVersion,
+    Player,
+    Round,
+    SyncLog,
+)
 
 # Mirror the constants defined in conftest — avoids importing from tests package
 PUUID = "20905543-1b42-5f6f-8435-ab284a0094f8"
@@ -100,9 +113,24 @@ def test_match_metadata_fields(match_details):
     assert m.region == "na"
 
 
-def test_match_null_started_at_becomes_empty_string(match_details):
+def test_match_null_started_at_raises_mapper_error(match_details):
+    """A match with no started_at must be rejected, not stored as ``""``.
+
+    Empty string sorts lexicographically before every valid ISO timestamp,
+    which would silently corrupt ``ORDER BY started_at`` queries.  The
+    mapper raises :class:`MapperError`; the sync pipeline catches it and
+    skips the offending match without poisoning the rest of the batch.
+    """
     match_details.metadata.started_at = None
-    assert match_from_details(match_details).started_at == ""
+    with pytest.raises(MapperError, match="started_at"):
+        match_from_details(match_details)
+
+
+def test_match_empty_started_at_raises_mapper_error(match_details):
+    """An empty-string started_at is also rejected (defence in depth)."""
+    match_details.metadata.started_at = ""
+    with pytest.raises(MapperError, match="started_at"):
+        match_from_details(match_details)
 
 
 # ---------------------------------------------------------------------------
@@ -238,6 +266,76 @@ def test_ability_kill_weapon_name_is_none(match_details):
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# _econ_int — line 73 else-None branch
+# ---------------------------------------------------------------------------
+
+
+def test_econ_int_returns_int_for_numeric_leaf():
+    """_econ_int returns int when leaf is a number (line 73 True branch)."""
+    assert _econ_int({"spent": {"overall": 3900}}, "spent", "overall") == 3900
+
+
+def test_econ_int_returns_none_for_string_leaf():
+    """_econ_int returns None when leaf is a non-numeric string (line 73 else-None branch).
+
+    Coverage target: mapper.py line 73 — `else None` when leaf not int|float.
+    """
+    result = _econ_int({"spent": {"overall": "not_a_number"}}, "spent", "overall")
+    assert result is None
+
+
+def test_econ_int_returns_none_for_none_leaf():
+    """_econ_int returns None when the key is missing (leaf=None)."""
+    assert _econ_int({"spent": {}}, "spent", "overall") is None
+
+
+# ---------------------------------------------------------------------------
+# match_from_details — kill in unknown round (lines 200-201)
+# ---------------------------------------------------------------------------
+
+
+def test_kill_in_unknown_round_is_skipped(match_details) -> None:
+    """A kill that references a round ID not in the rounds list is silently skipped.
+
+    Coverage target: mapper.py lines 200-201 — `log.debug("kill in unknown round")` +
+    `continue`.
+
+    Approach: append a kill referencing round 99 which doesn't exist in the rounds list.
+    """
+    from valocoach.data.api_models import MatchDetailsKill, _PlayerRef, _Ref
+
+    # Add a kill that references round 99 — not present in match_details.rounds (IDs 0, 1)
+    phantom_kill = MatchDetailsKill(
+        round=99,  # out-of-range round ID
+        time_in_round_in_ms=5_000,
+        time_in_match_in_ms=500_000,
+        killer=_PlayerRef(puuid=ENEMY_PUUID, name="dipp", tag="100T", team="Red"),
+        victim=_PlayerRef(puuid=PUUID, name="Yoursaviour01", tag="SK04", team="Blue"),
+        weapon=_Ref(id="vandal-id", name="Vandal"),
+    )
+    # Pydantic models are immutable — rebuild kills list with the extra kill
+    modified = match_details.model_copy(
+        update={"kills": list(match_details.kills) + [phantom_kill]}
+    )
+
+    # Should not raise; the unknown-round kill is simply skipped
+    result = match_from_details(modified)
+    all_kills = [k for r in result.rounds for k in r.kills]
+
+    # The phantom kill (round=99) must NOT appear in the ORM kill list
+    phantom_kill_in_orm = [k for k in all_kills if k.round_number == 99]
+    assert phantom_kill_in_orm == []
+
+    # The regular kills (round 0 and 1) are still present
+    assert len(all_kills) >= 1
+
+
+# ---------------------------------------------------------------------------
+# player_from_account_mmr
+# ---------------------------------------------------------------------------
+
+
 def test_player_from_account_mmr(account_data, mmr_data):
     p = player_from_account_mmr(account_data, mmr_data)
 
@@ -253,3 +351,142 @@ def test_player_from_account_mmr(account_data, mmr_data):
     assert p.elo == 900
     assert p.peak_tier == 14
     assert p.peak_tier_patched == "Gold 3"
+
+
+# ---------------------------------------------------------------------------
+# ORM model __repr__ methods (lines 71, 115, 201, 240, 271, 296, 329, 347)
+# ---------------------------------------------------------------------------
+#
+# None of the ORM __repr__ methods are exercised elsewhere.
+# These tests call repr() on in-memory instances — no DB session required.
+
+
+class TestOrmRepr:
+    """Cover __repr__ on every ORM model class (orm_models.py)."""
+
+    def test_player_repr(self) -> None:
+        """Player.__repr__ (line 71)."""
+        p = Player(
+            puuid="abc123",
+            riot_name="Yoursaviour01",
+            riot_tag="SK04",
+            region="na",
+            current_tier_patched="Gold 1",
+            elo=925,
+        )
+        r = repr(p)
+        assert "Player" in r
+        assert "Yoursaviour01" in r
+
+    def test_match_repr(self) -> None:
+        """Match.__repr__ (line 115)."""
+        m = Match(
+            match_id="aaaabbbbcccc",
+            map_name="Ascent",
+            queue_id="competitive",
+            is_ranked=True,
+            game_length_secs=1800,
+            rounds_played=20,
+            red_score=13,
+            blue_score=7,
+            started_at="2026-04-19T18:00:00+00:00",
+        )
+        r = repr(m)
+        assert "Match" in r
+        assert "Ascent" in r
+
+    def test_orm_match_player_repr(self) -> None:
+        """OrmMatchPlayer.__repr__ (line 201)."""
+        mp = OrmMatchPlayer(
+            match_id="x",
+            puuid="p",
+            agent_name="Jett",
+            team="Blue",
+            won=True,
+            score=5000,
+            kills=20,
+            deaths=10,
+            assists=5,
+            rounds_played=20,
+            headshots=30,
+            bodyshots=60,
+            legshots=10,
+            damage_dealt=3000,
+            damage_received=2000,
+            first_bloods=3,
+            first_deaths=1,
+            plants=0,
+            defuses=0,
+            afk_rounds=0,
+            rounds_in_spawn=0,
+            started_at="2026-04-19T18:00:00+00:00",
+        )
+        r = repr(mp)
+        assert "MatchPlayer" in r
+        assert "Jett" in r
+
+    def test_round_repr(self) -> None:
+        """Round.__repr__ (line 240)."""
+        rnd = Round(
+            match_id="m1",
+            round_number=5,
+            winning_team="Blue",
+            result_code="Elimination",
+            bomb_planted=False,
+            bomb_defused=False,
+        )
+        r = repr(rnd)
+        assert "Round" in r
+        assert "5" in r
+
+    def test_kill_repr(self) -> None:
+        """Kill.__repr__ (line 271)."""
+        k = Kill(
+            match_id="m1",
+            round_number=3,
+            time_in_round_ms=5000,
+            killer_puuid="killer-puuid-0001",
+            victim_puuid="victim-puuid-0002",
+            weapon_name="Vandal",
+            is_headshot=True,
+            assistants_json="[]",
+        )
+        r = repr(k)
+        assert "Kill" in r
+        assert "round=3" in r
+
+    def test_sync_log_repr(self) -> None:
+        """SyncLog.__repr__ (line 296)."""
+        sl = SyncLog(
+            puuid="synced-puuid-0001",
+            matches_fetched=10,
+            matches_new=3,
+            error=None,
+        )
+        r = repr(sl)
+        assert "SyncLog" in r
+        assert "synced-p" in r  # puuid[:8]
+
+    def test_meta_cache_repr(self) -> None:
+        """MetaCache.__repr__ (line 329)."""
+        mc = MetaCache(
+            url="https://valorant.fandom.com/wiki/Jett",
+            source="web",
+            content_hash="abc12345",
+            ttl_tier="stable",
+            expires_at="2026-06-01T00:00:00+00:00",
+            content_text="Jett is a duelist...",
+        )
+        r = repr(mc)
+        assert "MetaCache" in r
+        assert "stable" in r
+
+    def test_patch_version_repr(self) -> None:
+        """PatchVersion.__repr__ (line 347)."""
+        pv = PatchVersion(
+            game_version="release-09.00",
+            detected_at="2026-04-20T00:00:00+00:00",
+        )
+        r = repr(pv)
+        assert "PatchVersion" in r
+        assert "release-09.00" in r

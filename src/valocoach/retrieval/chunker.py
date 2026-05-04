@@ -28,9 +28,22 @@ class Chunk:
 
 
 def _token_split(text: str, max_tokens: int, overlap: int) -> list[str]:
-    """Token-exact split for a single section that individually exceeds max_tokens."""
+    """Token-exact split for a single section that individually exceeds max_tokens.
+
+    ``overlap`` is clamped to ``max_tokens - 1`` so ``start`` always advances by
+    at least one token per iteration.  Without the clamp, callers passing
+    ``overlap >= max_tokens`` (e.g. branch-coverage tests, or accidental
+    misuse) would hit ``start = end - overlap`` regressing the cursor and
+    spinning forever.  Clamping is the right behaviour: an overlap that
+    consumes the entire budget would emit the same window every iteration
+    even if the loop did terminate, so trimming it preserves the intent
+    while guaranteeing forward progress.
+    """
     enc = _get_enc()
     tokens = enc.encode(text)
+    if max_tokens <= 0:
+        return [text]
+    safe_overlap = max(0, min(overlap, max_tokens - 1))
     parts: list[str] = []
     start = 0
     while start < len(tokens):
@@ -38,7 +51,7 @@ def _token_split(text: str, max_tokens: int, overlap: int) -> list[str]:
         parts.append(enc.decode(tokens[start:end]))
         if end == len(tokens):
             break
-        start = end - overlap
+        start = end - safe_overlap
     return parts
 
 

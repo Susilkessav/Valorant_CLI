@@ -555,6 +555,77 @@ class TestRetrieveStatic:
         # Vector hits are appended with [TYPE: name] header
         assert ctx is not None
 
+    def test_unknown_map_logs_warning_and_continues(self, tmp_path, fake_embed, caplog) -> None:
+        """A map not in the knowledge base logs a warning (line 84) but doesn't crash.
+
+        Coverage target: retriever.py line 84 — `log.warning("Map '%s' not found", map_)`.
+        """
+        import logging
+
+        from valocoach.retrieval.retriever import retrieve_static
+
+        with caplog.at_level(logging.WARNING, logger="valocoach.retrieval.retriever"):
+            result = retrieve_static("push A", tmp_path, map_="ZZZUnknownMapXYZ")
+
+        assert result is not None
+        assert any("ZZZUnknownMapXYZ" in r.message for r in caplog.records)
+
+    def test_search_exception_is_silently_swallowed(self, tmp_path, monkeypatch) -> None:
+        """When the vector search raises any exception, it is caught and ignored (lines 125-126).
+
+        Coverage target: retriever.py lines 125-126 — `except Exception: pass`.
+        The function must still return a valid result with the static JSON chunks.
+        """
+        from valocoach.retrieval.retriever import retrieve_static
+
+        # Make search() raise to trigger the except-Exception branch
+        monkeypatch.setattr(
+            "valocoach.retrieval.retriever.build_retrieval_queries",
+            lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("chroma down")),
+        )
+
+        # Should not raise; returns static JSON result
+        result = retrieve_static("eco round", tmp_path)
+        assert result is not None
+
+    def test_duplicate_vector_hit_is_deduplicated(self, tmp_path, monkeypatch) -> None:
+        """When two queries return the same text, only the first is kept (line 116 False branch).
+
+        Coverage target: retriever.py line 116 `if text not in seen:` False branch (116→114).
+        The duplicate hit is silently skipped; only one entry appears in static_chunks.
+
+        `search` is lazily imported inside retrieve_static, so we patch it at the source
+        module (valocoach.retrieval.searcher.search) — that's what the lazy `from...import`
+        resolves to at call time.
+        """
+        from valocoach.retrieval.retriever import retrieve_static
+
+        dup_text = "Economy: buy rifle at 3900 credits."
+        dup_hit = {
+            "text": dup_text,
+            "metadata": {"name": "economy", "type": "concept", "source": "eco_doc"},
+        }
+
+        # search is lazily imported from valocoach.retrieval.searcher inside the function;
+        # patch at the source so the lazy import picks up the stub.
+        monkeypatch.setattr(
+            "valocoach.retrieval.searcher.search",
+            lambda *a, **kw: [dup_hit],
+        )
+        # Also need to stub embed_one (called by the real search) — not needed since
+        # we've replaced search itself. But we need STATIC_COLLECTION / LIVE_COLLECTION
+        # to be importable (they're constants, so they'll import fine).
+        # Also ensure build_retrieval_queries produces >1 query so the loop runs twice.
+        monkeypatch.setattr(
+            "valocoach.retrieval.retriever.build_retrieval_queries",
+            lambda *a, **kw: ["q1", "q2"],
+        )
+
+        result = retrieve_static("eco round", tmp_path)
+        # The duplicate must appear at most once in the chunks
+        dup_occurrences = sum(1 for c in result.static_chunks if dup_text in c)
+        assert dup_occurrences <= 1
+
 
 # ===========================================================================
 # 5. Cache (async)
@@ -739,3 +810,297 @@ class TestCollectionStats:
         stats = collection_stats(tmp_path)
         assert stats["by_type"]["[static] agent"] == 3
         assert stats["total"] == 3
+
+
+# ===========================================================================
+# 7. Live-collection TTL — both halves of the cache stay in lockstep
+# ===========================================================================
+#
+# Regression tests for FINDINGS P1: invalidate_volatile() and purge_expired()
+# previously deleted only SQLite meta_cache rows, leaving orphan vectors in
+# valocoach_live that retrieve_static would happily surface to the LLM.
+
+
+class TestLiveCollectionTTLFilter:
+    """``retrieve_static`` must filter expired live docs at search time."""
+
+    def test_expired_live_doc_is_filtered_out_at_search(self, tmp_path, fake_embed):
+        """A LIVE_COLLECTION doc with ``expires_at_unix`` in the past must NOT
+        appear in retrieve_static results, even when it semantically matches."""
+        from datetime import UTC, datetime, timedelta
+
+        from valocoach.retrieval.ingester import ingest_text
+        from valocoach.retrieval.retriever import retrieve_static
+        from valocoach.retrieval.vector_store import LIVE_COLLECTION
+
+        past_unix = int((datetime.now(UTC) - timedelta(hours=1)).timestamp())
+        ingest_text(
+            tmp_path,
+            "stale meta: pick rate 99% on Jett (PATCH 9.00 — outdated)",
+            doc_type="web",
+            name="metasrc-stale",
+            source="metasrc-stale",
+            collection_name=LIVE_COLLECTION,
+            extra_metadata={"ttl_tier": "volatile", "expires_at_unix": past_unix},
+        )
+
+        result = retrieve_static("Jett pick rate", tmp_path, agent="Jett")
+        ctx = result.to_context_string() or ""
+        assert "PATCH 9.00 — outdated" not in ctx, (
+            "expired live doc leaked into grounded context; expires_at_unix filter is broken"
+        )
+
+    def test_fresh_live_doc_is_retrievable(self, tmp_path, fake_embed):
+        """The flip side: a live doc with ``expires_at_unix`` in the future
+        must still be searchable.  Otherwise the TTL filter is too aggressive."""
+        from datetime import UTC, datetime, timedelta
+
+        from valocoach.retrieval.ingester import ingest_text
+        from valocoach.retrieval.searcher import search
+        from valocoach.retrieval.vector_store import LIVE_COLLECTION
+
+        future_unix = int((datetime.now(UTC) + timedelta(hours=6)).timestamp())
+        ingest_text(
+            tmp_path,
+            "current meta: pick rate 50% on Sage",
+            doc_type="web",
+            name="metasrc-fresh",
+            source="metasrc-fresh",
+            collection_name=LIVE_COLLECTION,
+            extra_metadata={"ttl_tier": "volatile", "expires_at_unix": future_unix},
+        )
+
+        # Search the live collection with the same TTL gate retrieve_static uses.
+        now_unix = int(datetime.now(UTC).timestamp())
+        hits = search(
+            "Sage meta",
+            tmp_path,
+            n_results=5,
+            doc_types=["web"],
+            max_distance=0.5,
+            collection_name=LIVE_COLLECTION,
+            where_extra={"expires_at_unix": {"$gt": now_unix}},
+        )
+        assert len(hits) == 1
+        assert "Sage" in hits[0]["text"]
+
+    def test_pre_migration_live_docs_excluded(self, tmp_path, fake_embed):
+        """Live docs ingested before the TTL change have no ``expires_at_unix``.
+
+        ChromaDB excludes missing-field rows from ``$gt`` queries — that's
+        the safe outcome (treats them as expired, forces a re-scrape).
+        This test pins that behavior so a future ChromaDB upgrade that
+        changes it doesn't silently re-leak old vectors.
+        """
+        from datetime import UTC, datetime
+
+        from valocoach.retrieval.ingester import ingest_text
+        from valocoach.retrieval.searcher import search
+        from valocoach.retrieval.vector_store import LIVE_COLLECTION
+
+        # Ingest WITHOUT expires_at_unix metadata (simulates a pre-fix install).
+        ingest_text(
+            tmp_path,
+            "ancient meta from before the TTL fix",
+            doc_type="web",
+            name="legacy",
+            source="legacy",
+            collection_name=LIVE_COLLECTION,
+        )
+
+        now_unix = int(datetime.now(UTC).timestamp())
+        hits = search(
+            "ancient meta",
+            tmp_path,
+            n_results=5,
+            doc_types=["web"],
+            max_distance=0.5,
+            collection_name=LIVE_COLLECTION,
+            where_extra={"expires_at_unix": {"$gt": now_unix}},
+        )
+        assert hits == []
+
+
+class TestInvalidateVolatileNukesLive:
+    """invalidate_volatile(data_dir) must clear BOTH cache halves."""
+
+    async def test_invalidate_volatile_deletes_live_volatile_docs(
+        self, tmp_path, cache_db, fake_embed
+    ):
+        """Volatile-tier live docs must be deleted from the vector store
+        when ``invalidate_volatile`` is called with a data_dir.
+
+        Before the fix: only SQLite rows were deleted; the live vector
+        was orphaned.  Now both halves are evicted in lockstep.
+        """
+        from datetime import UTC, datetime, timedelta
+
+        from valocoach.retrieval.cache import invalidate_volatile, store_cached
+        from valocoach.retrieval.ingester import ingest_text
+        from valocoach.retrieval.vector_store import LIVE_COLLECTION, collection_count
+
+        future_unix = int((datetime.now(UTC) + timedelta(hours=6)).timestamp())
+        # Volatile live doc — must be deleted.
+        ingest_text(
+            tmp_path,
+            "volatile pick rates",
+            doc_type="web",
+            name="vol",
+            source="vol",
+            collection_name=LIVE_COLLECTION,
+            extra_metadata={"ttl_tier": "volatile", "expires_at_unix": future_unix},
+        )
+        # Stable live doc — must survive (different ttl_tier).
+        ingest_text(
+            tmp_path,
+            "stable patch notes",
+            doc_type="web",
+            name="stable",
+            source="stable",
+            collection_name=LIVE_COLLECTION,
+            extra_metadata={"ttl_tier": "stable", "expires_at_unix": future_unix},
+        )
+        # Mirror SQLite cache state so the SQLite half deletes too.
+        await store_cached("https://vol.example.com", "vol", source="web", ttl_tier="volatile")
+
+        before = collection_count(tmp_path, LIVE_COLLECTION)
+        assert before == 2
+
+        await invalidate_volatile(tmp_path)
+
+        after = collection_count(tmp_path, LIVE_COLLECTION)
+        assert after == 1, "volatile live doc should have been deleted; stable kept"
+
+    async def test_invalidate_volatile_without_data_dir_is_safe(self, cache_db):
+        """Existing callers (or tests) that don't pass data_dir still work.
+
+        The SQLite half is invalidated; the Chroma half is left untouched.
+        This preserves the function's pre-fix signature for callers that
+        don't have a data_dir context handy.
+        """
+        from valocoach.retrieval.cache import invalidate_volatile, store_cached
+
+        await store_cached("https://vol.example.com", "vol", source="web", ttl_tier="volatile")
+        count = await invalidate_volatile()  # No data_dir
+        assert count == 1
+
+
+class TestPurgeExpiredNukesLive:
+    """purge_expired(data_dir) must drop expired live docs too."""
+
+    async def test_purge_expired_deletes_expired_live_docs(self, tmp_path, cache_db, fake_embed):
+        from datetime import UTC, datetime, timedelta
+
+        from valocoach.data.database import session_scope
+        from valocoach.data.orm_models import MetaCache
+        from valocoach.retrieval.cache import purge_expired
+        from valocoach.retrieval.ingester import ingest_text
+        from valocoach.retrieval.vector_store import LIVE_COLLECTION, collection_count
+
+        past_iso = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+        past_unix = int((datetime.now(UTC) - timedelta(hours=1)).timestamp())
+        future_unix = int((datetime.now(UTC) + timedelta(hours=6)).timestamp())
+
+        # Expired live doc — must be deleted.
+        ingest_text(
+            tmp_path,
+            "expired meta",
+            doc_type="web",
+            name="expired",
+            source="expired",
+            collection_name=LIVE_COLLECTION,
+            extra_metadata={"ttl_tier": "volatile", "expires_at_unix": past_unix},
+        )
+        # Fresh live doc — must survive.
+        ingest_text(
+            tmp_path,
+            "fresh meta",
+            doc_type="web",
+            name="fresh",
+            source="fresh",
+            collection_name=LIVE_COLLECTION,
+            extra_metadata={"ttl_tier": "volatile", "expires_at_unix": future_unix},
+        )
+        # Add an expired SQLite row so the purge function counts something.
+        async with session_scope() as s:
+            s.add(
+                MetaCache(
+                    url="https://expired.example.com",
+                    source="web",
+                    content_hash="h",
+                    ttl_tier="volatile",
+                    fetched_at=past_iso,
+                    expires_at=past_iso,
+                    content_text="t",
+                )
+            )
+
+        await purge_expired(tmp_path)
+
+        # Only the fresh live doc remains.
+        assert collection_count(tmp_path, LIVE_COLLECTION) == 1
+
+
+class TestPatchTrackerInvalidatesLive:
+    """The patch tracker's invalidation hook must pass data_dir through."""
+
+    async def test_patch_change_clears_live_collection(
+        self, tmp_path, cache_db, fake_embed, monkeypatch
+    ):
+        """When ``check_patch_update`` detects a new game version it must
+        nuke the live collection alongside the SQLite cache."""
+        from datetime import UTC, datetime, timedelta
+
+        from valocoach.core.config import Settings
+        from valocoach.data.database import session_scope
+        from valocoach.data.orm_models import PatchVersion
+        from valocoach.retrieval.ingester import ingest_text
+        from valocoach.retrieval.patch_tracker import check_patch_update
+        from valocoach.retrieval.vector_store import LIVE_COLLECTION, collection_count
+
+        # Seed a previous patch row so check_patch_update sees a "change".
+        async with session_scope() as s:
+            s.add(PatchVersion(game_version="9.00"))
+
+        # Seed a volatile live doc.
+        future_unix = int((datetime.now(UTC) + timedelta(hours=6)).timestamp())
+        ingest_text(
+            tmp_path,
+            "patch 9.00 meta",
+            doc_type="web",
+            name="meta",
+            source="meta",
+            collection_name=LIVE_COLLECTION,
+            extra_metadata={"ttl_tier": "volatile", "expires_at_unix": future_unix},
+        )
+        assert collection_count(tmp_path, LIVE_COLLECTION) == 1
+
+        # Stub the HenrikDev call so we don't hit the network.
+        class _FakeClient:
+            def __init__(self, *_a, **_kw):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_a):
+                return None
+
+            async def get_version(self, _region):
+                return {"version": "9.05"}
+
+        monkeypatch.setattr("valocoach.retrieval.patch_tracker.HenrikClient", _FakeClient)
+
+        settings = Settings(
+            riot_name="t",
+            riot_tag="t",
+            riot_region="na",
+            henrikdev_api_key="f",
+            data_dir=tmp_path,
+        )
+        version, is_new = await check_patch_update(settings)
+        assert is_new is True
+        assert version == "9.05"
+
+        # The volatile live doc must be gone.
+        assert collection_count(tmp_path, LIVE_COLLECTION) == 0

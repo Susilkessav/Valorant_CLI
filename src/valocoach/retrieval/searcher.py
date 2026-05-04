@@ -17,6 +17,7 @@ def search(
     doc_types: list[str] | None = None,
     max_distance: float = 0.5,
     collection_name: str = STATIC_COLLECTION,
+    where_extra: dict | None = None,
 ) -> list[dict]:
     """Semantic search over a single ChromaDB collection.
 
@@ -26,6 +27,13 @@ def search(
     Pass ``collection_name=LIVE_COLLECTION`` to query the live-scrape bucket.
     Most callers should use ``retrieve_static`` (which searches both collections)
     rather than calling this directly.
+
+    Args:
+        where_extra: Additional metadata filter merged with ``doc_types`` via
+                     ``$and``.  Used by the retriever to gate ``LIVE_COLLECTION``
+                     hits on ``expires_at > now`` so an expired live cache row
+                     can never reach the coach prompt — even if the cache
+                     invalidation hook hasn't run yet.
     """
     collection = get_collection(data_dir, collection_name)
     count = collection.count()
@@ -33,7 +41,20 @@ def search(
         return []
 
     embedding = embed_one(query)
-    where = {"type": {"$in": doc_types}} if doc_types else None
+
+    # Merge doc_types filter with any caller-supplied where clause.  ChromaDB
+    # requires a single top-level operator, so two filters need ``$and``.
+    filters: list[dict] = []
+    if doc_types:
+        filters.append({"type": {"$in": doc_types}})
+    if where_extra:
+        filters.append(where_extra)
+    if not filters:
+        where: dict | None = None
+    elif len(filters) == 1:
+        where = filters[0]
+    else:
+        where = {"$and": filters}
 
     results = collection.query(
         query_embeddings=[embedding],

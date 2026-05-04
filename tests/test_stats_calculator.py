@@ -431,3 +431,91 @@ def test_reliability_split_win_rate_clears_at_30() -> None:
     """At MIN_MATCHES_WIN_RATE_SPLIT, the split-tagged flag flips True."""
     stats = _stats_with_n_matches(MIN_MATCHES_WIN_RATE_SPLIT)
     assert reliability_flags(stats, is_split=True)["win_rate"] is True
+
+
+# ---------------------------------------------------------------------------
+# reliability_flags — rounds-floor enforcement
+# ---------------------------------------------------------------------------
+# The match-count floor is necessary but not sufficient: a player with
+# the right number of matches but too few rounds (short stomps) is still
+# unreliable for per-round metrics.  These tests guard against the
+# previous behaviour where the rounds dimension was silently ignored.
+
+
+def _stats_with_matches_and_rounds(matches: int, rounds_per_match: int) -> PlayerStats:
+    """Synthesise PlayerStats with the desired (matches, total_rounds)."""
+    return compute_player_stats(
+        [_mp(match_id=f"m-{i}", rounds_played=rounds_per_match) for i in range(matches)]
+    )
+
+
+def test_reliability_acs_fails_when_rounds_below_floor() -> None:
+    """15 matches x 10 rounds = 150 total: meets ACS match floor (15) but
+    not the round floor (200).  Must be flagged unreliable.
+
+    This is the exact failure mode that motivated FINDINGS P2 — short
+    stomps inflated the match count past the ACS floor while leaving the
+    per-round sample dangerously thin.
+    """
+    stats = _stats_with_matches_and_rounds(matches=15, rounds_per_match=10)
+    flags = reliability_flags(stats)
+    assert stats.matches == 15
+    assert stats.rounds == 150
+    assert flags["acs"] is False, "ACS must warn when rounds < 200 even if matches >= 15"
+    assert flags["adr"] is False  # same threshold (200 rounds)
+
+
+def test_reliability_acs_passes_when_both_floors_clear() -> None:
+    """15 matches x 14 rounds = 210 total: clears both ACS gates."""
+    stats = _stats_with_matches_and_rounds(matches=15, rounds_per_match=14)
+    flags = reliability_flags(stats)
+    assert stats.rounds >= 200
+    assert flags["acs"] is True
+    assert flags["adr"] is True
+
+
+def test_reliability_kd_requires_300_rounds() -> None:
+    """K/D needs 20 matches and 300 rounds.  20 x 12 = 240 must fail."""
+    stats = _stats_with_matches_and_rounds(matches=20, rounds_per_match=12)
+    flags = reliability_flags(stats)
+    assert flags["kd"] is False
+    assert flags["kda"] is False  # tracks K/D
+
+
+def test_reliability_hs_pct_requires_400_rounds() -> None:
+    """HS% needs 30 matches and 400 rounds.  30 x 12 = 360 must fail."""
+    stats = _stats_with_matches_and_rounds(matches=30, rounds_per_match=12)
+    flags = reliability_flags(stats)
+    assert flags["hs_pct"] is False
+
+
+def test_reliability_first_blood_requires_400_rounds() -> None:
+    """FB / FD rates need 30 matches and 400 rounds."""
+    stats = _stats_with_matches_and_rounds(matches=30, rounds_per_match=12)
+    flags = reliability_flags(stats)
+    assert flags["fb_rate"] is False
+    assert flags["fd_rate"] is False
+
+
+def test_reliability_econ_rating_honours_round_floor() -> None:
+    """econ_rating threshold: matches=15, rounds=300.  15 x 14 = 210 must fail."""
+    stats = _stats_with_matches_and_rounds(matches=15, rounds_per_match=14)
+    flags = reliability_flags(stats)
+    assert flags["econ_rating"] is False
+
+
+def test_reliability_win_rate_round_floor_is_none() -> None:
+    """Win-rate has no round floor (binary per match).  15 short stomps
+    must still be reliable for win_rate at overall scope (uses ACS match
+    floor, no round dimension).
+    """
+    stats = _stats_with_matches_and_rounds(matches=15, rounds_per_match=10)
+    flags = reliability_flags(stats)
+    assert flags["win_rate"] is True
+
+
+def test_reliability_thick_rounds_clears_all_round_floors() -> None:
+    """30 matches x 25 rounds = 750 total: clears every round floor."""
+    stats = _stats_with_matches_and_rounds(matches=30, rounds_per_match=25)
+    flags = reliability_flags(stats)
+    assert all(flags.values()), f"all flags should be True with thick sample, got {flags}"

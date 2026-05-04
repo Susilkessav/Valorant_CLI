@@ -43,7 +43,7 @@ from rich.console import Console
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn, TextColumn
 
 from valocoach.core.config import Settings
-from valocoach.core.exceptions import APIError, SyncError
+from valocoach.core.exceptions import APIError, MapperError, SyncError
 from valocoach.data.api_client import HenrikClient
 from valocoach.data.database import session_scope
 from valocoach.data.models import AccountData, MMRData
@@ -317,6 +317,14 @@ class SyncOrchestrator:
                     except APIError as exc:
                         msg = f"Match {match_id[:8]}…: {exc}"
                         log.warning("sync skip — %s", msg)
+                        result.errors.append(msg)
+                    except MapperError as exc:
+                        # Bad input data for this match — skip and continue.
+                        # MapperError is per-match; do NOT promote to a
+                        # whole-sync failure (one rejected match shouldn't
+                        # poison the rest of the batch).
+                        msg = f"Match {match_id[:8]}…: {exc}"
+                        log.warning("sync skip (bad data) — %s", msg)
                         result.errors.append(msg)
                     finally:
                         progress.advance(task)

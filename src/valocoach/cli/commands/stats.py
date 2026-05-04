@@ -191,11 +191,19 @@ def run_stats(
     # Only shown when full match data was loaded (include_rounds=True) and the
     # round analyzer finds round events for the player. Absent data renders
     # nothing — users with pre-round-migration history see a clean stats card.
+    #
+    # Filter scope: the round analyzer must run on the SAME match set the
+    # aggregate card was computed from.  Otherwise ``--agent Jett --map Ascent``
+    # shows ACS for filtered Jett-on-Ascent matches but KAST/clutch/trade for
+    # every loaded match — silently mixing scopes (FINDINGS P1).
     if data.full_matches:
-        round_analysis = analyze_rounds(data.full_matches, player.puuid)
-        if round_analysis.rounds > 0:
-            con.print()
-            any_warn |= render_round_stats(con, round_analysis, overall.matches)
+        filtered_match_ids = {mp.match_id for mp in filtered}
+        filtered_full_matches = [m for m in data.full_matches if m.match_id in filtered_match_ids]
+        if filtered_full_matches:
+            round_analysis = analyze_rounds(filtered_full_matches, player.puuid)
+            if round_analysis.rounds > 0:
+                con.print()
+                any_warn |= render_round_stats(con, round_analysis, overall.matches)
 
     if any_warn:
         con.print()

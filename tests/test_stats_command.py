@@ -625,9 +625,14 @@ def test_run_stats_round_stats_rendered_when_full_matches_available():
     con = _capture_console()
 
     def _fetch(_s, **_kw):
-        # full_matches must be non-empty to enter the if-block.
-        fake_match = object()  # analyze_rounds is mocked — shape doesn't matter.
-        return PlayerData(player=_FakePlayer(), rows=rows, full_matches=[fake_match])
+        # full_matches must be non-empty to enter the if-block.  Each fake
+        # match needs a match_id so the filter-scope plumbing matches it
+        # against the rows.
+        fake_matches = []
+        for i in range(len(rows)):
+            fm = type("FakeMatch", (), {"match_id": f"m-{i}"})()
+            fake_matches.append(fm)
+        return PlayerData(player=_FakePlayer(), rows=rows, full_matches=fake_matches)
 
     with (
         patch(_FAKE_SETTINGS_PATCH, return_value=_fake_settings()),
@@ -639,3 +644,101 @@ def test_run_stats_round_stats_rendered_when_full_matches_available():
     out = con.file.getvalue()
     # render_round_stats should have added KAST or round-related content.
     assert "KAST" in out or "Round" in out or "Clutch" in out
+
+
+def test_run_stats_round_analysis_uses_filtered_match_set():
+    """Round-level stats must run on the filter-scoped match set, not all loaded.
+
+    Regression test for FINDINGS P1: ``--agent Jett --map Ascent`` showed
+    aggregate ACS/ADR for the filtered subset but KAST/clutch/trade rates
+    from every loaded match.  ``analyze_rounds`` must receive only
+    full_matches whose ``match_id`` is in the filtered row set.
+    """
+    from unittest.mock import patch
+
+    from valocoach.data.loader import PlayerData
+    from valocoach.stats.round_analyzer import RoundAnalysis
+
+    # 5 Jett rows + 5 Reyna rows.  Each row's match_id is "m-{i}".
+    # When --agent Jett is applied, only the Jett match_ids should reach
+    # analyze_rounds.
+    jett_rows = [_mp(agent="Jett", match_id=f"m-{i}") for i in range(5)]
+    reyna_rows = [_mp(agent="Reyna", match_id=f"m-{i}") for i in range(5, 10)]
+    all_rows = jett_rows + reyna_rows
+
+    # Each full_match is a stand-in carrying just the match_id — analyze_rounds
+    # is mocked so the shape doesn't matter beyond the filter key.
+    fake_full_matches = [type("FM", (), {"match_id": f"m-{i}"})() for i in range(10)]
+
+    captured: dict = {}
+
+    def _capture_analyze(matches, _puuid):
+        captured["match_ids"] = sorted(m.match_id for m in matches)
+        # Return a non-empty stub so the render_round_stats branch fires.
+        return RoundAnalysis(
+            rounds=40,
+            deaths=10,
+            teammate_deaths=15,
+            clutch_opportunities=3,
+            rounds_with_kill=20,
+            rounds_with_assist=5,
+            rounds_survived=25,
+            rounds_traded_death=4,
+            rounds_kast=30,
+            clutches_won=1,
+            traded_deaths=4,
+            trades_given=6,
+            double_kills=3,
+            triple_kills=1,
+            quadra_kills=0,
+            aces=0,
+        )
+
+    def _fetch(_s, **_kw):
+        return PlayerData(player=_FakePlayer(), rows=all_rows, full_matches=fake_full_matches)
+
+    con = _capture_console()
+    with (
+        patch(_FAKE_SETTINGS_PATCH, return_value=_fake_settings()),
+        patch(_FAKE_DATA_PATCH, side_effect=_fetch),
+        patch("valocoach.cli.commands.stats.analyze_rounds", side_effect=_capture_analyze),
+    ):
+        run_stats(period="all", agent="Jett", console=con)
+
+    # analyze_rounds must have received exactly the 5 Jett match_ids.
+    assert captured["match_ids"] == [f"m-{i}" for i in range(5)], (
+        f"round analysis ran on the wrong match set: {captured['match_ids']}"
+    )
+
+
+def test_run_stats_skips_round_analysis_when_filter_yields_no_full_matches():
+    """If the filter selects rows but none of the loaded full_matches match,
+    analyze_rounds must not be called (would otherwise produce zeros that
+    render misleadingly as a round-stats card)."""
+    from unittest.mock import patch
+
+    from valocoach.data.loader import PlayerData
+
+    rows = _make_rows(5)  # match_ids m-0..m-4
+    # full_matches with ids that DON'T overlap with any row — simulates
+    # round data only available for older matches outside the filter.
+    fake_full_matches = [type("FM", (), {"match_id": f"x-{i}"})() for i in range(5)]
+
+    analyze_called = {"count": 0}
+
+    def _spy_analyze(*_a, **_kw):
+        analyze_called["count"] += 1
+        raise AssertionError("analyze_rounds called with empty filter intersection")
+
+    def _fetch(_s, **_kw):
+        return PlayerData(player=_FakePlayer(), rows=rows, full_matches=fake_full_matches)
+
+    con = _capture_console()
+    with (
+        patch(_FAKE_SETTINGS_PATCH, return_value=_fake_settings()),
+        patch(_FAKE_DATA_PATCH, side_effect=_fetch),
+        patch("valocoach.cli.commands.stats.analyze_rounds", side_effect=_spy_analyze),
+    ):
+        run_stats(period="all", console=con)
+
+    assert analyze_called["count"] == 0

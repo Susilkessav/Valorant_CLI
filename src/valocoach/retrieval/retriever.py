@@ -2,9 +2,28 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 
 log = logging.getLogger(__name__)
+
+
+def _now_iso() -> str:
+    """Current UTC ISO8601 timestamp — same format as ``MetaCache.expires_at``."""
+    return datetime.now(UTC).isoformat()
+
+
+def _now_unix() -> int:
+    """Current UTC unix timestamp (seconds).
+
+    Used as the metadata key for live-collection TTL filtering — ChromaDB's
+    ``$gt`` operator requires numeric operands and rejects strings, so we
+    store the expiry as an int and compare against ``int(time.time())``.
+    The SQLite cache continues to use ISO8601 strings (``MetaCache.expires_at``)
+    because string comparisons via SQLAlchemy work fine there and the column
+    is human-readable for debugging.
+    """
+    return int(datetime.now(UTC).timestamp())
 
 
 @dataclass
@@ -101,8 +120,21 @@ def retrieve_static(
         seen: set[str] = set()
         vector_parts: list[str] = []
 
+        # LIVE_COLLECTION docs carry ``expires_at_unix`` (int seconds) in their
+        # metadata.  Filtering on ``expires_at_unix > now`` is the second line
+        # of defence: even if the SQLite-backed invalidation hook didn't run
+        # (process crash, patch detector skipped a cycle, ...) an expired
+        # live doc cannot reach the coach prompt.  Docs ingested before this
+        # change have no ``expires_at_unix`` field; ChromaDB excludes them
+        # from ``$gt`` filters, which is the safe outcome — they get treated
+        # as already expired and re-scraped on next demand.
+        now_unix = _now_unix()
+
         for query in queries:
             for cname in (STATIC_COLLECTION, LIVE_COLLECTION):
+                where_extra: dict | None = None
+                if cname == LIVE_COLLECTION:
+                    where_extra = {"expires_at_unix": {"$gt": now_unix}}
                 hits = search(
                     query,
                     data_dir,
@@ -110,6 +142,7 @@ def retrieve_static(
                     doc_types=["patch_note", "youtube", "web", "concept"],
                     max_distance=0.45,
                     collection_name=cname,
+                    where_extra=where_extra,
                 )
                 for hit in hits:
                     text = hit["text"]
@@ -186,7 +219,9 @@ async def _fetch_live_meta(
     Cache is checked first (volatile TTL). On a miss, the page is scraped,
     stored, and ingested into the vector store for future semantic queries.
     """
-    from valocoach.retrieval.cache import get_cached, store_cached
+    from datetime import timedelta
+
+    from valocoach.retrieval.cache import TTL_HOURS, get_cached, store_cached
     from valocoach.retrieval.ingester import ingest_text
     from valocoach.retrieval.scrapers.web import scrape_url
 
@@ -209,9 +244,18 @@ async def _fetch_live_meta(
             if not scraped:
                 continue
             text = scraped.text
-            await store_cached(url, text, source=source, ttl_tier="volatile")
+            ttl_tier = "volatile"
+            await store_cached(url, text, source=source, ttl_tier=ttl_tier)
             from valocoach.retrieval.vector_store import LIVE_COLLECTION
 
+            # Stamp TTL metadata on the Chroma row so retrieval can filter
+            # expired entries even before the SQLite cache invalidation
+            # hook runs.  Both halves of the cache must agree on the
+            # expiry — derive it from the same TTL_HOURS table the SQLite
+            # cache uses.  Stored as int unix seconds because ChromaDB's
+            # ``$gt`` operator only accepts numeric operands.
+            now = datetime.now(UTC)
+            expires = now + timedelta(hours=TTL_HOURS[ttl_tier])
             ingest_text(
                 settings.data_dir,
                 text,
@@ -219,6 +263,10 @@ async def _fetch_live_meta(
                 name=url,
                 source=url,
                 collection_name=LIVE_COLLECTION,
+                extra_metadata={
+                    "ttl_tier": ttl_tier,
+                    "expires_at_unix": int(expires.timestamp()),
+                },
             )
 
         chunks.append(text[:2000])

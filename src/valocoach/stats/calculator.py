@@ -206,32 +206,61 @@ def reliability_flags(stats: PlayerStats, *, is_split: bool = False) -> dict[str
     BUILD_PLAN threshold table (e.g. total kills, matches, rounds — raw
     counts, not rates) are intentionally absent: nothing to flag.
 
+    Both the match-count *and* the round-count floor in
+    :data:`SAMPLE_THRESHOLDS` must be cleared for a metric to be reliable.
+    A player with 15 short stomps (≈150 rounds) clears the ACS match
+    floor but not the round floor — and that's exactly the case we have
+    to flag, since per-round stats stabilise on round count, not match
+    count.  Win-rate is binary per match, so its threshold has
+    ``rounds=None`` and the round dimension is skipped.
+
     Args:
         stats:     The aggregated stats to check.
         is_split:  Set ``True`` when ``stats`` is one agent's or map's
                    slice of the player's history. Splits need a larger
                    sample than overall (BUILD_PLAN § win rate per split:
                    30+) because each slice is a narrower subset. When
-                   ``False`` (overall), win_rate uses the same ACS/ADR
-                   floor — overall win rate stabilises sooner than a
-                   split's.
+                   ``False`` (overall), win_rate uses the standard
+                   ``win_rate`` threshold; on splits it switches to
+                   ``win_rate_split``.
 
     Empty input (matches=0) returns every flag ``False`` so an empty
     profile card renders with consistent ⚠️ behaviour instead of mixing
     "no warning" and "warning" cells arbitrarily.
     """
     m = stats.matches
-    win_rate_threshold = MIN_MATCHES_WIN_RATE_SPLIT if is_split else MIN_MATCHES_ACS
+    r = stats.rounds
+
+    def _ok(threshold_key: str, override_min_matches: int | None = None) -> bool:
+        thresh = SAMPLE_THRESHOLDS.get(threshold_key)
+        if not thresh:
+            return True  # no threshold defined ≡ no minimum
+        min_m = (
+            override_min_matches
+            if override_min_matches is not None
+            else (thresh.get("matches") or 0)
+        )
+        if m < min_m:
+            return False
+        min_r = thresh.get("rounds")
+        return not (min_r and r < min_r)
+
+    # Win-rate match floor: overall uses MIN_MATCHES_ACS (more permissive —
+    # overall stabilises sooner because it pools across all splits); per-split
+    # uses MIN_MATCHES_WIN_RATE_SPLIT.  Round floor is None for both
+    # (win-rate is binary per match), so the round dimension never bites.
+    win_rate_floor = MIN_MATCHES_WIN_RATE_SPLIT if is_split else MIN_MATCHES_ACS
+    win_rate_key = "win_rate_split" if is_split else "win_rate"
     return {
-        "win_rate": m >= win_rate_threshold,
-        "acs": m >= MIN_MATCHES_ACS,
-        "adr": m >= MIN_MATCHES_ADR,
-        "kd": m >= MIN_MATCHES_KD,
-        "kda": m >= MIN_MATCHES_KD,  # same variance regime as K/D
-        "hs_pct": m >= MIN_MATCHES_HS,
-        "fb_rate": m >= MIN_MATCHES_FB,
-        "fd_rate": m >= MIN_MATCHES_FB,  # first-death is the same rarity
-        "econ_rating": m >= MIN_MATCHES_ADR,  # same convergence as ADR
+        "win_rate": _ok(win_rate_key, override_min_matches=win_rate_floor),
+        "acs": _ok("acs"),
+        "adr": _ok("adr"),
+        "kd": _ok("kd"),
+        "kda": _ok("kd"),  # same variance regime as K/D
+        "hs_pct": _ok("hs_pct"),
+        "fb_rate": _ok("first_blood_rate"),
+        "fd_rate": _ok("first_death_rate"),
+        "econ_rating": _ok("econ_rating"),
     }
 
 

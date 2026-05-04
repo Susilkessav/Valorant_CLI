@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import logging
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from sqlalchemy import select
 
@@ -78,26 +79,62 @@ async def store_cached(
             log.debug("Cache stored for %s (tier=%s, expires %s)", url, ttl_tier, expires[:10])
 
 
-async def invalidate_volatile() -> int:
-    """Delete all volatile-tier cache entries.
+def _delete_from_live_collection(data_dir: Path, where: dict) -> None:
+    """Delete matching documents from the live ChromaDB collection.
+
+    Best-effort: the SQLite ``meta_cache`` table is the source of truth for
+    cache lifecycle.  If ChromaDB is unavailable (not initialised yet,
+    on-disk corruption) we log and continue rather than failing the
+    invalidation pass.  The next ``retrieve_static`` call still filters
+    expired live docs by metadata, so freshness is preserved either way.
+    """
+    try:
+        # Lazy import — ChromaDB has a non-trivial start-up cost we don't
+        # want to pay on test paths that never touch the live collection.
+        from valocoach.retrieval.vector_store import LIVE_COLLECTION, delete_by_metadata
+
+        delete_by_metadata(data_dir, where, collection_name=LIVE_COLLECTION)
+    except Exception as exc:
+        log.warning("Live-collection cleanup failed (non-fatal): %s", exc)
+
+
+async def invalidate_volatile(data_dir: Path | None = None) -> int:
+    """Delete all volatile-tier cache entries from BOTH halves of the cache.
 
     Call this when a new patch version is detected — volatile content (live
     pick rates, standings) becomes stale immediately on patch day.
+
+    Args:
+        data_dir: When provided, also deletes matching documents from the
+                  live ChromaDB collection (``ttl_tier == "volatile"``).
+                  Without it the SQLite rows are evicted but the embeddings
+                  remain searchable until they fall outside ``expires_at``.
+                  Patch-day callers must pass it; tests that don't touch
+                  ChromaDB can omit it.
     """
     async with session_scope() as s:
         entries = (await s.scalars(select(MetaCache).where(MetaCache.ttl_tier == "volatile"))).all()
         count = len(entries)
         for entry in entries:
             await s.delete(entry)
+    if data_dir is not None:
+        _delete_from_live_collection(data_dir, {"ttl_tier": "volatile"})
     log.info("Invalidated %d volatile cache entries.", count)
     return count
 
 
-async def purge_expired() -> int:
-    """Delete all entries whose expires_at has passed.
+async def purge_expired(data_dir: Path | None = None) -> int:
+    """Delete all entries whose expires_at has passed, from both halves of the cache.
 
     Useful as a periodic housekeeping call — the app doesn't auto-purge
     on read (only the specific URL is evicted on a cache miss).
+
+    Args:
+        data_dir: When provided, also deletes live ChromaDB documents
+                  whose stored ``expires_at`` is in the past.  Without
+                  it, the SQLite rows are evicted but the embeddings
+                  remain (still filtered out of search by
+                  ``retrieve_static``'s ``expires_at > now`` clause).
     """
     now = _now_iso()
     async with session_scope() as s:
@@ -105,5 +142,10 @@ async def purge_expired() -> int:
         count = len(entries)
         for entry in entries:
             await s.delete(entry)
+    if data_dir is not None:
+        # Chroma ``$lt`` requires a numeric operand; we stamp ``expires_at_unix``
+        # as int seconds at ingest time (see retriever._fetch_live_meta).
+        now_unix = int(datetime.now(UTC).timestamp())
+        _delete_from_live_collection(data_dir, {"expires_at_unix": {"$lt": now_unix}})
     log.info("Purged %d expired cache entries.", count)
     return count

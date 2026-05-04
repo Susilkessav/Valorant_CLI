@@ -63,6 +63,75 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
 
 
 # ---------------------------------------------------------------------------
+# Session-wide FD limit bump
+# ---------------------------------------------------------------------------
+# ChromaDB caches PersistentClient instances in a process-global registry
+# keyed by data_dir. Each test using a fresh ``tmp_path`` gets a brand new
+# client; chromadb does not auto-close them, and macOS's default
+# ``ulimit -n`` (often 256) is hit well before the suite finishes when 100+
+# chromadb tests run in one process.
+#
+# Two complementary mitigations:
+#   1. Bump RLIMIT_NOFILE at session start (defence in depth — gives headroom
+#      even if the cache-clearing fixture below misses something).
+#   2. Clear chromadb's shared client cache between tests so dereferenced
+#      systems get garbage-collected and their files closed.
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    """Raise the file-descriptor soft limit to the hard limit if possible.
+
+    macOS defaults soft to 256, hard to either ``unlimited`` (rlim_infinity)
+    or a generous number.  Bumping the soft limit is enough — we're not
+    asking for more than the OS already permits.
+    """
+    try:
+        import resource
+
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        # Pick a generous target, but never exceed the hard cap.
+        target = min(hard, 8192) if hard != resource.RLIM_INFINITY else 8192
+        if soft < target:
+            resource.setrlimit(resource.RLIMIT_NOFILE, (target, hard))
+    except (ImportError, ValueError, OSError):
+        # Best-effort: Windows lacks RLIMIT_NOFILE, hardened systems may
+        # forbid the bump.  The cache-clearing fixture is the real safety
+        # net; this is just a backstop.
+        pass
+
+
+@pytest.fixture(autouse=True)
+def _reset_chroma_client_cache():
+    """Drop chromadb's process-global client cache after every test.
+
+    Without this, every ``tmp_path``-using test leaves a live PersistentClient
+    in the cache that holds open SQLite WAL handles, journals, and HNSW index
+    files.  After a few hundred tests we hit the FD limit and downstream
+    chromadb calls fail with "Too many open files" or sqlite "unable to open
+    database file" (both rooted in EMFILE).
+
+    Clearing the dict releases the references; CPython's reference counting
+    runs the systems' finalisers immediately, closing the files.
+    """
+    yield
+    try:
+        from chromadb.api.shared_system_client import SharedSystemClient
+
+        # Stop each cached system explicitly before dropping the reference —
+        # belt-and-braces to make sure file handles release even if the GC
+        # is delayed.
+        for system in list(SharedSystemClient._identifer_to_system.values()):
+            try:
+                system.stop()
+            except Exception:
+                pass
+        SharedSystemClient._identifer_to_system.clear()
+    except Exception:
+        # chromadb not installed in some test contexts; nothing to clean.
+        pass
+
+
+# ---------------------------------------------------------------------------
 # App settings
 # ---------------------------------------------------------------------------
 
