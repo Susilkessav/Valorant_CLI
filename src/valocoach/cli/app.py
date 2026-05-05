@@ -266,11 +266,16 @@ def config_init() -> None:
 
 @config_app.command("show")
 def config_show() -> None:
-    """Display current effective settings."""
+    """Display current effective settings (API keys are redacted)."""
     from valocoach.core.config import load_settings
 
     s = load_settings()
-    display.console.print(s.model_dump())
+    data = s.model_dump()
+    # Redact secrets so they are never accidentally exposed in terminal output,
+    # shell history captures, or screenshots.
+    if data.get("henrikdev_api_key"):
+        data["henrikdev_api_key"] = "***redacted***"
+    display.console.print(data)
 
 
 if __name__ == "__main__":

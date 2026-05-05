@@ -162,9 +162,7 @@ def build_ragas_dataset(results: list[dict[str, Any]]):
     try:
         from datasets import Dataset
     except ImportError as exc:
-        raise ImportError(
-            "The 'datasets' package is required: pip install datasets"
-        ) from exc
+        raise ImportError("The 'datasets' package is required: pip install datasets") from exc
 
     rows = []
     for r in results:
@@ -197,9 +195,7 @@ def _get_metrics(names: list[str]):
             Faithfulness,
         )
     except ImportError as exc:
-        raise ImportError(
-            "RAGAS is not installed.  Install it with:  pip install ragas"
-        ) from exc
+        raise ImportError("RAGAS is not installed.  Install it with:  pip install ragas") from exc
 
     mapping = {
         "faithfulness": Faithfulness(),
@@ -229,9 +225,7 @@ def run_ragas_eval(
     try:
         from ragas import evaluate
     except ImportError as exc:
-        raise ImportError(
-            "RAGAS is not installed.  Install it with:  pip install ragas"
-        ) from exc
+        raise ImportError("RAGAS is not installed.  Install it with:  pip install ragas") from exc
 
     metrics = _get_metrics(metric_names)
     result = evaluate(dataset=dataset, metrics=metrics)

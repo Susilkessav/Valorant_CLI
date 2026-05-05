@@ -10,6 +10,7 @@ Usage:
     python scripts/build_corpus.py --maps-only
     python scripts/build_corpus.py --dry-run      # print paths without writing
 """
+
 from __future__ import annotations
 
 import argparse
@@ -56,6 +57,7 @@ _NON_COMPETITIVE = {"District", "Kasbah", "Drift", "Piazza", "Glitch"}
 # API helpers
 # ---------------------------------------------------------------------------
 
+
 def _get(endpoint: str, **params) -> dict:
     params.setdefault("language", LANG)
     resp = httpx.get(f"{API_BASE}/{endpoint}", params=params, timeout=20, follow_redirects=True)
@@ -66,6 +68,7 @@ def _get(endpoint: str, **params) -> dict:
 # ---------------------------------------------------------------------------
 # Local JSON cost/playstyle lookup
 # ---------------------------------------------------------------------------
+
 
 def _load_agent_costs() -> dict[str, dict]:
     """Return {agent_name_lower: {ability_name_lower: cost_str, playstyle, economy_tip}}."""
@@ -116,6 +119,7 @@ def _load_map_extras() -> dict[str, dict]:
 # ---------------------------------------------------------------------------
 # Agent markdown generation
 # ---------------------------------------------------------------------------
+
 
 def _agent_markdown(agent: dict, costs: dict[str, dict]) -> str:
     name: str = agent["displayName"]
@@ -170,6 +174,7 @@ def _agent_markdown(agent: dict, costs: dict[str, dict]) -> str:
 # Map markdown generation
 # ---------------------------------------------------------------------------
 
+
 def _map_markdown(map_data: dict, extras: dict[str, dict]) -> str:
     name: str = map_data["displayName"]
     tactical: str = map_data.get("tacticalDescription") or ""
@@ -193,7 +198,7 @@ def _map_markdown(map_data: dict, extras: dict[str, dict]) -> str:
         """'A Long' with prefix 'a' → 'long'. Used for deduplication."""
         lo = name.lower()
         if lo.startswith(prefix + " "):
-            return lo[len(prefix) + 1:]
+            return lo[len(prefix) + 1 :]
         return lo
 
     # Merge extra callouts from JSON (add names not already present from API)
@@ -222,8 +227,7 @@ def _map_markdown(map_data: dict, extras: dict[str, dict]) -> str:
     sites_str = tactical.replace("Sites", "").strip(" /")
     if not sites_str:
         sites_str = "/".join(
-            sr for sr in sorted(by_region)
-            if sr not in ("Attacker Side", "Defender Side", "Mid")
+            sr for sr in sorted(by_region) if sr not in ("Attacker Side", "Defender Side", "Mid")
         )
 
     lines: list[str] = [f"# {name}", ""]
@@ -256,6 +260,7 @@ def _map_markdown(map_data: dict, extras: dict[str, dict]) -> str:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def _safe_filename(name: str) -> str:
     """Sanitise a display name for use as a filename."""
@@ -301,7 +306,8 @@ def build_maps(dry_run: bool, extras: dict) -> list[str]:
     # Filter to competitive maps: must have a site-based tactical description
     # and not be a known training/deathmatch arena.
     competitive = [
-        m for m in maps
+        m
+        for m in maps
         if "Site" in (m.get("tacticalDescription") or "")
         and m.get("displayName") not in _NON_COMPETITIVE
     ]
@@ -322,7 +328,9 @@ def build_maps(dry_run: bool, extras: dict) -> list[str]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--agents-only", action="store_true")
     parser.add_argument("--maps-only", action="store_true")
     parser.add_argument("--dry-run", action="store_true", help="Print paths without writing files.")

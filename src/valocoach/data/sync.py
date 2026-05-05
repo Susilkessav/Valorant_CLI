@@ -38,9 +38,10 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
-from rich.console import Console
-from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn, TextColumn
+if TYPE_CHECKING:
+    from rich.console import Console
 
 from valocoach.core.config import Settings
 from valocoach.core.exceptions import APIError, MapperError, SyncError
@@ -116,7 +117,11 @@ class SyncOrchestrator:
                          tier safe).  Increase for paid API keys.
         """
         self._client = client
-        self._con = console or Console()
+        if console is None:
+            from rich.console import Console  # lazy — keeps data layer import-clean
+
+            console = Console()
+        self._con = console
         self._sem = asyncio.Semaphore(concurrency)
 
     # ------------------------------------------------------------------
@@ -293,6 +298,8 @@ class SyncOrchestrator:
         the gather degrades to a sequential loop — each match waits for the previous
         one's semaphore release before starting.
         """
+        from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn, TextColumn
+
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),

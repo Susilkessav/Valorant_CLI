@@ -182,7 +182,7 @@ def run_scenario(scenario: Scenario, model: str | None) -> ScenarioResult:
             elapsed_s=elapsed,
         )
 
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return ScenarioResult(
             scenario=scenario,
             passed=False,
@@ -222,8 +222,10 @@ def _print_summary(results: list[ScenarioResult]) -> None:
     failed = total - passed
     color = GREEN if failed == 0 else RED
     print()
-    print(f"{BOLD}Results:{RESET}  {color}{passed}/{total} passed{RESET}"
-          + (f"  ({RED}{failed} failed{RESET})" if failed else ""))
+    print(
+        f"{BOLD}Results:{RESET}  {color}{passed}/{total} passed{RESET}"
+        + (f"  ({RED}{failed} failed{RESET})" if failed else "")
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -236,25 +238,18 @@ def main() -> None:
         description="Run LLM eval scenarios against the ValoCoach coaching pipeline."
     )
     parser.add_argument(
-        "--scenario", metavar="ID",
-        help="Run a single scenario by its ID (default: all)."
+        "--scenario", metavar="ID", help="Run a single scenario by its ID (default: all)."
     )
+    parser.add_argument("--fail-fast", action="store_true", help="Stop after the first failure.")
     parser.add_argument(
-        "--fail-fast", action="store_true",
-        help="Stop after the first failure."
+        "--model", metavar="NAME", help="Override the Ollama model for this run (e.g. qwen3:14b)."
     )
+    parser.add_argument("--output", metavar="FILE", help="Write full results as JSON to this file.")
     parser.add_argument(
-        "--model", metavar="NAME",
-        help="Override the Ollama model for this run (e.g. qwen3:14b)."
-    )
-    parser.add_argument(
-        "--output", metavar="FILE",
-        help="Write full results as JSON to this file."
-    )
-    parser.add_argument(
-        "--scenarios-file", metavar="PATH",
+        "--scenarios-file",
+        metavar="PATH",
         default=str(SCENARIOS_PATH),
-        help=f"Path to scenarios YAML (default: {SCENARIOS_PATH})."
+        help=f"Path to scenarios YAML (default: {SCENARIOS_PATH}).",
     )
     args = parser.parse_args()
 

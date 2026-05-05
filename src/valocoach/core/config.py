@@ -35,7 +35,7 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_file=".env",
-        env_prefix="",
+        env_prefix="VALOCOACH_",
         extra="ignore",
         # Point the TOML source at the user's config. pydantic-settings
         # tolerates a missing file — TomlConfigSettingsSource simply yields
@@ -105,8 +105,11 @@ def write_default_config() -> Path:
         "riot_name": "",
         "riot_tag": "",
         "riot_region": "na",
+        "henrikdev_api_key": "",
         "ollama_model": "qwen3:8b",
         "ollama_host": "http://localhost:11434",
+        "llm_temperature": 0.6,
+        "llm_max_tokens": 3000,
     }
     with CONFIG_PATH.open("wb") as f:
         tomli_w.dump(defaults, f)

@@ -9,7 +9,13 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 from valocoach.core.config import Settings
-from valocoach.core.preflight import CheckResult, check_ollama, check_riot_id, check_vector_store
+from valocoach.core.preflight import (
+    CheckResult,
+    _is_ollama_model,
+    check_ollama,
+    check_riot_id,
+    check_vector_store,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -106,6 +112,77 @@ class TestCheckOllama:
     # NOTE: httpx is imported at module level in preflight.py so the patch
     # target is "valocoach.core.preflight.httpx.get" (attribute on the
     # already-bound module reference).  The tests above use this correctly.
+
+    # ------------------------------------------------------------------
+    # Provider-aware routing — cloud providers must skip the Ollama probe
+    # ------------------------------------------------------------------
+
+    def test_skips_probe_for_anthropic_prefix(self):
+        """anthropic/ model must return ok without touching httpx."""
+        settings = _settings(ollama_model="anthropic/claude-3-5-sonnet-20241022")
+        with patch("valocoach.core.preflight.httpx.get", side_effect=AssertionError("should not probe")) as mock_get:
+            result = check_ollama(settings)
+        mock_get.assert_not_called()
+        assert result.ok
+
+    def test_skips_probe_for_openai_prefix(self):
+        """openai/ model must return ok without touching httpx."""
+        settings = _settings(ollama_model="openai/gpt-4o")
+        with patch("valocoach.core.preflight.httpx.get", side_effect=AssertionError("should not probe")) as mock_get:
+            result = check_ollama(settings)
+        mock_get.assert_not_called()
+        assert result.ok
+
+    def test_explicit_ollama_prefix_still_probes(self):
+        """ollama/ prefix should still go through the Ollama connectivity check."""
+        settings = _settings(ollama_host="http://localhost:11434", ollama_model="ollama/qwen3:8b")
+        resp = _fake_tags_response(["qwen3:8b"])
+        with patch("valocoach.core.preflight.httpx.get", return_value=resp):
+            result = check_ollama(settings)
+        assert result.ok
+
+    def test_explicit_ollama_prefix_strips_for_comparison(self):
+        """ollama/model prefix is stripped before comparing against pulled model names."""
+        settings = _settings(ollama_host="http://localhost:11434", ollama_model="ollama/qwen3:14b")
+        resp = _fake_tags_response(["qwen3:14b"])
+        with patch("valocoach.core.preflight.httpx.get", return_value=resp):
+            result = check_ollama(settings)
+        assert result.ok
+
+    def test_explicit_ollama_prefix_model_not_pulled(self):
+        """ollama/model that is not pulled still returns a failing result."""
+        settings = _settings(ollama_host="http://localhost:11434", ollama_model="ollama/qwen3:72b")
+        resp = _fake_tags_response(["qwen3:8b"])
+        with patch("valocoach.core.preflight.httpx.get", return_value=resp):
+            result = check_ollama(settings)
+        assert not result.ok
+        assert "qwen3:72b" in result.message  # bare name, not prefixed
+        assert "ollama pull qwen3:72b" in result.hint
+
+
+# ---------------------------------------------------------------------------
+# _is_ollama_model
+# ---------------------------------------------------------------------------
+
+
+class TestIsOllamaModel:
+    def test_bare_name_is_ollama(self):
+        assert _is_ollama_model("qwen3:8b") is True
+
+    def test_ollama_prefix_is_ollama(self):
+        assert _is_ollama_model("ollama/qwen3:8b") is True
+
+    def test_anthropic_prefix_is_not_ollama(self):
+        assert _is_ollama_model("anthropic/claude-3-5-sonnet-20241022") is False
+
+    def test_openai_prefix_is_not_ollama(self):
+        assert _is_ollama_model("openai/gpt-4o") is False
+
+    def test_case_insensitive_prefix(self):
+        assert _is_ollama_model("Ollama/qwen3:8b") is True
+
+    def test_unknown_provider_is_not_ollama(self):
+        assert _is_ollama_model("groq/llama3-8b") is False
 
 
 # ---------------------------------------------------------------------------

@@ -189,6 +189,63 @@ def test_sync_errors_on_sync_error():
 
 
 # ---------------------------------------------------------------------------
+# config show — secret redaction
+# ---------------------------------------------------------------------------
+
+
+def test_config_show_redacts_api_key():
+    """config show must never print the raw henrikdev_api_key value."""
+    from unittest.mock import patch as mock_patch
+
+    fake_settings = MagicMock()
+    fake_settings.model_dump.return_value = {
+        "riot_name": "TestPlayer",
+        "henrikdev_api_key": "super-secret-key-abc123",
+        "ollama_model": "qwen3:8b",
+    }
+
+    with mock_patch("valocoach.core.config.load_settings", return_value=fake_settings):
+        result = runner.invoke(app, ["config", "show"])
+
+    assert result.exit_code == 0
+    assert "super-secret-key-abc123" not in result.stdout
+    assert "redacted" in result.stdout
+
+
+def test_config_show_empty_api_key_not_redacted():
+    """An empty henrikdev_api_key should not be changed to 'redacted'."""
+    from unittest.mock import patch as mock_patch
+
+    fake_settings = MagicMock()
+    fake_settings.model_dump.return_value = {
+        "riot_name": "TestPlayer",
+        "henrikdev_api_key": "",  # empty — user hasn't set it yet
+        "ollama_model": "qwen3:8b",
+    }
+
+    with mock_patch("valocoach.core.config.load_settings", return_value=fake_settings):
+        result = runner.invoke(app, ["config", "show"])
+
+    assert result.exit_code == 0
+    assert "redacted" not in result.stdout
+
+
+def test_config_init_creates_file():
+    """config init must create a default config and report its path."""
+    from unittest.mock import patch as mock_patch
+    from pathlib import Path
+
+    with mock_patch(
+        "valocoach.core.config.write_default_config",
+        return_value=Path("/tmp/test-config.toml"),
+    ):
+        result = runner.invoke(app, ["config", "init"])
+
+    assert result.exit_code == 0
+    assert "test-config.toml" in result.stdout
+
+
+# ---------------------------------------------------------------------------
 # index command (lines 220-229)
 # ---------------------------------------------------------------------------
 

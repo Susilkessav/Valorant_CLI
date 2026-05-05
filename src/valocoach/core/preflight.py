@@ -39,8 +39,28 @@ class CheckResult(NamedTuple):
 # ---------------------------------------------------------------------------
 
 
+def _is_ollama_model(model: str) -> bool:
+    """Return True when *model* should be served by a local Ollama instance.
+
+    LiteLLM uses an optional ``provider/model`` prefix convention:
+
+    - ``"qwen3:8b"``               → Ollama (no prefix → default)
+    - ``"ollama/qwen3:8b"``        → Ollama (explicit prefix)
+    - ``"anthropic/claude-3-5-sonnet"`` → cloud provider — skip probe
+    - ``"openai/gpt-4o"``          → cloud provider — skip probe
+    """
+    if "/" not in model:
+        return True  # bare model name → Ollama default
+    prefix = model.split("/", 1)[0].lower()
+    return prefix == "ollama"
+
+
 def check_ollama(settings) -> CheckResult:
     """Probe Ollama's HTTP API and verify the configured model is pulled.
+
+    For non-Ollama model prefixes (``anthropic/``, ``openai/``, etc.) the
+    probe is skipped and an ok result is returned immediately — those
+    providers are managed externally and do not need a local daemon.
 
     Uses a 3-second timeout so the caller is not blocked for long when
     Ollama is down.  The probe hits ``/api/tags`` (lists pulled models) —
@@ -50,6 +70,12 @@ def check_ollama(settings) -> CheckResult:
     - Ollama is not reachable at ``settings.ollama_host``.
     - The configured ``settings.ollama_model`` has not been pulled yet.
     """
+    model = settings.ollama_model
+    if not _is_ollama_model(model):
+        return CheckResult(
+            ok=True, message=f"Non-Ollama provider for '{model}' — skipping Ollama probe."
+        )
+
     url = f"{settings.ollama_host}/api/tags"
     try:
         resp = httpx.get(url, timeout=3.0)
@@ -63,26 +89,28 @@ def check_ollama(settings) -> CheckResult:
 
     # Verify the configured model is pulled.  Ollama stores model names as
     # "qwen3:8b" or "qwen3:8b:latest" — treat them as equivalent by checking
-    # the base name prefix.
-    model = settings.ollama_model
+    # the base name prefix.  Strip any "ollama/" LiteLLM prefix first.
+    bare_model = model.split("/", 1)[-1] if "/" in model else model
     tags = resp.json().get("models", [])
     names = {m.get("name", "") for m in tags}
 
     # Empty means no models at all; non-empty but not matching is also a miss.
+    # Use bare_model (stripped of any "ollama/" prefix) for comparisons.
     model_available = any(
-        n == model or n.startswith(f"{model}:") or model.startswith(f"{n}:") for n in names
+        n == bare_model or n.startswith(f"{bare_model}:") or bare_model.startswith(f"{n}:")
+        for n in names
     )
     if not names:
         return CheckResult(
             ok=False,
-            message=f"No models are pulled in Ollama (configured: '{model}').",
-            hint=f"Pull it with:  ollama pull {model}",
+            message=f"No models are pulled in Ollama (configured: '{bare_model}').",
+            hint=f"Pull it with:  ollama pull {bare_model}",
         )
     if not model_available:
         return CheckResult(
             ok=False,
-            message=f"Model '{model}' is not pulled in Ollama.",
-            hint=f"Pull it with:  ollama pull {model}",
+            message=f"Model '{bare_model}' is not pulled in Ollama.",
+            hint=f"Pull it with:  ollama pull {bare_model}",
         )
 
     return CheckResult(ok=True, message="Ollama reachable and model available.")

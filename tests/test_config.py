@@ -15,7 +15,7 @@ def test_settings_loads_with_defaults():
 
 
 def test_settings_respects_env(monkeypatch):
-    monkeypatch.setenv("OLLAMA_MODEL", "qwen3:14b")
+    monkeypatch.setenv("VALOCOACH_OLLAMA_MODEL", "qwen3:14b")
     s = Settings(_env_file=None)
     assert s.ollama_model == "qwen3:14b"
 
@@ -112,8 +112,8 @@ def test_missing_toml_is_not_an_error(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_write_default_config_creates_file_when_missing(tmp_path, monkeypatch):
-    """write_default_config creates the TOML file when it doesn't exist yet."""
+def _write_config_to(tmp_path, monkeypatch):
+    """Helper: write default config to a tmp dir and return the parsed TOML."""
     import tomllib
 
     from valocoach.core.config import write_default_config
@@ -122,16 +122,34 @@ def test_write_default_config_creates_file_when_missing(tmp_path, monkeypatch):
     fake_path = fake_dir / "config.toml"
     monkeypatch.setattr("valocoach.core.config.CONFIG_DIR", fake_dir)
     monkeypatch.setattr("valocoach.core.config.CONFIG_PATH", fake_path)
-
-    result = write_default_config()
-
-    assert result == fake_path
-    assert fake_path.exists()
+    write_default_config()
     with fake_path.open("rb") as f:
-        data = tomllib.load(f)
+        return tomllib.load(f), fake_path
+
+
+def test_write_default_config_creates_file_when_missing(tmp_path, monkeypatch):
+    """write_default_config creates the TOML file when it doesn't exist yet."""
+    data, fake_path = _write_config_to(tmp_path, monkeypatch)
+    assert fake_path.exists()
     assert data["riot_name"] == ""
     assert data["riot_region"] == "na"
     assert "ollama_model" in data
+
+
+def test_write_default_config_includes_api_key_field(tmp_path, monkeypatch):
+    """write_default_config must include henrikdev_api_key so the user knows to fill it in."""
+    data, _ = _write_config_to(tmp_path, monkeypatch)
+    assert "henrikdev_api_key" in data
+    assert data["henrikdev_api_key"] == ""
+
+
+def test_write_default_config_includes_llm_fields(tmp_path, monkeypatch):
+    """write_default_config must include llm_temperature and llm_max_tokens."""
+    data, _ = _write_config_to(tmp_path, monkeypatch)
+    assert "llm_temperature" in data
+    assert "llm_max_tokens" in data
+    assert isinstance(data["llm_temperature"], float)
+    assert isinstance(data["llm_max_tokens"], int)
 
 
 def test_write_default_config_skips_existing_file(tmp_path, monkeypatch):
