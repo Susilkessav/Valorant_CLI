@@ -1104,3 +1104,34 @@ class TestPatchTrackerInvalidatesLive:
 
         # The volatile live doc must be gone.
         assert collection_count(tmp_path, LIVE_COLLECTION) == 0
+
+
+# ---------------------------------------------------------------------------
+# _delete_from_live_collection — exception path (cache.py lines 97-98)
+# ---------------------------------------------------------------------------
+
+
+class TestDeleteFromLiveCollectionExceptionPath:
+    """When the live-collection delete raises, the error is logged (not raised).
+
+    This guards the ``except Exception`` handler in cache._delete_from_live_collection
+    so the caller (invalidate_volatile / purge_expired) is never interrupted by
+    an unavailable or corrupt ChromaDB instance.
+    """
+
+    @pytest.mark.asyncio
+    async def test_delete_by_metadata_exception_is_swallowed(
+        self, tmp_path, cache_db
+    ) -> None:
+        """_delete_from_live_collection catches and logs any exception from delete_by_metadata,
+        then continues without re-raising."""
+        from unittest.mock import patch
+
+        from valocoach.retrieval.cache import _delete_from_live_collection
+
+        with patch(
+            "valocoach.retrieval.vector_store.delete_by_metadata",
+            side_effect=RuntimeError("chromadb unavailable"),
+        ):
+            # Must NOT raise — the function is best-effort.
+            _delete_from_live_collection(tmp_path, {"ttl_tier": "volatile"})

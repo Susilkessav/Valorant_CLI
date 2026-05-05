@@ -324,6 +324,22 @@ class TestAnomalyDisplay:
         dd = self._acs_decline().delta_display
         assert dd.startswith("-") and "%" in dd
 
+    def test_delta_display_absolute_when_baseline_zero(self) -> None:
+        """When baseline_mean==0 pct_delta is None, so delta_display falls back
+        to the absolute signed value (line 183: ``f"{self.delta:+.2f}"``).
+
+        _check_one("acs", [200.0], 0.0, 0.1) triggers this:
+          - fmt = ".0f"   (not "pct")
+          - baseline_mean = 0.0  → pct_delta = None
+          - delta = form_mean - baseline_mean = 200.0 - 0.0 = +200.0
+        """
+        a = _check_one("acs", [200.0], 0.0, 0.1)
+        assert a is not None
+        assert a.pct_delta is None  # pre-condition for the branch we're hitting
+        assert a.fmt != "pct"
+        dd = a.delta_display
+        assert dd == "+200.00"
+
     def test_one_liner_contains_sigma(self) -> None:
         line = self._acs_decline().one_liner()
         assert "\u03c3" in line  # sigma character

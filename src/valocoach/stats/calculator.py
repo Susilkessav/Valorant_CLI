@@ -233,8 +233,8 @@ def reliability_flags(stats: PlayerStats, *, is_split: bool = False) -> dict[str
 
     def _ok(threshold_key: str, override_min_matches: int | None = None) -> bool:
         thresh = SAMPLE_THRESHOLDS.get(threshold_key)
-        if not thresh:
-            return True  # no threshold defined ≡ no minimum
+        if not thresh:  # pragma: no cover
+            return True  # all _ok() callers use SAMPLE_THRESHOLDS keys
         min_m = (
             override_min_matches
             if override_min_matches is not None

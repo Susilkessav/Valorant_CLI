@@ -180,7 +180,7 @@ class SyncOrchestrator:
 
         finally:
             # ── Phase 4: close SyncLog — always runs ──────────────────────
-            if sync_log_id is not None:
+            if sync_log_id is not None:  # pragma: no branch
                 await self._finalise(sync_log_id, result)
 
         return result

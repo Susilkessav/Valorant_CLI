@@ -192,6 +192,51 @@ class TestIngestKnowledgeBaseProgress:
         assert kwargs.get("on_progress") is None
 
 
+class TestIngestKnowledgeBaseMapMeta:
+    """Cover the map_meta loop body in ingester.py (lines 108-112).
+
+    The existing tests use ``{"map_meta": {}}`` (empty dict) so the loop
+    body never runs.  This class uses a non-empty map_meta to exercise it.
+    """
+
+    def test_nonempty_map_meta_generates_per_map_docs(self):
+        """Each entry in map_meta must produce one text/id/meta triple."""
+        from valocoach.retrieval.ingester import ingest_knowledge_base
+
+        with (
+            patch(_UPSERT_BATCH, return_value=3) as mock_upsert,
+            patch(
+                "valocoach.retrieval.ingester.json.load",
+                side_effect=[
+                    {"agents": []},
+                    {"maps": []},
+                    {"map_meta": {"Haven": {"callouts": ["A Long", "B Site"]}}},
+                ],
+            ),
+            patch("builtins.open", MagicMock()),
+            patch(
+                "valocoach.retrieval.agents.format_agent_context",
+                return_value="agent text",
+            ),
+            patch(
+                "valocoach.retrieval.maps.format_map_context",
+                return_value="map text",
+            ),
+            patch(
+                "valocoach.retrieval.meta.format_meta_context",
+                return_value="meta text",
+            ),
+        ):
+            counts = ingest_knowledge_base(Path("/tmp"))
+
+        # One doc for the global tier list + one for Haven → meta count = 2.
+        assert counts["meta"] == 2
+        # _upsert_batch was called with texts including the Haven meta doc.
+        args, _kwargs = mock_upsert.call_args
+        ids = args[2]  # positional: data_dir, texts, ids, metas
+        assert any("haven" in id_.lower() for id_ in ids)
+
+
 # ---------------------------------------------------------------------------
 # CLI ingest --seed integration
 # ---------------------------------------------------------------------------

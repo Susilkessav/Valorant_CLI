@@ -83,3 +83,30 @@ def test_stream_completion_empty_history_treated_as_none():
 
     messages = mock_call.call_args.kwargs["messages"]
     assert len(messages) == 2  # system + user only
+
+
+def test_stream_completion_keeps_anthropic_prefix_unchanged():
+    """A model that already carries a provider prefix must NOT get 'ollama/' prepended."""
+    settings = Settings(_env_file=None)
+    object.__setattr__(settings, "ollama_model", "anthropic/claude-3-5-sonnet-20241022")
+
+    with patch("valocoach.llm.provider.litellm.completion") as mock_call:
+        mock_call.return_value = iter([])
+        list(stream_completion(settings, "sys", "user"))
+
+    passed_model = mock_call.call_args.kwargs["model"]
+    assert passed_model == "anthropic/claude-3-5-sonnet-20241022"
+    assert not passed_model.startswith("ollama/ollama/")
+    assert not passed_model.startswith("ollama/anthropic/")
+
+
+def test_stream_completion_keeps_openai_prefix_unchanged():
+    """openai/ prefix must pass through to LiteLLM without modification."""
+    settings = Settings(_env_file=None)
+    object.__setattr__(settings, "ollama_model", "openai/gpt-4o")
+
+    with patch("valocoach.llm.provider.litellm.completion") as mock_call:
+        mock_call.return_value = iter([])
+        list(stream_completion(settings, "sys", "user"))
+
+    assert mock_call.call_args.kwargs["model"] == "openai/gpt-4o"

@@ -23,6 +23,8 @@ from valocoach.stats.calculator import (
     AgentStats,
     MapStats,
     PlayerStats,
+    StatResult,
+    _check_threshold,
     compute_per_agent,
     compute_per_map,
     compute_player_stats,
@@ -519,3 +521,38 @@ def test_reliability_thick_rounds_clears_all_round_floors() -> None:
     stats = _stats_with_matches_and_rounds(matches=30, rounds_per_match=25)
     flags = reliability_flags(stats)
     assert all(flags.values()), f"all flags should be True with thick sample, got {flags}"
+
+
+# ---------------------------------------------------------------------------
+# StatValue.display — branch coverage (lines 92-96)
+# ---------------------------------------------------------------------------
+
+
+def test_stat_value_display_pct_format() -> None:
+    """format='pct' → value rendered as-is with one decimal place and % suffix."""
+    sv = StatResult(value=22.3, label="HS%", format="pct")
+    assert sv.display == "22.3%"
+
+
+def test_stat_value_display_ratio_format() -> None:
+    """format='ratio' → value rendered with two decimal places."""
+    sv = StatResult(value=1.75, label="K/D", format="ratio")
+    assert sv.display == "1.75"
+
+
+def test_stat_value_display_fallback_format() -> None:
+    """Any other format string is passed directly to str.format — e.g. '.0f'."""
+    sv = StatResult(value=243.5, label="ACS", format=".0f")
+    assert sv.display == "244"
+
+
+# ---------------------------------------------------------------------------
+# _check_threshold — branch coverage (line 111)
+# ---------------------------------------------------------------------------
+
+
+def test_check_threshold_unknown_metric_returns_reliable() -> None:
+    """A metric absent from SAMPLE_THRESHOLDS is assumed reliable."""
+    ok, warning = _check_threshold("nonexistent_metric", matches=1, rounds=0)
+    assert ok is True
+    assert warning is None

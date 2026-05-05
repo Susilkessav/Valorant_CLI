@@ -659,3 +659,50 @@ class TestSyncOrchestratorMissingBranches:
 
         # _finalise was NOT called because sync_log_id remained None
         complete_sync_mock.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# MapperError in _fetch_all — lines 328-335 (bad-data skip, non-fatal)
+# ---------------------------------------------------------------------------
+
+
+class TestFetchAllMapperError:
+    """A MapperError raised by upsert_match_details is caught per-match,
+    appended to result.errors, and does NOT abort the remaining batch."""
+
+    @pytest.mark.asyncio
+    async def test_mapper_error_is_non_fatal_and_collected(
+        self, account_data, mmr_data, match_details
+    ) -> None:
+        from valocoach.core.exceptions import MapperError
+
+        session = _make_session()
+        client = _make_client(
+            account_data,
+            mmr_data,
+            stored=[_stored_match(MATCH_A), _stored_match(MATCH_B)],
+            details=match_details,
+        )
+
+        with (
+            patch(_P_SCOPE, lambda: _scope(session)),
+            patch(_P_UPSERT_PLAYER, new_callable=AsyncMock),
+            patch(_P_START_SYNC, new_callable=AsyncMock, return_value=_sync_log_mock()),
+            patch(_P_MATCH_EXISTS, new_callable=AsyncMock, return_value=False),
+            # First call raises MapperError; second returns a real match object.
+            patch(
+                _P_UPSERT_DETAILS,
+                new_callable=AsyncMock,
+                side_effect=[MapperError("bad agent id"), MagicMock()],
+            ),
+            patch(_P_COMPLETE_SYNC),
+            patch(_P_CLOSE_STALE, new=AsyncMock(return_value=0)),
+        ):
+            orch = SyncOrchestrator(client, console=_quiet_console())
+            result = await orch.run("na", "Yoursaviour01", "SK04")
+
+        # Sync as a whole succeeds — one bad match does not poison the batch.
+        assert result.ok
+        assert len(result.errors) == 1
+        assert "bad agent id" in result.errors[0]
+        assert result.matches_new == 1  # second match stored successfully
