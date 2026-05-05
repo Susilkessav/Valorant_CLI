@@ -15,16 +15,18 @@ from valocoach.data.models import (
 from valocoach.data.models import (
     MatchPlayer as MatchPlayerModel,
 )
-from valocoach.data.orm_models import Match, MatchPlayer, Player
+from valocoach.data.orm_models import MMRHistory, Match, MatchPlayer, Player
 from valocoach.data.repository import (
     close_stale_syncs,
     complete_sync,
     get_match,
+    get_mmr_history,
     get_player,
     get_player_by_name,
     get_recent_matches,
     get_recent_matches_full,
     match_exists,
+    record_mmr_snapshot,
     start_sync,
     upsert_match,
     upsert_match_details,
@@ -608,3 +610,127 @@ async def test_close_stale_syncs_closes_incomplete_rows(db_session):
     # Current must be untouched.
     cur_row = await db_session.get(SyncLog, current.id)
     assert cur_row.completed_at is None
+
+
+# ---------------------------------------------------------------------------
+# record_mmr_snapshot / get_mmr_history
+# ---------------------------------------------------------------------------
+
+
+async def test_record_mmr_snapshot_inserts_first_row(db_session, account_data, mmr_data):
+    """First call always inserts (no previous row to compare against)."""
+    await upsert_player(db_session, account_data, mmr_data)
+    await db_session.flush()
+
+    snapshot = await record_mmr_snapshot(db_session, PUUID, mmr_data)
+    await db_session.flush()
+
+    assert snapshot is not None
+    assert isinstance(snapshot, MMRHistory)
+    assert snapshot.puuid == PUUID
+    assert snapshot.tier == 12
+    assert snapshot.tier_patched == "Gold 1"
+    assert snapshot.rr == 0
+    assert snapshot.elo == 900
+    assert snapshot.mmr_change == -13
+
+
+async def test_record_mmr_snapshot_skips_when_elo_unchanged(db_session, account_data, mmr_data):
+    """Second call with identical ELO returns None — no duplicate row."""
+    await upsert_player(db_session, account_data, mmr_data)
+    await db_session.flush()
+
+    await record_mmr_snapshot(db_session, PUUID, mmr_data)
+    await db_session.flush()
+
+    # Same ELO — should be skipped.
+    result = await record_mmr_snapshot(db_session, PUUID, mmr_data)
+    await db_session.flush()
+
+    assert result is None
+
+    history = await get_mmr_history(db_session, PUUID)
+    assert len(history) == 1  # only one row despite two calls
+
+
+async def test_record_mmr_snapshot_inserts_when_elo_changes(db_session, account_data, mmr_data):
+    """When ELO increases the snapshot is recorded as a second row."""
+    await upsert_player(db_session, account_data, mmr_data)
+    await db_session.flush()
+
+    await record_mmr_snapshot(db_session, PUUID, mmr_data)
+    await db_session.flush()
+
+    # Simulate a win: +22 RR.
+    mmr_data.current_data.elo = 922
+    mmr_data.current_data.ranking_in_tier = 22
+    mmr_data.current_data.mmr_change_to_last_game = 22
+
+    second = await record_mmr_snapshot(db_session, PUUID, mmr_data)
+    await db_session.flush()
+
+    assert second is not None
+    assert second.elo == 922
+    assert second.rr == 22
+    assert second.mmr_change == 22
+
+    history = await get_mmr_history(db_session, PUUID)
+    assert len(history) == 2
+
+
+async def test_get_mmr_history_newest_first(db_session, account_data, mmr_data):
+    """get_mmr_history returns rows ordered newest first."""
+    await upsert_player(db_session, account_data, mmr_data)
+    await db_session.flush()
+
+    await record_mmr_snapshot(db_session, PUUID, mmr_data)
+    await db_session.flush()
+
+    mmr_data.current_data.elo = 950
+    await record_mmr_snapshot(db_session, PUUID, mmr_data)
+    await db_session.flush()
+
+    history = await get_mmr_history(db_session, PUUID)
+    assert len(history) == 2
+    # Newest first — second insert (elo=950) should be index 0.
+    assert history[0].elo == 950
+    assert history[1].elo == 900
+
+
+async def test_get_mmr_history_respects_limit(db_session, account_data, mmr_data):
+    """get_mmr_history returns at most *limit* rows."""
+    await upsert_player(db_session, account_data, mmr_data)
+    await db_session.flush()
+
+    # Insert 5 distinct snapshots.
+    for delta in range(5):
+        mmr_data.current_data.elo = 900 + delta * 10
+        await record_mmr_snapshot(db_session, PUUID, mmr_data)
+        await db_session.flush()
+
+    history = await get_mmr_history(db_session, PUUID, limit=3)
+    assert len(history) == 3
+
+
+async def test_get_mmr_history_empty_when_none_recorded(db_session, account_data, mmr_data):
+    """Returns an empty list when no snapshots exist for the puuid."""
+    await upsert_player(db_session, account_data, mmr_data)
+    await db_session.flush()
+
+    history = await get_mmr_history(db_session, PUUID)
+    assert history == []
+
+
+async def test_record_mmr_snapshot_mmr_change_zero_stored_as_none(
+    db_session, account_data, mmr_data
+):
+    """mmr_change_to_last_game=0 is stored as None (no meaningful delta)."""
+    mmr_data.current_data.mmr_change_to_last_game = 0
+    await upsert_player(db_session, account_data, mmr_data)
+    await db_session.flush()
+
+    snapshot = await record_mmr_snapshot(db_session, PUUID, mmr_data)
+    await db_session.flush()
+
+    assert snapshot is not None
+    assert snapshot.mmr_change is None

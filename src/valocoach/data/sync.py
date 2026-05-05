@@ -53,6 +53,7 @@ from valocoach.data.repository import (
     close_stale_syncs,
     complete_sync,
     match_exists,
+    record_mmr_snapshot,
     start_sync,
     upsert_match_details,
     upsert_player,
@@ -207,9 +208,13 @@ class SyncOrchestrator:
         return account, mmr
 
     async def _open_log(self, account: AccountData, mmr: MMRData) -> int:
-        """Upsert the Player row and open a SyncLog.  Returns sync_log.id."""
+        """Upsert the Player row, record a rank snapshot, and open a SyncLog.
+
+        Returns sync_log.id (populated by flush() inside start_sync).
+        """
         async with session_scope() as session:
             await upsert_player(session, account, mmr)
+            await record_mmr_snapshot(session, account.puuid, mmr)
             sync_log = await start_sync(session, account.puuid)
         return sync_log.id  # id populated by flush() inside start_sync
 

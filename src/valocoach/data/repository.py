@@ -8,6 +8,8 @@ changes their schema; this file stays stable.
 
 Public API:
     await upsert_player(session, account, mmr)                -> Player
+    await record_mmr_snapshot(session, puuid, mmr)            -> MMRHistory | None
+    await get_mmr_history(session, puuid, limit)              -> list[MMRHistory]
     await upsert_match(session, match_data)                   -> Match | None
     await upsert_match_details(session, details)              -> Match | None  (v4)
     await get_player(session, puuid)                          -> Player | None
@@ -34,7 +36,7 @@ from sqlalchemy.orm import selectinload
 from valocoach.data.api_models import MatchDetails
 from valocoach.data.mapper import match_from_details, player_from_account_mmr
 from valocoach.data.models import AccountData, MatchData, MMRData
-from valocoach.data.orm_models import Match, MatchPlayer, Player, Round, SyncLog
+from valocoach.data.orm_models import MMRHistory, Match, MatchPlayer, Player, Round, SyncLog
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +80,77 @@ async def upsert_player(
         mmr.current_data.elo,
     )
     return merged
+
+
+async def record_mmr_snapshot(
+    session: AsyncSession,
+    puuid: str,
+    mmr: MMRData,
+) -> MMRHistory | None:
+    """Insert a rank snapshot if ELO has changed since the last recorded one.
+
+    Skips insertion when the player's ELO matches the most recent row —
+    avoids duplicate rows when the user syncs multiple times without playing.
+
+    Returns the new MMRHistory row, or None if skipped (no change).
+    """
+    cd = mmr.current_data
+    new_elo = cd.elo
+
+    # Look up the most recent snapshot for this puuid.
+    stmt = (
+        select(MMRHistory)
+        .where(MMRHistory.puuid == puuid)
+        .order_by(MMRHistory.recorded_at.desc())
+        .limit(1)
+    )
+    result = await session.scalars(stmt)
+    latest = result.first()
+
+    if latest is not None and latest.elo == new_elo:
+        logger.debug("mmr_history skip — elo unchanged (%d) for %s…", new_elo, puuid[:8])
+        return None
+
+    snapshot = MMRHistory(
+        puuid=puuid,
+        recorded_at=_now_iso(),
+        tier=cd.currenttier,
+        tier_patched=cd.currenttierpatched,
+        rr=cd.ranking_in_tier,
+        elo=new_elo,
+        mmr_change=cd.mmr_change_to_last_game or None,
+    )
+    session.add(snapshot)
+    await session.flush()
+    logger.debug(
+        "mmr_history insert %s elo=%d rr=%d tier=%s",
+        puuid[:8],
+        new_elo,
+        cd.ranking_in_tier,
+        cd.currenttierpatched,
+    )
+    return snapshot
+
+
+async def get_mmr_history(
+    session: AsyncSession,
+    puuid: str,
+    limit: int = 50,
+) -> list[MMRHistory]:
+    """Return up to *limit* rank snapshots for *puuid*, newest first.
+
+    Typical callers:
+      - Coaching context builder: last 10 rows for a rank-progression summary.
+      - Stats CLI profile panel: last 50 rows for a sparkline.
+    """
+    stmt = (
+        select(MMRHistory)
+        .where(MMRHistory.puuid == puuid)
+        .order_by(MMRHistory.recorded_at.desc())
+        .limit(limit)
+    )
+    result = await session.scalars(stmt)
+    return list(result.all())
 
 
 async def get_player(session: AsyncSession, puuid: str) -> Player | None:

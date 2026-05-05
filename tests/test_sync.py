@@ -35,6 +35,7 @@ _P_MATCH_EXISTS = "valocoach.data.sync.match_exists"
 _P_UPSERT_DETAILS = "valocoach.data.sync.upsert_match_details"
 _P_COMPLETE_SYNC = "valocoach.data.sync.complete_sync"
 _P_CLOSE_STALE = "valocoach.data.sync.close_stale_syncs"
+_P_RECORD_MMR = "valocoach.data.sync.record_mmr_snapshot"
 
 # Stable fake IDs
 PUUID = "20905543-1b42-5f6f-8435-ab284a0094f8"
@@ -161,6 +162,7 @@ class TestSyncOrchestratorRun:
         with (
             patch(_P_SCOPE, lambda: _scope(session)),
             patch(_P_UPSERT_PLAYER, new_callable=AsyncMock),
+            patch(_P_RECORD_MMR, new_callable=AsyncMock),
             patch(_P_START_SYNC, new_callable=AsyncMock, return_value=_sync_log_mock()),
             patch(_P_MATCH_EXISTS, new_callable=AsyncMock, return_value=False),
             patch(_P_UPSERT_DETAILS, new_callable=AsyncMock, return_value=fake_match),
@@ -189,6 +191,7 @@ class TestSyncOrchestratorRun:
         with (
             patch(_P_SCOPE, lambda: _scope(session)),
             patch(_P_UPSERT_PLAYER, new_callable=AsyncMock),
+            patch(_P_RECORD_MMR, new_callable=AsyncMock),
             patch(_P_START_SYNC, new_callable=AsyncMock, return_value=_sync_log_mock()),
             patch(_P_MATCH_EXISTS, new_callable=AsyncMock, return_value=True),  # already stored
             patch(_P_UPSERT_DETAILS, new_callable=AsyncMock) as mock_upsert,
@@ -221,6 +224,7 @@ class TestSyncOrchestratorRun:
         with (
             patch(_P_SCOPE, lambda: _scope(session)),
             patch(_P_UPSERT_PLAYER, new_callable=AsyncMock),
+            patch(_P_RECORD_MMR, new_callable=AsyncMock),
             patch(_P_START_SYNC, new_callable=AsyncMock, return_value=_sync_log_mock()),
             patch(_P_MATCH_EXISTS, new_callable=AsyncMock, return_value=False),
             patch(_P_UPSERT_DETAILS, new_callable=AsyncMock, return_value=MagicMock()),
@@ -264,6 +268,7 @@ class TestSyncOrchestratorRun:
         with (
             patch(_P_SCOPE, lambda: _scope(session)),
             patch(_P_UPSERT_PLAYER, new_callable=AsyncMock),
+            patch(_P_RECORD_MMR, new_callable=AsyncMock),
             patch(_P_START_SYNC, new_callable=AsyncMock, return_value=_sync_log_mock()),
             patch(_P_COMPLETE_SYNC),
             patch(_P_CLOSE_STALE, new=AsyncMock(return_value=0)),
@@ -283,6 +288,7 @@ class TestSyncOrchestratorRun:
         with (
             patch(_P_SCOPE, lambda: _scope(session)),
             patch(_P_UPSERT_PLAYER, new_callable=AsyncMock),
+            patch(_P_RECORD_MMR, new_callable=AsyncMock),
             patch(_P_START_SYNC, new_callable=AsyncMock, return_value=_sync_log_mock()),
             patch(_P_COMPLETE_SYNC, complete_sync_mock),
             patch(_P_CLOSE_STALE, new=AsyncMock(return_value=0)),
@@ -309,6 +315,7 @@ class TestSyncOrchestratorRun:
         with (
             patch(_P_SCOPE, lambda: _scope(session)),
             patch(_P_UPSERT_PLAYER, new_callable=AsyncMock),
+            patch(_P_RECORD_MMR, new_callable=AsyncMock),
             patch(_P_START_SYNC, new_callable=AsyncMock, return_value=_sync_log_mock()),
             patch(_P_MATCH_EXISTS, new_callable=AsyncMock, return_value=False),
             patch(_P_UPSERT_DETAILS, new_callable=AsyncMock, return_value=None),  # already stored
@@ -687,6 +694,7 @@ class TestFetchAllMapperError:
         with (
             patch(_P_SCOPE, lambda: _scope(session)),
             patch(_P_UPSERT_PLAYER, new_callable=AsyncMock),
+            patch(_P_RECORD_MMR, new_callable=AsyncMock),
             patch(_P_START_SYNC, new_callable=AsyncMock, return_value=_sync_log_mock()),
             patch(_P_MATCH_EXISTS, new_callable=AsyncMock, return_value=False),
             # First call raises MapperError; second returns a real match object.

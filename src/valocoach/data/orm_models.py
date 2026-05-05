@@ -1,12 +1,13 @@
 """SQLAlchemy ORM table definitions.
 
-Seven tables:
+Eight tables:
   players       — identity + current/peak rank snapshot
   matches       — match metadata + team scores
   match_players — one row per player per match (stats junction table)
   rounds        — per-round outcome + bomb events
   round_players — per-player per-round stats (score, kills, economy, survival)
   kills         — per-kill events within a round
+  mmr_history   — rank snapshot per sync (enables progression timeline)
   sync_log      — operational audit trail for each data sync
 
 Design decisions:
@@ -376,6 +377,53 @@ class SyncLog(Base):
         return (
             f"<SyncLog puuid={self.puuid[:8]} "
             f"new={self.matches_new}/{self.matches_fetched} err={self.error is not None}>"
+        )
+
+
+# ---------------------------------------------------------------------------
+# mmr_history
+# ---------------------------------------------------------------------------
+
+
+class MMRHistory(Base):
+    """Rank snapshot recorded at each successful sync.
+
+    One row is inserted per sync, but only when the player's ELO has changed
+    since the previous snapshot — purely identical re-syncs produce no row.
+
+    This table is the source of truth for:
+      - Rank progression charts (tier/RR over time)
+      - Session delta ("you gained +47 RR in tonight's session")
+      - Peak-rank detection within a chosen time window
+      - Coach context: "currently Diamond 2 after climbing from Platinum 1"
+
+    recorded_at is the sync timestamp (not the game timestamp).  It
+    correlates closely with when the player's last match ended but is not
+    exact — use match.started_at for per-game granularity.
+    """
+
+    __tablename__ = "mmr_history"
+    __table_args__ = (
+        Index("idx_mmr_history_puuid", "puuid", "recorded_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    puuid: Mapped[str] = mapped_column(
+        ForeignKey("players.puuid", ondelete="CASCADE"), nullable=False
+    )
+    recorded_at: Mapped[str] = mapped_column(String, nullable=False, default=_now_iso)
+    tier: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    tier_patched: Mapped[str] = mapped_column(String, nullable=False, default="Unranked")
+    rr: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # ranking_in_tier (0-99)
+    elo: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # absolute MMR
+    mmr_change: Mapped[int | None] = mapped_column(Integer, nullable=True)  # +/- RR from last game
+
+    def __repr__(self) -> str:
+        sign = "+" if (self.mmr_change or 0) >= 0 else ""
+        change = f" ({sign}{self.mmr_change})" if self.mmr_change is not None else ""
+        return (
+            f"<MMRHistory {self.tier_patched} {self.rr}RR{change} "
+            f"elo={self.elo} at={self.recorded_at[:10]}>"
         )
 
 
