@@ -28,10 +28,13 @@ if str(SCRIPTS_DIR) not in sys.path:
 from run_ragas_eval import (  # noqa: E402
     DEFAULT_METRICS,
     METRIC_NAMES,
+    _get_metrics,
     _print_scores,
     _validate_samples,
     build_ragas_dataset,
+    collect_pipeline_outputs,
     load_ragas_samples,
+    main,
     run_ragas_eval,
 )
 
@@ -209,6 +212,26 @@ class TestBuildRagasDataset:
         ):
             build_ragas_dataset(minimal_results)
 
+    def test_builds_dataset_via_mock(self, minimal_results):
+        """build_ragas_dataset happy path with mocked datasets module."""
+        fake_dataset = MagicMock(name="Dataset")
+        datasets_mod = MagicMock()
+        datasets_mod.Dataset.from_list.return_value = fake_dataset
+
+        with patch.dict("sys.modules", {"datasets": datasets_mod}):
+            import importlib
+
+            import run_ragas_eval as rre
+
+            importlib.reload(rre)
+            result = rre.build_ragas_dataset(minimal_results)
+
+        assert result is fake_dataset
+        # Verify column mapping
+        call_rows = datasets_mod.Dataset.from_list.call_args[0][0]
+        assert call_rows[0]["user_input"] == minimal_results[0]["question"]
+        assert call_rows[0]["reference"] == minimal_results[0]["ground_truth"]
+
 
 # ---------------------------------------------------------------------------
 # TestMetricNames
@@ -313,3 +336,373 @@ class TestPrintScores:
         _print_scores({})
         out = capsys.readouterr().out
         assert "0.000" in out or "mean" in out.lower()
+
+
+# ---------------------------------------------------------------------------
+# TestLoadRagasSamplesCount — 20-sample assertion
+# ---------------------------------------------------------------------------
+
+
+class TestRagasSamplesCount:
+    def test_samples_file_has_20_entries(self):
+        """ragas_samples.yaml must have exactly 20 samples."""
+        samples = load_ragas_samples(SAMPLES_FILE)
+        assert len(samples) == 20, f"Expected 20 samples, got {len(samples)}"
+
+    def test_all_samples_have_metadata(self):
+        """Every sample should have at least an 'id', 'question', and 'ground_truth'."""
+        samples = load_ragas_samples(SAMPLES_FILE)
+        for s in samples:
+            assert s.get("question"), f"Sample {s['id']} has empty question"
+            gt = s.get("ground_truth", "")
+            assert gt and len(str(gt).strip()) > 20, f"Sample {s['id']} ground_truth too short"
+
+
+# ---------------------------------------------------------------------------
+# TestCollectPipelineOutputs — collect_pipeline_outputs() (LLM/retriever mocked)
+# ---------------------------------------------------------------------------
+
+
+class TestCollectPipelineOutputs:
+    """collect_pipeline_outputs() is tested here with mocked valocoach modules."""
+
+    def _samples(self) -> list[dict]:
+        return [
+            {
+                "id": "s1",
+                "question": "How should I use Jett on Ascent?",
+                "ground_truth": "Use Tailwind.",
+                "metadata": {"agent": "Jett", "map": "Ascent"},
+            },
+            {
+                "id": "s2",
+                "question": "Eco decision on pistol round?",
+                "ground_truth": "Save credits.",
+                "metadata": {},
+            },
+        ]
+
+    def _mock_modules(self, coach_response="Tailwind dash.", contexts=None):
+        if contexts is None:
+            contexts = [{"document": "Jett uses Tailwind for entry."}]
+        return {
+            "valocoach.cli.commands.coach": MagicMock(
+                run_coach=MagicMock(return_value=coach_response)
+            ),
+            "valocoach.core.config": MagicMock(load_settings=MagicMock(return_value=MagicMock())),
+            "valocoach.retrieval.retriever": MagicMock(
+                retrieve=MagicMock(return_value=contexts)
+            ),
+        }
+
+    def test_returns_one_result_per_sample(self):
+        samples = self._samples()
+        with patch.dict("sys.modules", self._mock_modules()):
+            results = collect_pipeline_outputs(samples)
+        assert len(results) == len(samples)
+
+    def test_response_populated_from_run_coach(self):
+        samples = self._samples()[:1]
+        with patch.dict("sys.modules", self._mock_modules(coach_response="Tailwind entry.")):
+            results = collect_pipeline_outputs(samples)
+        assert results[0]["response"] == "Tailwind entry."
+
+    def test_retrieved_contexts_populated_from_retriever(self):
+        samples = self._samples()[:1]
+        contexts = [{"document": "chunk 1"}, {"document": "chunk 2"}]
+        with patch.dict("sys.modules", self._mock_modules(contexts=contexts)):
+            results = collect_pipeline_outputs(samples)
+        assert results[0]["retrieved_contexts"] == ["chunk 1", "chunk 2"]
+
+    def test_retrieval_failure_results_in_empty_contexts(self):
+        """A retrieval error should not abort the run — contexts become []."""
+        samples = self._samples()[:1]
+        mocks = self._mock_modules()
+        mocks["valocoach.retrieval.retriever"].retrieve.side_effect = RuntimeError("chroma down")
+        with patch.dict("sys.modules", mocks):
+            results = collect_pipeline_outputs(samples)
+        assert results[0]["retrieved_contexts"] == []
+
+    def test_coach_failure_results_in_empty_response(self):
+        """A coaching error should not abort the run — response becomes ''."""
+        samples = self._samples()[:1]
+        mocks = self._mock_modules()
+        mocks["valocoach.cli.commands.coach"].run_coach.side_effect = RuntimeError("llm down")
+        with patch.dict("sys.modules", mocks):
+            results = collect_pipeline_outputs(samples)
+        assert results[0]["response"] == ""
+
+    def test_original_sample_fields_preserved(self):
+        """Result dicts contain all original sample fields plus response + retrieved_contexts."""
+        samples = self._samples()[:1]
+        with patch.dict("sys.modules", self._mock_modules()):
+            results = collect_pipeline_outputs(samples)
+        r = results[0]
+        assert r["id"] == "s1"
+        assert r["ground_truth"] == "Use Tailwind."
+        assert "response" in r
+        assert "retrieved_contexts" in r
+
+    def test_settings_none_loads_from_config(self):
+        """When settings=None, load_settings() is called to obtain settings."""
+        samples = self._samples()[:1]
+        mocks = self._mock_modules()
+        mock_load = mocks["valocoach.core.config"].load_settings
+        with patch.dict("sys.modules", mocks):
+            collect_pipeline_outputs(samples, settings=None)
+        mock_load.assert_called_once()
+
+    def test_settings_provided_skips_load_settings(self):
+        """When settings is already supplied, load_settings() is NOT called."""
+        samples = self._samples()[:1]
+        mocks = self._mock_modules()
+        mock_load = mocks["valocoach.core.config"].load_settings
+        fake_settings = MagicMock()
+        with patch.dict("sys.modules", mocks):
+            collect_pipeline_outputs(samples, settings=fake_settings)
+        mock_load.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# TestGetMetrics — _get_metrics() success path (ragas mocked)
+# ---------------------------------------------------------------------------
+
+
+class TestGetMetrics:
+    def _ragas_metrics_mock(self):
+        m = MagicMock()
+        m.Faithfulness.return_value = MagicMock(name="Faithfulness")
+        m.AnswerRelevancy.return_value = MagicMock(name="AnswerRelevancy")
+        m.ContextPrecision.return_value = MagicMock(name="ContextPrecision")
+        m.ContextRecall.return_value = MagicMock(name="ContextRecall")
+        return m
+
+    def test_returns_list_of_metric_objects(self):
+        metrics_mod = self._ragas_metrics_mock()
+        with patch.dict("sys.modules", {"ragas.metrics": metrics_mod}):
+            result = _get_metrics(["faithfulness", "answer_relevancy"])
+        assert len(result) == 2
+
+    def test_unknown_metric_raises_value_error(self):
+        metrics_mod = self._ragas_metrics_mock()
+        with (
+            patch.dict("sys.modules", {"ragas.metrics": metrics_mod}),
+            pytest.raises(ValueError, match="Unknown RAGAS metrics"),
+        ):
+            _get_metrics(["not_a_metric"])
+
+    def test_all_four_default_metrics_instantiated(self):
+        metrics_mod = self._ragas_metrics_mock()
+        with patch.dict("sys.modules", {"ragas.metrics": metrics_mod}):
+            result = _get_metrics(list(METRIC_NAMES))
+        assert len(result) == len(METRIC_NAMES)
+
+    def test_raises_import_error_when_ragas_missing(self):
+        with (
+            patch.dict("sys.modules", {"ragas.metrics": None}),
+            pytest.raises((ImportError, AttributeError)),
+        ):
+            _get_metrics(["faithfulness"])
+
+
+# ---------------------------------------------------------------------------
+# TestMain (ragas_eval) — smoke tests for main() with all I/O mocked
+# ---------------------------------------------------------------------------
+
+
+class TestMainRagasEval:
+    def _fake_samples(self) -> list[dict]:
+        return [
+            {
+                "id": "t1",
+                "question": "q1",
+                "ground_truth": "gt1",
+                "response": "r1",
+                "retrieved_contexts": ["c1"],
+            }
+        ]
+
+    def test_main_returns_0_on_success(self, tmp_path):
+        """main() returns 0 when the pipeline succeeds end-to-end (all mocked)."""
+        fake_samples = self._fake_samples()
+        fake_ds = MagicMock()
+
+        with (
+            patch("run_ragas_eval.load_ragas_samples", return_value=fake_samples),
+            patch("run_ragas_eval.collect_pipeline_outputs", return_value=fake_samples),
+            patch("run_ragas_eval.build_ragas_dataset", return_value=fake_ds),
+            patch("run_ragas_eval.run_ragas_eval", return_value={"faithfulness": 0.9}),
+            patch("sys.argv", ["run_ragas_eval.py"]),
+        ):
+            exit_code = main()
+
+        assert exit_code == 0
+
+    def test_main_returns_2_on_missing_samples_file(self, tmp_path):
+        """main() returns 2 when samples file does not exist."""
+        with (
+            patch("sys.argv", ["run_ragas_eval.py", "--samples-file", "/no/such/file.yaml"]),
+        ):
+            exit_code = main()
+
+        assert exit_code == 2
+
+    def test_main_returns_2_on_unknown_sample_id(self):
+        """--sample with an unknown ID returns exit code 2."""
+        fake_samples = self._fake_samples()
+        with (
+            patch("run_ragas_eval.load_ragas_samples", return_value=fake_samples),
+            patch("sys.argv", ["run_ragas_eval.py", "--sample", "does_not_exist"]),
+        ):
+            exit_code = main()
+
+        assert exit_code == 2
+
+    def test_main_writes_output_file(self, tmp_path):
+        """--output FILE writes a JSON scores file."""
+        import json
+
+        fake_samples = self._fake_samples()
+        out_file = tmp_path / "scores.json"
+        fake_ds = MagicMock()
+
+        with (
+            patch("run_ragas_eval.load_ragas_samples", return_value=fake_samples),
+            patch("run_ragas_eval.collect_pipeline_outputs", return_value=fake_samples),
+            patch("run_ragas_eval.build_ragas_dataset", return_value=fake_ds),
+            patch("run_ragas_eval.run_ragas_eval", return_value={"faithfulness": 0.85}),
+            patch("sys.argv", ["run_ragas_eval.py", "--output", str(out_file)]),
+        ):
+            main()
+
+        data = json.loads(out_file.read_text())
+        assert data["faithfulness"] == pytest.approx(0.85)
+
+    def test_main_from_file_skips_pipeline(self, tmp_path):
+        """--from-file loads pre-collected results instead of calling the pipeline."""
+        import json
+
+        pre_results = self._fake_samples()
+        results_file = tmp_path / "results.json"
+        results_file.write_text(json.dumps(pre_results))
+
+        fake_ds = MagicMock()
+
+        with (
+            patch("run_ragas_eval.load_ragas_samples", return_value=pre_results),
+            patch("run_ragas_eval.collect_pipeline_outputs") as mock_collect,
+            patch("run_ragas_eval.build_ragas_dataset", return_value=fake_ds),
+            patch("run_ragas_eval.run_ragas_eval", return_value={"faithfulness": 0.8}),
+            patch("sys.argv", ["run_ragas_eval.py", "--from-file", str(results_file)]),
+        ):
+            exit_code = main()
+
+        # collect_pipeline_outputs must NOT have been called
+        mock_collect.assert_not_called()
+        assert exit_code == 0
+
+    def test_main_returns_2_on_build_dataset_import_error(self):
+        """ImportError from build_ragas_dataset (datasets not installed) → exit 2."""
+        fake_samples = self._fake_samples()
+
+        with (
+            patch("run_ragas_eval.load_ragas_samples", return_value=fake_samples),
+            patch("run_ragas_eval.collect_pipeline_outputs", return_value=fake_samples),
+            patch("run_ragas_eval.build_ragas_dataset", side_effect=ImportError("no datasets")),
+            patch("sys.argv", ["run_ragas_eval.py"]),
+        ):
+            exit_code = main()
+
+        assert exit_code == 2
+
+    def test_main_single_sample_filter(self):
+        """--sample filters to exactly one sample."""
+        fake_samples = [
+            {"id": "s1", "question": "q1", "ground_truth": "g1", "response": "r1", "retrieved_contexts": []},
+            {"id": "s2", "question": "q2", "ground_truth": "g2", "response": "r2", "retrieved_contexts": []},
+        ]
+        fake_ds = MagicMock()
+        mock_collect = MagicMock(return_value=fake_samples[:1])
+
+        with (
+            patch("run_ragas_eval.load_ragas_samples", return_value=fake_samples),
+            patch("run_ragas_eval.collect_pipeline_outputs", mock_collect),
+            patch("run_ragas_eval.build_ragas_dataset", return_value=fake_ds),
+            patch("run_ragas_eval.run_ragas_eval", return_value={"faithfulness": 0.9}),
+            patch("sys.argv", ["run_ragas_eval.py", "--sample", "s1"]),
+        ):
+            exit_code = main()
+
+        # Only sample s1 passed to collect
+        passed_samples = mock_collect.call_args[0][0]
+        assert len(passed_samples) == 1
+        assert passed_samples[0]["id"] == "s1"
+        assert exit_code == 0
+
+    def test_main_corrupt_from_file_returns_2(self, tmp_path):
+        """--from-file pointing at a non-JSON file → return 2."""
+        bad_file = tmp_path / "bad.json"
+        bad_file.write_text("not json {{{{")
+
+        fake_samples = self._fake_samples()
+        with (
+            patch("run_ragas_eval.load_ragas_samples", return_value=fake_samples),
+            patch("sys.argv", ["run_ragas_eval.py", "--from-file", str(bad_file)]),
+        ):
+            exit_code = main()
+
+        assert exit_code == 2
+
+    def test_main_collect_pipeline_raises_returns_2(self):
+        """collect_pipeline_outputs raising → return 2."""
+        fake_samples = self._fake_samples()
+
+        with (
+            patch("run_ragas_eval.load_ragas_samples", return_value=fake_samples),
+            patch(
+                "run_ragas_eval.collect_pipeline_outputs",
+                side_effect=RuntimeError("no ollama"),
+            ),
+            patch("sys.argv", ["run_ragas_eval.py"]),
+        ):
+            exit_code = main()
+
+        assert exit_code == 2
+
+    def test_main_run_ragas_eval_import_error_returns_2(self):
+        """run_ragas_eval raising ImportError (ragas not installed) → return 2."""
+        fake_samples = self._fake_samples()
+        fake_ds = MagicMock()
+
+        with (
+            patch("run_ragas_eval.load_ragas_samples", return_value=fake_samples),
+            patch("run_ragas_eval.collect_pipeline_outputs", return_value=fake_samples),
+            patch("run_ragas_eval.build_ragas_dataset", return_value=fake_ds),
+            patch(
+                "run_ragas_eval.run_ragas_eval",
+                side_effect=ImportError("RAGAS not installed"),
+            ),
+            patch("sys.argv", ["run_ragas_eval.py"]),
+        ):
+            exit_code = main()
+
+        assert exit_code == 2
+
+    def test_main_run_ragas_eval_value_error_returns_2(self):
+        """run_ragas_eval raising ValueError (unknown metric) → return 2."""
+        fake_samples = self._fake_samples()
+        fake_ds = MagicMock()
+
+        with (
+            patch("run_ragas_eval.load_ragas_samples", return_value=fake_samples),
+            patch("run_ragas_eval.collect_pipeline_outputs", return_value=fake_samples),
+            patch("run_ragas_eval.build_ragas_dataset", return_value=fake_ds),
+            patch(
+                "run_ragas_eval.run_ragas_eval",
+                side_effect=ValueError("Unknown RAGAS metrics"),
+            ),
+            patch("sys.argv", ["run_ragas_eval.py"]),
+        ):
+            exit_code = main()
+
+        assert exit_code == 2

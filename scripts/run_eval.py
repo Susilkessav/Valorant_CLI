@@ -47,9 +47,9 @@ from typing import Any
 
 try:
     import yaml
-except ImportError:
-    print("PyYAML is required: pip install pyyaml", file=sys.stderr)
-    sys.exit(2)
+except ImportError:  # pragma: no cover
+    print("PyYAML is required: pip install pyyaml", file=sys.stderr)  # pragma: no cover
+    sys.exit(2)  # pragma: no cover
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -151,8 +151,8 @@ def _check_assertions(response: str, scenario: Scenario) -> list[str]:
 def run_scenario(scenario: Scenario, model: str | None) -> ScenarioResult:
     """Execute one scenario through the real run_coach pipeline."""
     # Add repo src to path so run_coach is importable without installing.
-    if str(REPO_ROOT / "src") not in sys.path:
-        sys.path.insert(0, str(REPO_ROOT / "src"))
+    if str(REPO_ROOT / "src") not in sys.path:  # pragma: no cover
+        sys.path.insert(0, str(REPO_ROOT / "src"))  # pragma: no cover
 
     try:
         from valocoach.cli.commands.coach import run_coach

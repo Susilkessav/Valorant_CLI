@@ -133,6 +133,115 @@ samples:
       category: defense_side
 
   # ----------------------------------------------------------------
+  # Agent-specific (continued)
+  # ----------------------------------------------------------------
+
+  - id: killjoy_nanoswarm_ascent_b
+    question: "Where should Killjoy place Nanoswarm grenades on Ascent B site?"
+    ground_truth: >
+      Place Nanoswarm grenades under the default spike plant spot on B site and
+      at B Lane to punish planters and retakers. A third grenade near B Market
+      window punishes any attempt to hold from that angle. Activate them only
+      after the spike is planted — pre-activating wastes charges.
+    metadata:
+      agent: Killjoy
+      map: Ascent
+      category: agent_ability
+
+  - id: sova_recon_bolt_bind_b
+    question: "What is a reliable Sova Recon Bolt lineup for Bind B site?"
+    ground_truth: >
+      From B Long, aim at the ceiling above B Hookah to bounce a Recon Bolt
+      into site and reveal defenders holding behind boxes. A second bolt thrown
+      from B Short with one charge can reveal CT.  Time the bolt reveal with
+      the team's B push so defenders cannot reposition before entry.
+    metadata:
+      agent: Sova
+      map: Bind
+      category: agent_ability
+
+  - id: reyna_dismiss_after_kill
+    question: "When and how should Reyna use Dismiss after getting a kill in a fight?"
+    ground_truth: >
+      Activate Dismiss immediately after securing a kill to become briefly
+      intangible and reposition.  Use it to escape out of a crossfire, retreat
+      behind cover, or shift the angle so the remaining enemies have to
+      re-acquire Reyna.  Do not Dismiss into the open — pick a safe direction
+      first.  Pairing Dismiss with Devour before the next duel fully restores
+      health.
+    metadata:
+      agent: Reyna
+      category: agent_ability
+
+  - id: cypher_tripwire_split_b
+    question: "Where should Cypher place Trapwires on Split B site?"
+    ground_truth: >
+      Place one Trapwire at B Alley entrance to catch early pushers and give
+      defenders time to react.  A second wire across B Heaven stairs prevents
+      flanks from the top.  Avoid placing both wires in obvious spots that
+      experienced players will pre-aim and destroy; off-angle wires on the
+      side of doorways are harder to spot.
+    metadata:
+      agent: Cypher
+      map: Split
+      category: agent_ability
+
+  # ----------------------------------------------------------------
+  # Economy (continued)
+  # ----------------------------------------------------------------
+
+  - id: eco_bonus_round_strategy
+    question: "We just won the pistol round. Should we buy in the bonus round?"
+    ground_truth: >
+      After winning the pistol round the team can typically afford Spectre
+      or Stinger SMGs plus light shields in the bonus round (round 2).
+      Full rifles are usually out of range.  Buying SMGs maximises the
+      credit advantage from the pistol win without over-investing, and a
+      second win can fund a full rifle round thereafter.
+    metadata:
+      category: economy
+
+  # ----------------------------------------------------------------
+  # Tactical (continued)
+  # ----------------------------------------------------------------
+
+  - id: spike_plant_timing_decision
+    question: "When during the round should attackers decide to plant the spike?"
+    ground_truth: >
+      Attackers should commit to a plant when they have site control and at
+      least 35 seconds on the round timer — enough for defenders to rotate
+      but not enough to stall indefinitely.  Planting too early gives
+      defenders a long post-plant window; too late risks running out of time.
+      Utility expenditure and numbers advantage should both favour the
+      attackers before planting.
+    metadata:
+      category: tactical
+
+  - id: clutch_1v2_post_plant_decisions
+    question: "I'm in a 1v2 post-plant situation with the spike planted. What is the best play?"
+    ground_truth: >
+      In a 1v2 post-plant, take a strong off-angle that covers the spike and
+      lets you trade the first kill safely.  Avoid peeking both opponents
+      simultaneously — separate them by forcing one to push a different
+      angle.  Use remaining utility (flashes, smokes) to isolate each duel.
+      If you win the first pick, reset to a new angle before the last
+      defender finds your position.
+    metadata:
+      category: tactical
+
+  - id: defense_retake_coordination_3v3
+    question: "How should three defenders coordinate a 3v3 retake on Split A site?"
+    ground_truth: >
+      Split the retake into two entry angles — two players push from A Heaven
+      and one from A Main — so the defenders on site cannot hold both angles
+      simultaneously.  Flash or smoke the site before committing to cover the
+      entry.  Communicate spike location before entering; the player with the
+      best defuse position should move to defuse while teammates trade kills.
+    metadata:
+      map: Split
+      category: tactical
+
+  # ----------------------------------------------------------------
   # Hallucination guards
   # ----------------------------------------------------------------
 
@@ -146,5 +255,31 @@ samples:
       resets the ult if Phoenix dies.
     metadata:
       agent: Phoenix
+      map: Ascent
+      category: hallucination_guard
+
+  - id: no_viper_omen_confusion
+    question: "How does Viper use her smokes to block Haven A site?"
+    ground_truth: >
+      Viper uses Poison Cloud (a placeable canister) to produce a smoke at a
+      specific location, and Toxic Screen (a wall of gas) to cut off long
+      sightlines.  Both abilities deplete Fuel when active and are toggled
+      on and off.  Viper's smokes are not instant-cast like Omen's Dark Cover
+      — they require pre-placement and careful Fuel management to maintain
+      coverage throughout the round.
+    metadata:
+      agent: Viper
+      map: Haven
+      category: hallucination_guard
+
+  - id: no_wrong_map_callouts
+    question: "Describe a B site execute on Ascent."
+    ground_truth: >
+      On Ascent B site, attackers typically push from B Main and B Garden.
+      Smoking B Site default and CT spawn cuts off defender angles.  Pushing
+      through B Main under smoke while a teammate plays B Garden creates a
+      two-pronged entry.  Key callouts on Ascent B are B Main, B Market,
+      B Site, and B Garden — not Hookah (Bind) or B Elbow (Split).
+    metadata:
       map: Ascent
       category: hallucination_guard
