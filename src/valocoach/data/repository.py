@@ -21,6 +21,14 @@ Public API:
     await start_sync(session, puuid)                          -> SyncLog
     complete_sync(session, log, ...)                          -> None
     await close_stale_syncs(session, puuid, exclude_id)      -> int
+    await create_coaching_session(session, puuid, ...)        -> CoachingSession
+    await end_coaching_session(session, session_id)           -> CoachingSession | None
+    await get_coaching_sessions(session, puuid, limit)        -> list[CoachingSession]
+    await get_open_coaching_session(session, puuid)           -> CoachingSession | None
+    await add_coaching_note(session, session_id, body, ...)   -> CoachingNote
+    await get_coaching_notes(session, session_id)             -> list[CoachingNote]
+    await get_open_notes(session, puuid, ...)                 -> list[CoachingNote]
+    await resolve_note(session, note_id)                      -> CoachingNote | None
 """
 
 from __future__ import annotations
@@ -36,7 +44,16 @@ from sqlalchemy.orm import selectinload
 from valocoach.data.api_models import MatchDetails
 from valocoach.data.mapper import match_from_details, player_from_account_mmr
 from valocoach.data.models import AccountData, MatchData, MMRData
-from valocoach.data.orm_models import MMRHistory, Match, MatchPlayer, Player, Round, SyncLog
+from valocoach.data.orm_models import (
+    CoachingNote,
+    CoachingSession,
+    MMRHistory,
+    Match,
+    MatchPlayer,
+    Player,
+    Round,
+    SyncLog,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -439,3 +456,213 @@ async def close_stale_syncs(
         log.completed_at = now
         log.error = "interrupted"
     return len(stale)
+
+
+# ---------------------------------------------------------------------------
+# Coaching sessions
+# ---------------------------------------------------------------------------
+
+
+async def create_coaching_session(
+    session: AsyncSession,
+    puuid: str,
+    *,
+    title: str | None = None,
+    focus_agent: str | None = None,
+    focus_map: str | None = None,
+) -> CoachingSession:
+    """Open a new coaching session for *puuid*.
+
+    title defaults to the current date (YYYY-MM-DD) when omitted so every
+    session has a human-readable anchor even without explicit input.
+
+    Returns the persisted CoachingSession with its auto-assigned id.
+    """
+    now = _now_iso()
+    coaching_session = CoachingSession(
+        puuid=puuid,
+        started_at=now,
+        session_title=title or now[:10],  # YYYY-MM-DD prefix
+        focus_agent=focus_agent,
+        focus_map=focus_map,
+    )
+    session.add(coaching_session)
+    await session.flush()
+    logger.debug(
+        "coaching_session create id=%d puuid=%s… title=%r",
+        coaching_session.id,
+        puuid[:8],
+        coaching_session.session_title,
+    )
+    return coaching_session
+
+
+async def end_coaching_session(
+    session: AsyncSession,
+    coaching_session_id: int,
+) -> CoachingSession | None:
+    """Close an open coaching session by setting ended_at to now.
+
+    Returns the updated CoachingSession, or None if the id is not found.
+    Does nothing (returns the row unchanged) if ended_at is already set.
+    """
+    cs = await session.get(CoachingSession, coaching_session_id)
+    if cs is None:
+        logger.debug("end_coaching_session: id=%d not found", coaching_session_id)
+        return None
+    if cs.ended_at is None:
+        cs.ended_at = _now_iso()
+        logger.debug("coaching_session close id=%d", coaching_session_id)
+    return cs
+
+
+async def get_coaching_sessions(
+    session: AsyncSession,
+    puuid: str,
+    limit: int = 20,
+) -> list[CoachingSession]:
+    """Return up to *limit* coaching sessions for *puuid*, newest first."""
+    stmt = (
+        select(CoachingSession)
+        .where(CoachingSession.puuid == puuid)
+        .order_by(CoachingSession.started_at.desc())
+        .limit(limit)
+    )
+    result = await session.scalars(stmt)
+    return list(result.all())
+
+
+async def get_open_coaching_session(
+    session: AsyncSession,
+    puuid: str,
+) -> CoachingSession | None:
+    """Return the most recent still-open session for *puuid*, or None.
+
+    "Open" means ended_at IS NULL.  If the user starts the CLI without
+    closing a previous session, this lets the CLI offer to resume it.
+    """
+    stmt = (
+        select(CoachingSession)
+        .where(CoachingSession.puuid == puuid)
+        .where(CoachingSession.ended_at.is_(None))
+        .order_by(CoachingSession.started_at.desc())
+        .limit(1)
+    )
+    result = await session.scalars(stmt)
+    return result.first()
+
+
+# ---------------------------------------------------------------------------
+# Coaching notes
+# ---------------------------------------------------------------------------
+
+
+async def add_coaching_note(
+    session: AsyncSession,
+    coaching_session_id: int,
+    body: str,
+    *,
+    puuid: str,
+    category: str = "general",
+    priority: int = 2,
+    match_id: str | None = None,
+) -> CoachingNote:
+    """Append a coaching note to *coaching_session_id*.
+
+    Args:
+        coaching_session_id: Parent session id — must exist (caller's responsibility).
+        body:                 The coaching observation / action item text.
+        puuid:                Player PUUID (denormalised so notes can be
+                              queried without joining coaching_sessions).
+        category:             Coaching category tag (e.g. "aim", "economy").
+        priority:             1 (low) / 2 (medium) / 3 (high).
+        match_id:             Optional reference to a specific stored match.
+
+    Returns the persisted CoachingNote with its auto-assigned id.
+    """
+    note = CoachingNote(
+        session_id=coaching_session_id,
+        puuid=puuid,
+        body=body,
+        category=category,
+        priority=max(1, min(3, priority)),  # clamp to 1-3
+        match_id=match_id,
+        created_at=_now_iso(),
+    )
+    session.add(note)
+    await session.flush()
+    logger.debug(
+        "coaching_note add id=%d session=%d category=%s priority=%d",
+        note.id,
+        coaching_session_id,
+        category,
+        priority,
+    )
+    return note
+
+
+async def get_coaching_notes(
+    session: AsyncSession,
+    coaching_session_id: int,
+) -> list[CoachingNote]:
+    """Return all notes for *coaching_session_id*, oldest first."""
+    stmt = (
+        select(CoachingNote)
+        .where(CoachingNote.session_id == coaching_session_id)
+        .order_by(CoachingNote.created_at.asc())
+    )
+    result = await session.scalars(stmt)
+    return list(result.all())
+
+
+async def get_open_notes(
+    session: AsyncSession,
+    puuid: str,
+    *,
+    resolved: bool = False,
+    category: str | None = None,
+    limit: int = 50,
+) -> list[CoachingNote]:
+    """Return coaching notes for *puuid* filtered by resolved status.
+
+    Args:
+        resolved:  When False (default) returns unresolved notes only.
+                   Pass True to retrieve already-resolved notes.
+        category:  Optional filter; pass None to return all categories.
+        limit:     Maximum rows returned (default 50).
+
+    Notes are ordered by priority DESC then created_at ASC so the most
+    urgent unresolved items surface first.
+    """
+    stmt = (
+        select(CoachingNote)
+        .where(CoachingNote.puuid == puuid)
+        .where(CoachingNote.resolved == resolved)
+        .order_by(CoachingNote.priority.desc(), CoachingNote.created_at.asc())
+        .limit(limit)
+    )
+    if category is not None:
+        stmt = stmt.where(CoachingNote.category == category)
+    result = await session.scalars(stmt)
+    return list(result.all())
+
+
+async def resolve_note(
+    session: AsyncSession,
+    note_id: int,
+) -> CoachingNote | None:
+    """Mark a coaching note as resolved.
+
+    Sets resolved=True and resolved_at=now.  Idempotent — calling again on
+    an already-resolved note updates resolved_at but leaves resolved=True.
+
+    Returns the updated CoachingNote, or None if note_id is not found.
+    """
+    note = await session.get(CoachingNote, note_id)
+    if note is None:
+        logger.debug("resolve_note: id=%d not found", note_id)
+        return None
+    note.resolved = True
+    note.resolved_at = _now_iso()
+    logger.debug("coaching_note resolve id=%d", note_id)
+    return note

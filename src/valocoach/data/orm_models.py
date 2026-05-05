@@ -1,14 +1,16 @@
 """SQLAlchemy ORM table definitions.
 
-Eight tables:
-  players       — identity + current/peak rank snapshot
-  matches       — match metadata + team scores
-  match_players — one row per player per match (stats junction table)
-  rounds        — per-round outcome + bomb events
-  round_players — per-player per-round stats (score, kills, economy, survival)
-  kills         — per-kill events within a round
-  mmr_history   — rank snapshot per sync (enables progression timeline)
-  sync_log      — operational audit trail for each data sync
+Ten tables:
+  players            — identity + current/peak rank snapshot
+  matches            — match metadata + team scores
+  match_players      — one row per player per match (stats junction table)
+  rounds             — per-round outcome + bomb events
+  round_players      — per-player per-round stats (score, kills, economy, survival)
+  kills              — per-kill events within a round
+  mmr_history        — rank snapshot per sync (enables progression timeline)
+  sync_log           — operational audit trail for each data sync
+  coaching_sessions  — one row per coaching conversation / focus block
+  coaching_notes     — individual takeaways / action items from a session
 
 Design decisions:
   - Timestamps stored as UTC ISO8601 TEXT (e.g. "2026-04-18T18:00:00+00:00").
@@ -455,6 +457,114 @@ class MetaCache(Base):
 
     def __repr__(self) -> str:
         return f"<MetaCache {self.url[:40]} tier={self.ttl_tier} expires={self.expires_at[:10]}>"
+
+
+# ---------------------------------------------------------------------------
+# coaching_sessions
+# ---------------------------------------------------------------------------
+
+
+class CoachingSession(Base):
+    """One row per coaching conversation or focus block.
+
+    A session groups related coaching notes and provides temporal context
+    (when did the player seek feedback, what were they focusing on?).
+
+    Design decisions:
+      - puuid FK with CASCADE — sessions belong to a player; deleting the
+        player purges their session history.
+      - ended_at is NULL while the session is in progress.  The CLI sets it
+        when the user closes the coaching conversation or runs `coach close`.
+      - agent / map are optional focus hints, not enforcement — a session
+        can cover multiple agents or maps (notes carry their own context).
+      - session_title defaults to the started_at date to give humans a
+        recognisable anchor without mandatory input.
+    """
+
+    __tablename__ = "coaching_sessions"
+    __table_args__ = (
+        Index("idx_cs_puuid", "puuid", "started_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    puuid: Mapped[str] = mapped_column(
+        ForeignKey("players.puuid", ondelete="CASCADE"), nullable=False
+    )
+    started_at: Mapped[str] = mapped_column(String, nullable=False, default=_now_iso)
+    ended_at: Mapped[str | None] = mapped_column(String, nullable=True)
+    session_title: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Optional focus context for the session
+    focus_agent: Mapped[str | None] = mapped_column(String, nullable=True)
+    focus_map: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # Relationship
+    notes: Mapped[list[CoachingNote]] = relationship(
+        back_populates="session", cascade="all, delete-orphan"
+    )
+
+    def __repr__(self) -> str:
+        status = "open" if self.ended_at is None else "closed"
+        return (
+            f"<CoachingSession id={self.id} puuid={self.puuid[:8]}… "
+            f"title={self.session_title!r} {status}>"
+        )
+
+
+# ---------------------------------------------------------------------------
+# coaching_notes
+# ---------------------------------------------------------------------------
+
+
+class CoachingNote(Base):
+    """One row per coaching takeaway or action item within a session.
+
+    Notes are the primary output of a coaching session — concrete,
+    actionable observations the player can review and act on.
+
+    Design decisions:
+      - session_id FK with CASCADE — deleting a session removes all its notes.
+      - match_id is a plain string (no FK) — the same rationale as
+        match_players.puuid: not every note is tied to a stored match, and
+        adding a FK would block notes for matches not yet synced.
+      - category is free-form TEXT (no CHECK constraint) — coaching categories
+        evolve; validation lives in the CLI / repository layer.
+        Suggested values: "aim", "positioning", "economy", "rotation",
+        "mindset", "agent_usage", "comms", "general".
+      - priority: 1 (low), 2 (medium, default), 3 (high).
+      - resolved: False until the player marks the note as addressed.
+    """
+
+    __tablename__ = "coaching_notes"
+    __table_args__ = (
+        Index("idx_cn_session", "session_id"),
+        Index("idx_cn_puuid_resolved", "puuid", "resolved"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("coaching_sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    # Denormalised — allows querying all notes for a player without joining sessions
+    puuid: Mapped[str] = mapped_column(String, nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    category: Mapped[str] = mapped_column(String, nullable=False, default="general")
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=2)  # 1-3
+    resolved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Optional reference to a specific match this note was generated from
+    match_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[str] = mapped_column(String, nullable=False, default=_now_iso)
+    resolved_at: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # Relationship
+    session: Mapped[CoachingSession] = relationship(back_populates="notes")
+
+    def __repr__(self) -> str:
+        state = "✓" if self.resolved else "○"
+        prio = {1: "low", 2: "med", 3: "high"}.get(self.priority, "?")
+        return (
+            f"<CoachingNote {state} [{prio}] [{self.category}] "
+            f"{self.body[:40]!r}>"
+        )
 
 
 # ---------------------------------------------------------------------------
