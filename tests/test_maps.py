@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-
 # ---------------------------------------------------------------------------
 # Minimal fake map used to test branches that need missing keys.
 # (All real maps in maps.json have both 'rotations' and 'notes'.)

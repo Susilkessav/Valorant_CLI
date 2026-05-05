@@ -585,9 +585,7 @@ def test_run_profile_breakdown_shown_when_multiple_agents(tmp_path) -> None:
     fake_settings = _fake_settings(tmp_path)
 
     # Mix of two different agents so compute_per_agent returns 2+ rows.
-    rows = [
-        _mp(agent="Jett", match_id=f"m-jett-{i}") for i in range(5)
-    ] + [
+    rows = [_mp(agent="Jett", match_id=f"m-jett-{i}") for i in range(5)] + [
         _mp(agent="Reyna", match_id=f"m-reyna-{i}") for i in range(5)
     ]
     data = PlayerData(player=_player(), rows=rows, full_matches=[])

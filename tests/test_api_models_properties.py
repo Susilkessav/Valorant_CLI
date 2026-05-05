@@ -32,8 +32,6 @@ Coverage targets (27 missed statements):
 
 from __future__ import annotations
 
-import pytest
-
 from valocoach.data.api_models import (
     MatchDetails,
     MatchDetailsKill,
@@ -50,12 +48,10 @@ from valocoach.data.api_models import (
     _Ref,
     _StoredDamage,
     _StoredShots,
-    _V4BombEvent,
     _V4PlayerDamage,
     _V4Queue,
     _V4TeamRounds,
 )
-
 
 # ---------------------------------------------------------------------------
 # StoredMatchMeta (line 96)

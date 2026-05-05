@@ -17,7 +17,11 @@ from __future__ import annotations
 import json
 
 from valocoach.data.orm_models import Kill, Match, MatchPlayer, Round
-from valocoach.stats.constants import FIRST_HALF_END, MAX_REGULATION_ROUNDS, SECOND_HALF_END, TRADE_WINDOW_MS
+from valocoach.stats.constants import (
+    FIRST_HALF_END,
+    MAX_REGULATION_ROUNDS,
+    TRADE_WINDOW_MS,
+)
 from valocoach.stats.round_analyzer import analyze_rounds, get_side, multi_kill_summary
 
 P = "puuid-p"
@@ -554,11 +558,11 @@ def test_get_side_overtime_odd_index_gives_first_half_attacker() -> None:
 def test_get_side_overtime_covers_first_and_second_half_too() -> None:
     """Basic sanity — first half attacker and second half swap still work."""
     # attacker_team="Red" means Red started on attack in first half.
-    assert get_side(0, "Red") == "attack"                    # round 0, Red attacks
+    assert get_side(0, "Red") == "attack"  # round 0, Red attacks
     assert get_side(FIRST_HALF_END + 1, "Red") == "defense"  # second half, Red defends
     # attacker_team="Blue" means Blue started on attack in first half.
-    assert get_side(0, "Blue") == "attack"                   # round 0, Blue attacks
-    assert get_side(FIRST_HALF_END + 1, "Blue") == "defense" # second half, Blue defends
+    assert get_side(0, "Blue") == "attack"  # round 0, Blue attacks
+    assert get_side(FIRST_HALF_END + 1, "Blue") == "defense"  # second half, Blue defends
 
 
 # ---------------------------------------------------------------------------
@@ -601,7 +605,7 @@ def test_infer_attacker_team_second_half_plant(monkeypatch) -> None:
         planter_puuid=ENEMIES[0],  # ENEMIES[0] is "Red"
     )
     m = _match([second_half_round])
-    team_map = {P: "Blue", **{t: "Blue" for t in TEAMMATES}, **{e: "Red" for e in ENEMIES}}
+    team_map = {P: "Blue", **dict.fromkeys(TEAMMATES, "Blue"), **dict.fromkeys(ENEMIES, "Red")}
 
     result = _infer_attacker_team(m, team_map)
     # Planted in second half → Red is second-half attacker → Blue was first-half attacker.
@@ -620,7 +624,7 @@ def test_infer_attacker_team_ot_plant_skipped_returns_none(monkeypatch) -> None:
         planter_puuid=ENEMIES[0],
     )
     m = _match([ot_round])
-    team_map = {P: "Blue", **{t: "Blue" for t in TEAMMATES}, **{e: "Red" for e in ENEMIES}}
+    team_map = {P: "Blue", **dict.fromkeys(TEAMMATES, "Blue"), **dict.fromkeys(ENEMIES, "Red")}
 
     result = _infer_attacker_team(m, team_map)
     # OT plant is ambiguous — continue skips it; no other rounds → return None.
@@ -638,7 +642,7 @@ def test_infer_attacker_team_first_half_plant() -> None:
         planter_puuid=ENEMIES[0],  # "Red" team
     )
     m = _match([first_half_round])
-    team_map = {P: "Blue", **{t: "Blue" for t in TEAMMATES}, **{e: "Red" for e in ENEMIES}}
+    team_map = {P: "Blue", **dict.fromkeys(TEAMMATES, "Blue"), **dict.fromkeys(ENEMIES, "Red")}
 
     result = _infer_attacker_team(m, team_map)
     assert result == "Red"  # Red planted in first half → Red is the first-half attacker
@@ -690,7 +694,7 @@ def test_side_accounting_tracked_when_attacker_known() -> None:
     assert a.attack_rounds is not None
     assert a.defense_rounds is not None
     assert a.defense_rounds >= 2  # rounds 0 and 1
-    assert a.attack_rounds >= 2   # rounds 12 and 13
+    assert a.attack_rounds >= 2  # rounds 12 and 13
     # Blue won round 12 while attacking → attack_wins must be set.
     assert a.attack_wins is not None
     assert a.attack_wins >= 1
@@ -831,7 +835,7 @@ def test_trade_revenge_with_none_timestamp_not_counted() -> None:
         0,
         "Red",
         [
-            _kill(killer=ENEMIES[0], victim=P, t_ms=5_000),       # P dies (non-None)
+            _kill(killer=ENEMIES[0], victim=P, t_ms=5_000),  # P dies (non-None)
             _kill(killer=TEAMMATES[0], victim=ENEMIES[0], t_ms=None),  # revenge, t_ms=None
         ],
     )
@@ -846,28 +850,28 @@ def test_trade_revenge_with_none_timestamp_not_counted() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _make_analysis(**kwargs) -> "RoundAnalysis":  # noqa: F821
+def _make_analysis(**kwargs) -> RoundAnalysis:  # noqa: F821
     """Build a RoundAnalysis with all required fields, defaulting ints to 0."""
     from valocoach.stats.round_analyzer import RoundAnalysis
 
-    defaults = dict(
-        rounds=0,
-        deaths=0,
-        teammate_deaths=0,
-        clutch_opportunities=0,
-        rounds_with_kill=0,
-        rounds_with_assist=0,
-        rounds_survived=0,
-        rounds_traded_death=0,
-        rounds_kast=0,
-        clutches_won=0,
-        traded_deaths=0,
-        trades_given=0,
-        double_kills=0,
-        triple_kills=0,
-        quadra_kills=0,
-        aces=0,
-    )
+    defaults = {
+        "rounds": 0,
+        "deaths": 0,
+        "teammate_deaths": 0,
+        "clutch_opportunities": 0,
+        "rounds_with_kill": 0,
+        "rounds_with_assist": 0,
+        "rounds_survived": 0,
+        "rounds_traded_death": 0,
+        "rounds_kast": 0,
+        "clutches_won": 0,
+        "traded_deaths": 0,
+        "trades_given": 0,
+        "double_kills": 0,
+        "triple_kills": 0,
+        "quadra_kills": 0,
+        "aces": 0,
+    }
     defaults.update(kwargs)
     return RoundAnalysis(**defaults)
 

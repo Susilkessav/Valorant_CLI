@@ -19,10 +19,9 @@ Return-value contract:
 from __future__ import annotations
 
 from io import StringIO
+from unittest.mock import patch
 
 from rich.console import Console
-
-from unittest.mock import patch
 
 from valocoach.cli.formatter import (
     WARN_PREFIX,

@@ -597,16 +597,19 @@ def test_format_context_round_line_tags_thin_sample() -> None:
 
 def _check_ok():
     from valocoach.core.preflight import CheckResult
+
     return CheckResult(ok=True, message="OK", hint="")
 
 
 def _check_fail():
     from valocoach.core.preflight import CheckResult
+
     return CheckResult(ok=False, message="Riot ID not configured", hint="Run valocoach config init")
 
 
 def _check_vs_fail():
     from valocoach.core.preflight import CheckResult
+
     return CheckResult(ok=False, message="Vector store empty", hint="Run valocoach index")
 
 
@@ -622,7 +625,9 @@ def test_run_coach_warns_when_unknown_agent_in_grounded_context() -> None:
             return_value=_stream(["ok"]),
         ),
         patch("valocoach.cli.commands.coach.display.stream_to_panel"),
-        patch("valocoach.cli.commands.coach.display.warn", side_effect=lambda m: warn_calls.append(m)),
+        patch(
+            "valocoach.cli.commands.coach.display.warn", side_effect=lambda m: warn_calls.append(m)
+        ),
         # Return None for unknown agent → triggers the warn at line 66.
         patch(
             "valocoach.cli.commands.coach.format_agent_context",
@@ -647,7 +652,9 @@ def test_run_coach_warns_when_unknown_map_in_grounded_context() -> None:
             return_value=_stream(["ok"]),
         ),
         patch("valocoach.cli.commands.coach.display.stream_to_panel"),
-        patch("valocoach.cli.commands.coach.display.warn", side_effect=lambda m: warn_calls.append(m)),
+        patch(
+            "valocoach.cli.commands.coach.display.warn", side_effect=lambda m: warn_calls.append(m)
+        ),
         patch(
             "valocoach.cli.commands.coach.format_map_context",
             return_value=None,
@@ -671,7 +678,9 @@ def test_run_coach_warns_when_riot_id_not_configured() -> None:
             return_value=_stream(["ok"]),
         ),
         patch("valocoach.cli.commands.coach.display.stream_to_panel"),
-        patch("valocoach.cli.commands.coach.display.warn", side_effect=lambda m: warn_calls.append(m)),
+        patch(
+            "valocoach.cli.commands.coach.display.warn", side_effect=lambda m: warn_calls.append(m)
+        ),
         # check_riot_id/check_vector_store are lazily imported inside run_coach's body
         # via `from valocoach.core.preflight import ...`, so patch the source module.
         patch("valocoach.core.preflight.check_riot_id", return_value=_check_fail()),
@@ -694,7 +703,9 @@ def test_run_coach_warns_when_vector_store_empty() -> None:
             return_value=_stream(["ok"]),
         ),
         patch("valocoach.cli.commands.coach.display.stream_to_panel"),
-        patch("valocoach.cli.commands.coach.display.warn", side_effect=lambda m: warn_calls.append(m)),
+        patch(
+            "valocoach.cli.commands.coach.display.warn", side_effect=lambda m: warn_calls.append(m)
+        ),
         patch("valocoach.core.preflight.check_riot_id", return_value=_check_ok()),
         patch("valocoach.core.preflight.check_vector_store", return_value=_check_vs_fail()),
     ):
@@ -724,9 +735,9 @@ def test_run_coach_raises_when_llm_fails() -> None:
         # check_vector_store is always called (not guarded by with_stats).
         # Patch at the source module since it's lazily imported inside run_coach.
         patch("valocoach.core.preflight.check_vector_store", return_value=_check_ok()),
+        pytest.raises(RuntimeError, match="ollama is down"),
     ):
-        with pytest.raises(RuntimeError, match="ollama is down"):
-            run_coach("push B", with_stats=False)
+        run_coach("push B", with_stats=False)
 
     mock_error.assert_called()
     mock_warn.assert_called()

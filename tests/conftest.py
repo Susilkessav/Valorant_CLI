@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 
 import pytest
@@ -121,10 +122,8 @@ def _reset_chroma_client_cache():
         # belt-and-braces to make sure file handles release even if the GC
         # is delayed.
         for system in list(SharedSystemClient._identifer_to_system.values()):
-            try:
+            with contextlib.suppress(Exception):
                 system.stop()
-            except Exception:
-                pass
         SharedSystemClient._identifer_to_system.clear()
     except Exception:
         # chromadb not installed in some test contexts; nothing to clean.

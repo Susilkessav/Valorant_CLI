@@ -9,7 +9,6 @@ Gaps being covered:
 
 from __future__ import annotations
 
-
 # ===========================================================================
 # _token_split — internal helper
 # ===========================================================================
@@ -125,9 +124,7 @@ class TestChunkMarkdownCandidateOverflow:
 
         assert tok_a <= max_tok, f"section_a {tok_a} tokens must fit alone"
         assert tok_b <= max_tok, f"section_b {tok_b} tokens must fit alone"
-        assert tok_combined > max_tok, (
-            f"combined={tok_combined} should exceed max_tok={max_tok}"
-        )
+        assert tok_combined > max_tok, f"combined={tok_combined} should exceed max_tok={max_tok}"
 
         text = section_a + "\n\n" + section_b
         chunks = chunk_markdown(text, source="test", max_tokens=max_tok, overlap=3)

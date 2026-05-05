@@ -487,6 +487,7 @@ class TestRunIngestBranches:
             patch(_INGEST_TEXT_SRC, return_value=1),
         ):
             from valocoach.cli.commands.ingest import run_ingest
+
             run_ingest(
                 url=None,
                 youtube=None,
@@ -514,6 +515,7 @@ class TestRunIngestBranches:
             patch(_INGEST_TEXT_SRC, return_value=2),
         ):
             from valocoach.cli.commands.ingest import run_ingest
+
             run_ingest(
                 url="https://example.com",
                 youtube=None,
@@ -540,6 +542,7 @@ class TestRunIngestBranches:
             patch(_INGEST_TEXT_SRC, return_value=3),
         ):
             from valocoach.cli.commands.ingest import run_ingest
+
             run_ingest(
                 url=None,
                 youtube="dQw4w9WgXcQ",
@@ -566,6 +569,7 @@ class TestDoSeedOnProgressCallback:
 
         with patch(_INGEST_KB_SRC, side_effect=fake_ingest_kb):
             from valocoach.cli.commands.ingest import _do_seed
+
             # Must not raise — the progress.update calls (line 85) run inside
             # the Rich Progress context, which we let run normally.
             _do_seed(tmp_path)

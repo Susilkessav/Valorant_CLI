@@ -316,7 +316,7 @@ def test_kill_in_unknown_round_is_skipped(match_details) -> None:
     )
     # Pydantic models are immutable — rebuild kills list with the extra kill
     modified = match_details.model_copy(
-        update={"kills": list(match_details.kills) + [phantom_kill]}
+        update={"kills": [*list(match_details.kills), phantom_kill]}
     )
 
     # Should not raise; the unknown-round kill is simply skipped
