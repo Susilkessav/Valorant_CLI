@@ -39,7 +39,7 @@ from dataclasses import dataclass
 from valocoach.core.exceptions import MapperError
 from valocoach.data.api_models import MatchDetails, MatchDetailsKill, MatchDetailsPlayer
 from valocoach.data.models import AccountData, MMRData
-from valocoach.data.orm_models import Kill, Match, OrmMatchPlayer, Player, Round
+from valocoach.data.orm_models import Kill, Match, OrmMatchPlayer, Player, Round, RoundPlayer
 
 log = logging.getLogger(__name__)
 
@@ -164,10 +164,10 @@ def _map_player(
 
 
 def _build_round_tree(details: MatchDetails, match_id: str) -> list[Round]:
-    """Build Round ORM rows with Kill children attached via relationship.
+    """Build Round ORM rows with Kill and RoundPlayer children attached.
 
-    Returns a list in round-index order.  Kills are appended to their parent
-    Round so SQLAlchemy's unit-of-work resolves the round_id FK automatically
+    Returns a list in round-index order.  Children are appended to their
+    parent Round so SQLAlchemy's unit-of-work resolves FKs automatically
     on flush — no explicit round.id look-up needed.
 
     V4 notes:
@@ -175,7 +175,16 @@ def _build_round_tree(details: MatchDetails, match_id: str) -> list[Round]:
     - kill.round is that same index used to match kills to rounds.
     - kill.is_headshot does not exist in v4 — always stored as False.
     - weapon.name is null on ability kills — stored as NULL.
+    - round.stats[*].economy is a flat dict: {loadout_value, remaining, weapon, armor}.
     """
+    # puuid → team ("Red" | "Blue") — needed for RoundPlayer.team field.
+    puuid_to_team: dict[str, str] = {p.puuid: p.team_id for p in details.players}
+
+    # round_number → set of victim PUUIDs — for the survived flag.
+    round_victims: dict[int, set[str]] = defaultdict(set)
+    for kill in details.kills:
+        round_victims[kill.round].add(kill.victim.puuid)
+
     round_map: dict[int, Round] = {}
 
     for rnd in details.rounds:
@@ -193,6 +202,36 @@ def _build_round_tree(details: MatchDetails, match_id: str) -> list[Round]:
             else None,
         )
         round_map[rnd.id] = orm_round
+
+        victims_this_round = round_victims.get(rnd.id, set())
+        for ps in rnd.stats:
+            puuid = ps.puuid
+            if not puuid:
+                continue  # malformed row — skip
+            econ = ps.economy if isinstance(ps.economy, dict) else {}
+            damage_dealt = sum(
+                int(ev.get("damage", 0))
+                for ev in ps.damage_events
+                if isinstance(ev, dict)
+            )
+            orm_round.round_players.append(
+                RoundPlayer(
+                    match_id=match_id,
+                    puuid=puuid,
+                    team=puuid_to_team.get(puuid, ""),
+                    score=ps.score,
+                    kills=ps.kills,
+                    headshots=ps.stats.headshots,
+                    bodyshots=ps.stats.bodyshots,
+                    legshots=ps.stats.legshots,
+                    damage_dealt=damage_dealt,
+                    loadout_value=econ.get("loadout_value"),
+                    remaining_credits=econ.get("remaining"),
+                    survived=puuid not in victims_this_round,
+                    was_afk=ps.was_afk,
+                    stayed_in_spawn=ps.stayed_in_spawn,
+                )
+            )
 
     for kill in details.kills:
         orm_round = round_map.get(kill.round)

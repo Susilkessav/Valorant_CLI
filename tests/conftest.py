@@ -14,9 +14,11 @@ from valocoach.data.api_models import (
     MatchDetailsPlayerBehavior,
     MatchDetailsPlayerStats,
     MatchDetailsRound,
+    MatchDetailsRoundPlayerStats,
     MatchDetailsTeam,
     _PlayerRef,
     _Ref,
+    _RoundPlayerInnerStats,
     _V4BombEvent,
     _V4PlayerDamage,
     _V4Queue,
@@ -334,6 +336,28 @@ def match_details() -> MatchDetails:
                     site="A",
                     player=_PlayerRef(puuid=ENEMY_PUUID, name="dipp", tag="100T", team="Red"),
                 ),
+                # Round 0: PUUID dies (killed at 10 000 ms), ENEMY_PUUID survives
+                stats=[
+                    MatchDetailsRoundPlayerStats(
+                        player=_PlayerRef(puuid=PUUID, team="Blue"),
+                        stats=_RoundPlayerInnerStats(score=100, kills=0, headshots=2, bodyshots=4, legshots=0),
+                        damage_events=[{"player": {"puuid": ENEMY_PUUID}, "damage": 80, "headshots": 0, "bodyshots": 1, "legshots": 0}],
+                        economy={"loadout_value": 900, "remaining": 0},
+                        was_afk=False,
+                        stayed_in_spawn=False,
+                    ),
+                    MatchDetailsRoundPlayerStats(
+                        player=_PlayerRef(puuid=ENEMY_PUUID, team="Red"),
+                        stats=_RoundPlayerInnerStats(score=350, kills=2, headshots=1, bodyshots=5, legshots=0),
+                        damage_events=[
+                            {"player": {"puuid": PUUID}, "damage": 150, "headshots": 1, "bodyshots": 1, "legshots": 0},
+                            {"player": {"puuid": "other-puuid"}, "damage": 100, "headshots": 0, "bodyshots": 2, "legshots": 0},
+                        ],
+                        economy={"loadout_value": 3900, "remaining": 1200},
+                        was_afk=False,
+                        stayed_in_spawn=False,
+                    ),
+                ],
             ),
             MatchDetailsRound(
                 id=1,
@@ -344,6 +368,25 @@ def match_details() -> MatchDetails:
                     site="B",
                     player=_PlayerRef(puuid=PUUID, name="Yoursaviour01", tag="SK04", team="Blue"),
                 ),
+                # Round 1: ENEMY_PUUID dies (killed at 8 000 ms), PUUID survives
+                stats=[
+                    MatchDetailsRoundPlayerStats(
+                        player=_PlayerRef(puuid=PUUID, team="Blue"),
+                        stats=_RoundPlayerInnerStats(score=250, kills=1, headshots=1, bodyshots=3, legshots=0),
+                        damage_events=[{"player": {"puuid": ENEMY_PUUID}, "damage": 125, "headshots": 1, "bodyshots": 1, "legshots": 0}],
+                        economy={"loadout_value": 4650, "remaining": 2450},
+                        was_afk=False,
+                        stayed_in_spawn=False,
+                    ),
+                    MatchDetailsRoundPlayerStats(
+                        player=_PlayerRef(puuid=ENEMY_PUUID, team="Red"),
+                        stats=_RoundPlayerInnerStats(score=80, kills=0, headshots=0, bodyshots=2, legshots=0),
+                        damage_events=[],
+                        economy={"loadout_value": 1800, "remaining": 0},
+                        was_afk=False,
+                        stayed_in_spawn=False,
+                    ),
+                ],
             ),
         ],
         kills=[

@@ -28,6 +28,7 @@ from valocoach.data.orm_models import (
     PatchVersion,
     Player,
     Round,
+    RoundPlayer,
     SyncLog,
 )
 
@@ -329,6 +330,177 @@ def test_kill_in_unknown_round_is_skipped(match_details) -> None:
 
     # The regular kills (round 0 and 1) are still present
     assert len(all_kills) >= 1
+
+
+# ---------------------------------------------------------------------------
+# match_from_details — round_players
+# ---------------------------------------------------------------------------
+
+
+def test_round_player_count(match_details):
+    """Two rounds × two players each → 4 RoundPlayer rows total."""
+    m = match_from_details(match_details)
+    total = sum(len(r.round_players) for r in m.rounds)
+    assert total == 4
+
+
+def test_round_player_types(match_details):
+    """Every child in round.round_players must be a RoundPlayer instance."""
+    m = match_from_details(match_details)
+    for rnd in m.rounds:
+        for rp in rnd.round_players:
+            assert isinstance(rp, RoundPlayer)
+
+
+def test_round_player_match_id_denormalised(match_details):
+    """round_players.match_id must equal the parent match_id."""
+    m = match_from_details(match_details)
+    for rnd in m.rounds:
+        for rp in rnd.round_players:
+            assert rp.match_id == MATCH_ID
+
+
+def test_round_player_team_assigned(match_details):
+    """team must be derived from details.players[puuid].team_id."""
+    m = match_from_details(match_details)
+    all_rps: list[RoundPlayer] = [rp for r in m.rounds for rp in r.round_players]
+    me = next(rp for rp in all_rps if rp.puuid == PUUID)
+    enemy = next(rp for rp in all_rps if rp.puuid == ENEMY_PUUID)
+    assert me.team == "Blue"
+    assert enemy.team == "Red"
+
+
+def test_round_player_stats_round0(match_details):
+    """Round 0, tracked player: score=100, kills=0, headshots=2, damage=80."""
+    m = match_from_details(match_details)
+    r0 = next(r for r in m.rounds if r.round_number == 0)
+    me = next(rp for rp in r0.round_players if rp.puuid == PUUID)
+    assert me.score == 100
+    assert me.kills == 0
+    assert me.headshots == 2
+    assert me.bodyshots == 4
+    assert me.legshots == 0
+    assert me.damage_dealt == 80
+
+
+def test_round_player_economy_round1(match_details):
+    """Round 1, tracked player: loadout_value=4650, remaining_credits=2450."""
+    m = match_from_details(match_details)
+    r1 = next(r for r in m.rounds if r.round_number == 1)
+    me = next(rp for rp in r1.round_players if rp.puuid == PUUID)
+    assert me.loadout_value == 4650
+    assert me.remaining_credits == 2450
+
+
+def test_round_player_survived_flag(match_details):
+    """Survival flag: PUUID dies in round 0, survives in round 1."""
+    m = match_from_details(match_details)
+    r0 = next(r for r in m.rounds if r.round_number == 0)
+    r1 = next(r for r in m.rounds if r.round_number == 1)
+    me_r0 = next(rp for rp in r0.round_players if rp.puuid == PUUID)
+    me_r1 = next(rp for rp in r1.round_players if rp.puuid == PUUID)
+    # Kill in round 0: dipp kills PUUID → survived=False
+    assert me_r0.survived is False
+    # No kill on PUUID in round 1 → survived=True
+    assert me_r1.survived is True
+
+
+def test_round_player_enemy_survived_inverted(match_details):
+    """ENEMY_PUUID survives round 0, dies in round 1."""
+    m = match_from_details(match_details)
+    r0 = next(r for r in m.rounds if r.round_number == 0)
+    r1 = next(r for r in m.rounds if r.round_number == 1)
+    enemy_r0 = next(rp for rp in r0.round_players if rp.puuid == ENEMY_PUUID)
+    enemy_r1 = next(rp for rp in r1.round_players if rp.puuid == ENEMY_PUUID)
+    assert enemy_r0.survived is True   # not killed in round 0
+    assert enemy_r1.survived is False  # PUUID kills ENEMY_PUUID in round 1
+
+
+def test_round_player_damage_summed_from_events(match_details):
+    """damage_dealt is the sum of all damage_events[*].damage for the player."""
+    m = match_from_details(match_details)
+    r0 = next(r for r in m.rounds if r.round_number == 0)
+    enemy = next(rp for rp in r0.round_players if rp.puuid == ENEMY_PUUID)
+    # Enemy has two damage events: 150 + 100 = 250
+    assert enemy.damage_dealt == 250
+
+
+def test_round_player_was_afk_and_spawn(match_details):
+    """was_afk and stayed_in_spawn are mapped from round player stats."""
+    m = match_from_details(match_details)
+    r0 = next(r for r in m.rounds if r.round_number == 0)
+    me = next(rp for rp in r0.round_players if rp.puuid == PUUID)
+    assert me.was_afk is False
+    assert me.stayed_in_spawn is False
+
+
+def test_round_player_empty_puuid_skipped():
+    """A round.stats entry with blank puuid must be silently skipped."""
+    from valocoach.data.api_models import (
+        MatchDetailsRoundPlayerStats,
+        _PlayerRef,
+        _RoundPlayerInnerStats,
+    )
+
+    # Build a minimal MatchDetails with one round having a blank-puuid entry.
+    from tests.conftest import MATCH_ID, PUUID, ENEMY_PUUID
+    from valocoach.data.api_models import (
+        MatchDetails,
+        MatchDetailsKill,
+        MatchDetailsMetadata,
+        MatchDetailsPlayer,
+        MatchDetailsPlayerBehavior,
+        MatchDetailsPlayerStats,
+        MatchDetailsRound,
+        MatchDetailsTeam,
+        _Ref,
+        _V4PlayerDamage,
+        _V4Queue,
+        _V4TeamRounds,
+        _V4BombEvent,
+    )
+
+    md = MatchDetails(
+        metadata=MatchDetailsMetadata(
+            match_id=MATCH_ID,
+            started_at="2026-04-19T18:00:00+00:00",
+            queue=_V4Queue(id="competitive"),
+        ),
+        players=[
+            MatchDetailsPlayer(
+                puuid=PUUID, team_id="Blue",
+                stats=MatchDetailsPlayerStats(damage=_V4PlayerDamage()),
+                behavior=MatchDetailsPlayerBehavior(),
+            ),
+        ],
+        teams=[
+            MatchDetailsTeam(team_id="Red", won=True, rounds=_V4TeamRounds(won=1)),
+            MatchDetailsTeam(team_id="Blue", won=False, rounds=_V4TeamRounds(won=0)),
+        ],
+        rounds=[
+            MatchDetailsRound(
+                id=0,
+                winning_team="Red",
+                stats=[
+                    # valid entry
+                    MatchDetailsRoundPlayerStats(
+                        player=_PlayerRef(puuid=PUUID, team="Blue"),
+                        stats=_RoundPlayerInnerStats(score=100),
+                    ),
+                    # blank puuid — must be skipped
+                    MatchDetailsRoundPlayerStats(
+                        player=_PlayerRef(puuid="", team="Blue"),
+                        stats=_RoundPlayerInnerStats(score=50),
+                    ),
+                ],
+            ),
+        ],
+        kills=[],
+    )
+    m = match_from_details(md)
+    r0 = m.rounds[0]
+    assert len(r0.round_players) == 1  # only the valid entry
+    assert r0.round_players[0].puuid == PUUID
 
 
 # ---------------------------------------------------------------------------

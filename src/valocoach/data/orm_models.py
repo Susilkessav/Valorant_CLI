@@ -1,10 +1,11 @@
 """SQLAlchemy ORM table definitions.
 
-Six tables:
+Seven tables:
   players       — identity + current/peak rank snapshot
   matches       — match metadata + team scores
   match_players — one row per player per match (stats junction table)
   rounds        — per-round outcome + bomb events
+  round_players — per-player per-round stats (score, kills, economy, survival)
   kills         — per-kill events within a round
   sync_log      — operational audit trail for each data sync
 
@@ -251,9 +252,66 @@ class Round(Base):
     # Relationships
     match: Mapped[Match] = relationship(back_populates="rounds")
     kills: Mapped[list[Kill]] = relationship(back_populates="round", cascade="all, delete-orphan")
+    round_players: Mapped[list[RoundPlayer]] = relationship(
+        back_populates="round", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return f"<Round {self.round_number} won={self.winning_team} {self.result_code}>"
+
+
+# ---------------------------------------------------------------------------
+# round_players
+# ---------------------------------------------------------------------------
+
+
+class RoundPlayer(Base):
+    """Per-player, per-round stats — economy, combat score, and survival flag.
+
+    One row per (round_id, puuid).  Populated by the mapper from the
+    ``round.stats`` list in a v4 MatchDetails response.
+
+    Why a separate table:
+      - Per-round loadout_value / remaining_credits unlock a correct econ
+        rating that the match-level aggregate (credits_spent) approximates.
+      - survived=False rows identify deaths without scanning the kills table.
+      - Round-level score variance is not derivable from match_players alone.
+    """
+
+    __tablename__ = "round_players"
+    __table_args__ = (
+        UniqueConstraint("round_id", "puuid", name="uq_round_player"),
+        Index("idx_rp_match_puuid", "match_id", "puuid"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    round_id: Mapped[int] = mapped_column(
+        ForeignKey("rounds.id", ondelete="CASCADE"), nullable=False
+    )
+    match_id: Mapped[str] = mapped_column(String, nullable=False)  # denormalised
+    puuid: Mapped[str] = mapped_column(String, nullable=False)
+    team: Mapped[str] = mapped_column(String, nullable=False)  # "Red" | "Blue"
+    score: Mapped[int] = mapped_column(Integer, default=0)
+    kills: Mapped[int] = mapped_column(Integer, default=0)
+    headshots: Mapped[int] = mapped_column(Integer, default=0)
+    bodyshots: Mapped[int] = mapped_column(Integer, default=0)
+    legshots: Mapped[int] = mapped_column(Integer, default=0)
+    damage_dealt: Mapped[int] = mapped_column(Integer, default=0)  # sum(damage_events[*].damage)
+    loadout_value: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    remaining_credits: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    survived: Mapped[bool] = mapped_column(Boolean, default=True)
+    was_afk: Mapped[bool] = mapped_column(Boolean, default=False)
+    stayed_in_spawn: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # Relationship
+    round: Mapped[Round] = relationship(back_populates="round_players")
+
+    def __repr__(self) -> str:
+        return (
+            f"<RoundPlayer round={self.round_id} "
+            f"puuid={self.puuid[:8]}… "
+            f"kills={self.kills} survived={self.survived}>"
+        )
 
 
 # ---------------------------------------------------------------------------
