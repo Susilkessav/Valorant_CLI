@@ -598,3 +598,64 @@ class TestSyncPlayerMatches:
         mock_run.assert_called_once_with(
             "na", "Yoursaviour01", "SK04", limit=10, full=False, mode="competitive"
         )
+
+
+# ---------------------------------------------------------------------------
+# Missing branch coverage — lines 171-174 (except APIError) and
+# 178→181 (sync_log_id is None in finally)
+# ---------------------------------------------------------------------------
+
+
+class TestSyncOrchestratorMissingBranches:
+    """Cover the `except APIError` handler and the sync_log_id=None finally path."""
+
+    @pytest.mark.asyncio
+    async def test_api_error_before_open_log_is_promoted_to_sync_error(
+        self, account_data, mmr_data
+    ) -> None:
+        """APIError raised inside _open_log (via upsert_player) triggers lines 171-174.
+
+        Path:
+          - _resolve() succeeds (sync_log_id still None before _open_log executes)
+          - upsert_player raises APIError (escapes _open_log into the outer try)
+          - except SyncError: does NOT catch APIError
+          - except APIError as exc: fires → result.error set, raises SyncError
+          - finally: sync_log_id is None → if-body skipped (covers 178 False branch)
+        """
+        session = _make_session()
+        client = _make_client(account_data, mmr_data)
+
+        with (
+            patch(_P_SCOPE, lambda: _scope(session)),
+            # upsert_player raises APIError — escapes _open_log directly
+            patch(_P_UPSERT_PLAYER, new_callable=AsyncMock, side_effect=APIError("db quota")),
+            patch(_P_START_SYNC, new_callable=AsyncMock, return_value=_sync_log_mock()),
+            patch(_P_COMPLETE_SYNC),
+        ):
+            orch = SyncOrchestrator(client, console=_quiet_console())
+            with pytest.raises(SyncError, match="db quota"):
+                await orch.run("na", "Yoursaviour01", "SK04")
+
+    @pytest.mark.asyncio
+    async def test_sync_log_id_none_skips_finalise(self, account_data, mmr_data) -> None:
+        """When the exception fires before _open_log assigns sync_log_id, _finalise is skipped.
+
+        Same code path as the previous test; this test explicitly asserts that
+        complete_sync is NOT called (since sync_log_id=None means no log row to close).
+        """
+        session = _make_session()
+        client = _make_client(account_data, mmr_data)
+        complete_sync_mock = MagicMock()
+
+        with (
+            patch(_P_SCOPE, lambda: _scope(session)),
+            patch(_P_UPSERT_PLAYER, new_callable=AsyncMock, side_effect=APIError("early fail")),
+            patch(_P_START_SYNC, new_callable=AsyncMock, return_value=_sync_log_mock()),
+            patch(_P_COMPLETE_SYNC, complete_sync_mock),
+        ):
+            orch = SyncOrchestrator(client, console=_quiet_console())
+            with pytest.raises(SyncError):
+                await orch.run("na", "Yoursaviour01", "SK04")
+
+        # _finalise was NOT called because sync_log_id remained None
+        complete_sync_mock.assert_not_called()

@@ -16,10 +16,13 @@ Endpoints covered:
 
 from __future__ import annotations
 
+import asyncio
+from unittest.mock import AsyncMock, patch
+
 import pytest
 
 from valocoach.core.config import Settings
-from valocoach.core.exceptions import APIError, RateLimitError
+from valocoach.core.exceptions import APIError, RateLimitError, ServerError
 from valocoach.data.api_client import HenrikClient
 
 BASE = "https://api.henrikdev.xyz"
@@ -498,3 +501,175 @@ async def test_raises_config_error_when_api_key_missing():
     )
     with pytest.raises(ConfigError):
         HenrikClient(bad_settings)
+
+
+# ---------------------------------------------------------------------------
+# Missing branch coverage
+# ---------------------------------------------------------------------------
+
+
+async def test_aexit_with_no_client_does_not_crash() -> None:
+    """__aexit__ when _client is None (line 129 False branch) is a no-op.
+
+    This happens when the client is created but __aenter__ was never called.
+    Coverage target: api_client.py line 129 → exit branch.
+    """
+    client = HenrikClient(_SETTINGS, throttle_seconds=0)
+    # _client is still None — __aexit__ must not raise
+    await client.__aexit__(None, None, None)
+    assert client._client is None
+
+
+async def test_get_without_context_manager_raises_runtime_error() -> None:
+    """Calling _get() outside 'async with' raises RuntimeError (line 165).
+
+    Coverage target: api_client.py line 165 — guard against bare usage.
+    """
+    client = HenrikClient(_SETTINGS, throttle_seconds=0)
+    # _client is None because we never called __aenter__
+    with pytest.raises(RuntimeError, match="async context manager"):
+        await client._get("/some/path")
+
+
+async def test_get_raises_server_error_on_5xx(httpx_mock) -> None:
+    """5xx HTTP response → raise ServerError (line 179).
+
+    Calls _get() directly (no retry decorator) so the test runs in one shot.
+    Coverage target: api_client.py line 179.
+    """
+    httpx_mock.add_response(
+        url=f"{BASE}/valorant/v2/account/x/y",
+        status_code=503,
+        text="Service Unavailable",
+    )
+    async with HenrikClient(_SETTINGS, throttle_seconds=0) as client:
+        with pytest.raises(ServerError, match="503"):
+            await client._get("/valorant/v2/account/x/y")
+
+
+async def test_get_raises_api_error_on_malformed_json(httpx_mock) -> None:
+    """Non-JSON body after 200 status → raise APIError (lines 187-188).
+
+    Coverage target: api_client.py lines 187-188 — `except Exception: raise APIError`.
+    """
+    httpx_mock.add_response(
+        url=f"{BASE}/valorant/v2/account/x/y",
+        status_code=200,
+        content=b"THIS IS NOT VALID JSON {{{",
+        headers={"Content-Type": "application/json"},
+    )
+    async with HenrikClient(_SETTINGS, throttle_seconds=0) as client:
+        with pytest.raises(APIError, match="Malformed JSON"):
+            await client._get("/valorant/v2/account/x/y")
+
+
+async def test_get_raises_rate_limit_on_body_429(httpx_mock) -> None:
+    """HTTP 200 but body status=429 → raise RateLimitError (line 193).
+
+    Henrik sometimes returns status inside the JSON body even on 200 HTTP.
+    Coverage target: api_client.py line 193.
+    """
+    httpx_mock.add_response(
+        url=f"{BASE}/valorant/v2/account/x/y",
+        json={"status": 429, "message": "Rate limited"},
+    )
+    async with HenrikClient(_SETTINGS, throttle_seconds=0) as client:
+        with pytest.raises(RateLimitError, match="body"):
+            await client._get("/valorant/v2/account/x/y")
+
+
+async def test_get_raises_server_error_on_body_5xx(httpx_mock) -> None:
+    """HTTP 200 but body status=503 → raise ServerError (line 195).
+
+    Coverage target: api_client.py line 195.
+    """
+    httpx_mock.add_response(
+        url=f"{BASE}/valorant/v2/account/x/y",
+        json={"status": 503, "message": "Internal error"},
+    )
+    async with HenrikClient(_SETTINGS, throttle_seconds=0) as client:
+        with pytest.raises(ServerError, match="body"):
+            await client._get("/valorant/v2/account/x/y")
+
+
+async def test_throttle_calls_asyncio_sleep_when_wait_positive(httpx_mock) -> None:
+    """_throttle() sleeps when the inter-request gap is below throttle_seconds (line 152).
+
+    Coverage target: api_client.py line 152 — `await asyncio.sleep(wait)`.
+    Strategy: mock asyncio.sleep to avoid the real 1-second pause, then assert
+    it was called with a positive wait.
+    """
+    # Add two responses for two back-to-back get_account calls
+    for _ in range(2):
+        httpx_mock.add_response(
+            url=f"{BASE}/valorant/v2/account/Yoursaviour01/SK04",
+            json=_account_payload("p1"),
+        )
+
+    sleep_calls: list[float] = []
+
+    async def _fake_sleep(secs: float) -> None:
+        sleep_calls.append(secs)
+
+    with patch("asyncio.sleep", _fake_sleep):
+        async with HenrikClient(_SETTINGS, throttle_seconds=1.0) as client:
+            await client.get_account("Yoursaviour01", "SK04")  # sets _last_call_at
+            # Immediately call again — not enough time has passed, so wait > 0
+            await client.get_account("Yoursaviour01", "SK04")
+
+    # At least one sleep call with a positive value should have occurred
+    assert any(s > 0 for s in sleep_calls), f"Expected positive sleep, got: {sleep_calls}"
+
+
+async def test_get_matches_with_empty_mode_omits_mode_param(httpx_mock) -> None:
+    """get_matches(mode='') skips adding mode to params (lines 268→270 False branch).
+
+    Coverage target: api_client.py line 268 `if mode:` False → no mode= in params.
+    """
+    httpx_mock.add_response(
+        url=f"{BASE}/valorant/v3/matches/na/Yoursaviour01/SK04?size=5",
+        json=_matches_payload("m-no-mode"),
+    )
+    async with HenrikClient(_SETTINGS, throttle_seconds=0) as client:
+        matches = await client.get_matches("na", "Yoursaviour01", "SK04", size=5, mode="")
+
+    assert len(matches) == 1
+
+
+async def test_get_stored_matches_with_empty_mode_omits_mode_param(httpx_mock) -> None:
+    """get_stored_matches(mode='') skips adding mode to params (lines 296→298 False branch).
+
+    Coverage target: api_client.py line 296 `if mode:` False → no mode= in params.
+    """
+    httpx_mock.add_response(
+        url=f"{BASE}/valorant/v1/stored-matches/na/Yoursaviour01/SK04?size=20",
+        json=_stored_matches_payload("stored-no-mode"),
+    )
+    async with HenrikClient(_SETTINGS, throttle_seconds=0) as client:
+        matches = await client.get_stored_matches("na", "Yoursaviour01", "SK04", mode="")
+
+    assert len(matches) == 1
+    assert matches[0].match_id == "stored-no-mode"
+
+
+async def test_get_version_returns_data_dict(httpx_mock) -> None:
+    """get_version() returns the 'data' dict from the response (lines 323-325).
+
+    Coverage target: api_client.py lines 323-325 — entire get_version() method.
+    """
+    httpx_mock.add_response(
+        url=f"{BASE}/valorant/v1/version/na",
+        json={
+            "status": 200,
+            "data": {
+                "version": "release-09.00",
+                "branch": "release",
+                "build_date": "2026-04-01",
+            },
+        },
+    )
+    async with HenrikClient(_SETTINGS, throttle_seconds=0) as client:
+        data = await client.get_version("na")
+
+    assert data["version"] == "release-09.00"
+    assert data["branch"] == "release"
