@@ -588,3 +588,350 @@ def test_format_context_round_line_tags_thin_sample() -> None:
     out = _format_context(_player(), rows, round_analysis=analysis)
     round_line = next(line for line in out.splitlines() if "Round play" in line)
     assert "⚠" in round_line
+
+
+# ---------------------------------------------------------------------------
+# Missing branch coverage for coach.py
+# ---------------------------------------------------------------------------
+
+
+def _check_ok():
+    from valocoach.core.preflight import CheckResult
+    return CheckResult(ok=True, message="OK", hint="")
+
+
+def _check_fail():
+    from valocoach.core.preflight import CheckResult
+    return CheckResult(ok=False, message="Riot ID not configured", hint="Run valocoach config init")
+
+
+def _check_vs_fail():
+    from valocoach.core.preflight import CheckResult
+    return CheckResult(ok=False, message="Vector store empty", hint="Run valocoach index")
+
+
+def test_run_coach_warns_when_unknown_agent_in_grounded_context() -> None:
+    """_build_grounded_context warns when agent is not in knowledge base (line 66)."""
+    warn_calls: list[str] = []
+
+    with (
+        patch("valocoach.cli.commands.coach.load_settings", return_value=_settings()),
+        patch("valocoach.cli.commands.coach.build_stats_context", return_value=None),
+        patch(
+            "valocoach.cli.commands.coach.stream_completion",
+            return_value=_stream(["ok"]),
+        ),
+        patch("valocoach.cli.commands.coach.display.stream_to_panel"),
+        patch("valocoach.cli.commands.coach.display.warn", side_effect=lambda m: warn_calls.append(m)),
+        # Return None for unknown agent → triggers the warn at line 66.
+        patch(
+            "valocoach.cli.commands.coach.format_agent_context",
+            return_value=None,
+        ),
+    ):
+        run_coach("push A", agent="ZZZUnknownAgent", with_stats=False)
+
+    assert any("not found in knowledge base" in m for m in warn_calls)
+    assert any("ZZZUnknownAgent" in m for m in warn_calls)
+
+
+def test_run_coach_warns_when_unknown_map_in_grounded_context() -> None:
+    """_build_grounded_context warns when map is not in knowledge base (line 68)."""
+    warn_calls: list[str] = []
+
+    with (
+        patch("valocoach.cli.commands.coach.load_settings", return_value=_settings()),
+        patch("valocoach.cli.commands.coach.build_stats_context", return_value=None),
+        patch(
+            "valocoach.cli.commands.coach.stream_completion",
+            return_value=_stream(["ok"]),
+        ),
+        patch("valocoach.cli.commands.coach.display.stream_to_panel"),
+        patch("valocoach.cli.commands.coach.display.warn", side_effect=lambda m: warn_calls.append(m)),
+        patch(
+            "valocoach.cli.commands.coach.format_map_context",
+            return_value=None,
+        ),
+    ):
+        run_coach("push B", map_="ZZZUnknownMap", with_stats=False)
+
+    assert any("not found in knowledge base" in m for m in warn_calls)
+    assert any("ZZZUnknownMap" in m for m in warn_calls)
+
+
+def test_run_coach_warns_when_riot_id_not_configured() -> None:
+    """check_riot_id not ok + with_stats=True → warning at line 131."""
+    warn_calls: list[str] = []
+
+    with (
+        patch("valocoach.cli.commands.coach.load_settings", return_value=_settings()),
+        patch("valocoach.cli.commands.coach.build_stats_context", return_value=None),
+        patch(
+            "valocoach.cli.commands.coach.stream_completion",
+            return_value=_stream(["ok"]),
+        ),
+        patch("valocoach.cli.commands.coach.display.stream_to_panel"),
+        patch("valocoach.cli.commands.coach.display.warn", side_effect=lambda m: warn_calls.append(m)),
+        # check_riot_id/check_vector_store are lazily imported inside run_coach's body
+        # via `from valocoach.core.preflight import ...`, so patch the source module.
+        patch("valocoach.core.preflight.check_riot_id", return_value=_check_fail()),
+        patch("valocoach.core.preflight.check_vector_store", return_value=_check_ok()),
+    ):
+        run_coach("eco round", with_stats=True)
+
+    assert any("Riot ID" in m or "Coaching will proceed" in m for m in warn_calls)
+
+
+def test_run_coach_warns_when_vector_store_empty() -> None:
+    """check_vector_store not ok → warning at line 140→145."""
+    warn_calls: list[str] = []
+
+    with (
+        patch("valocoach.cli.commands.coach.load_settings", return_value=_settings()),
+        patch("valocoach.cli.commands.coach.build_stats_context", return_value=None),
+        patch(
+            "valocoach.cli.commands.coach.stream_completion",
+            return_value=_stream(["ok"]),
+        ),
+        patch("valocoach.cli.commands.coach.display.stream_to_panel"),
+        patch("valocoach.cli.commands.coach.display.warn", side_effect=lambda m: warn_calls.append(m)),
+        patch("valocoach.core.preflight.check_riot_id", return_value=_check_ok()),
+        patch("valocoach.core.preflight.check_vector_store", return_value=_check_vs_fail()),
+    ):
+        run_coach("eco round", with_stats=True)
+
+    assert any("Vector store" in m or "empty" in m.lower() for m in warn_calls)
+
+
+def test_run_coach_raises_when_llm_fails() -> None:
+    """stream_completion raises → error + warn displayed, exception re-raised (lines 214-217).
+
+    Note: with_stats=False means check_riot_id is NOT called (it's inside `if with_stats:`),
+    but check_vector_store IS always called (outside the guard), so we patch it at the source.
+    """
+    import pytest
+
+    with (
+        patch("valocoach.cli.commands.coach.load_settings", return_value=_settings()),
+        patch("valocoach.cli.commands.coach.build_stats_context", return_value=None),
+        patch(
+            "valocoach.cli.commands.coach.stream_completion",
+            side_effect=RuntimeError("ollama is down"),
+        ),
+        patch("valocoach.cli.commands.coach.display.stream_to_panel"),
+        patch("valocoach.cli.commands.coach.display.error") as mock_error,
+        patch("valocoach.cli.commands.coach.display.warn") as mock_warn,
+        # check_vector_store is always called (not guarded by with_stats).
+        # Patch at the source module since it's lazily imported inside run_coach.
+        patch("valocoach.core.preflight.check_vector_store", return_value=_check_ok()),
+    ):
+        with pytest.raises(RuntimeError, match="ollama is down"):
+            run_coach("push B", with_stats=False)
+
+    mock_error.assert_called()
+    mock_warn.assert_called()
+    error_msg = mock_error.call_args.args[0]
+    assert "LLM call failed" in error_msg
+
+
+# ---------------------------------------------------------------------------
+# context.py branch coverage — _format_round_line side data (line 96)
+# and _format_context baseline_comparison (line 197)
+# and build_stats_context / _build_stats_context_async (lines 243-249, 279)
+# ---------------------------------------------------------------------------
+
+
+def _make_player_stats():
+    """Full PlayerStats object for BaselineComparison construction."""
+    from valocoach.stats.calculator import PlayerStats
+
+    return PlayerStats(
+        matches=20,
+        rounds=400,
+        wins=12,
+        losses=8,
+        win_rate=0.6,
+        acs=250.0,
+        adr=150.0,
+        kills=400,
+        deaths=200,
+        assists=100,
+        kd=2.0,
+        kda=2.5,
+        headshots=120,
+        bodyshots=240,
+        legshots=40,
+        hs_pct=0.30,
+        first_bloods=40,
+        first_deaths=20,
+        fb_rate=0.10,
+        fd_rate=0.05,
+        fb_diff=20,
+        plants=10,
+        defuses=5,
+        econ_rating=None,
+    )
+
+
+def _make_anomaly_obj(*, severity: str = "significant", is_improvement: bool = False):
+    """Build a real Anomaly for baseline_comparison tests."""
+    from valocoach.stats.baseline import Anomaly
+
+    return Anomaly(
+        metric="acs",
+        label="ACS",
+        baseline_val=250.0,
+        form_val=200.0,
+        delta=-50.0,
+        pct_delta=-0.2,
+        direction="down",
+        severity=severity,  # type: ignore[arg-type]
+        is_improvement=is_improvement,
+        fmt=".0f",
+        z_score=-2.1,
+        baseline_stddev=30.0,
+    )
+
+
+def _make_baseline_comparison(anomalies=None):
+    """Build a real BaselineComparison with the given anomalies."""
+    from valocoach.stats.baseline import BaselineComparison
+
+    ps = _make_player_stats()
+    return BaselineComparison(
+        baseline=ps,
+        form=ps,
+        baseline_matches=15,
+        form_matches=5,
+        anomalies=anomalies or [],
+    )
+
+
+def test_format_round_line_shows_atk_def_when_side_data_present() -> None:
+    """attack_win_rate and defense_win_rate non-None → ATK/DEF appended (line 96).
+
+    Coverage target: context.py line 96 — the side_str f-string.
+    """
+    from valocoach.coach.context import _format_round_line
+
+    analysis = RoundAnalysis(
+        rounds=100,
+        deaths=50,
+        teammate_deaths=100,
+        clutch_opportunities=20,
+        rounds_with_kill=60,
+        rounds_with_assist=30,
+        rounds_survived=40,
+        rounds_traded_death=10,
+        rounds_kast=75,
+        clutches_won=5,
+        traded_deaths=20,
+        trades_given=15,
+        double_kills=5,
+        triple_kills=2,
+        quadra_kills=1,
+        aces=0,
+        # Provide side data — non-None → triggers line 96
+        attack_rounds=50,
+        attack_wins=30,
+        defense_rounds=50,
+        defense_wins=35,
+    )
+    result = _format_round_line(analysis, 20)
+    assert result is not None
+    assert "ATK" in result
+    assert "DEF" in result
+    assert "60%" in result  # 30/50 = 60% attack win rate
+    assert "70%" in result  # 35/50 = 70% defense win rate
+
+
+def test_format_context_includes_baseline_block_when_comparison_has_anomalies() -> None:
+    """baseline_comparison non-None + has_anomalies → extend with trend lines (line 197).
+
+    Coverage target: context.py line 197 — lines.extend(_format_baseline_lines(comparison)).
+    """
+    anomaly = _make_anomaly_obj(severity="significant", is_improvement=False)
+    comparison = _make_baseline_comparison(anomalies=[anomaly])
+    rows = [_mp(match_id=f"m-{i}") for i in range(20)]
+    out = _format_context(_player(), rows, baseline_comparison=comparison)
+    assert "Form trend" in out
+    assert "ACS" in out
+    assert "(!!)" in out  # significant anomaly marker from _format_baseline_lines
+
+
+def test_format_baseline_lines_returns_empty_when_no_anomalies() -> None:
+    """has_anomalies=False → _format_baseline_lines returns [] (line 116→117).
+
+    Coverage target: context.py line 116 — guard returns early.
+    """
+    from valocoach.coach.context import _format_baseline_lines
+
+    comparison = _make_baseline_comparison(anomalies=[])
+    result = _format_baseline_lines(comparison)
+    assert result == []
+
+
+def test_build_stats_context_returns_none_when_no_data() -> None:
+    """load_player_data_async returns None → build_stats_context returns None (line 244).
+
+    Coverage target: context.py lines 243 (await), 244 (if data is None), 279 (asyncio.run).
+    """
+    from unittest.mock import AsyncMock
+
+    from valocoach.coach.context import build_stats_context
+
+    with patch(
+        "valocoach.coach.context.load_player_data_async",
+        new_callable=AsyncMock,
+        return_value=None,
+    ):
+        result = build_stats_context(_settings())
+
+    assert result is None
+
+
+def test_build_stats_context_returns_none_when_rows_empty() -> None:
+    """data.rows=[] → build_stats_context returns None (line 244 second condition)."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from valocoach.coach.context import build_stats_context
+
+    fake_data = MagicMock()
+    fake_data.rows = []
+
+    with patch(
+        "valocoach.coach.context.load_player_data_async",
+        new_callable=AsyncMock,
+        return_value=fake_data,
+    ):
+        result = build_stats_context(_settings())
+
+    assert result is None
+
+
+def test_build_stats_context_returns_string_when_data_present() -> None:
+    """data with non-empty rows → build_stats_context returns formatted string.
+
+    Coverage target: context.py lines 247 (analysis), 248 (compare_baseline),
+    249 (return _format_context), 279 (asyncio.run returns str).
+    """
+    from unittest.mock import AsyncMock
+
+    from valocoach.coach.context import build_stats_context
+    from valocoach.data.loader import PlayerData
+
+    player = _player()
+    rows = [_mp(match_id=f"m-{i}") for i in range(5)]
+    fake_data = PlayerData(player=player, rows=rows, full_matches=[])
+
+    with patch(
+        "valocoach.coach.context.load_player_data_async",
+        new_callable=AsyncMock,
+        return_value=fake_data,
+    ):
+        result = build_stats_context(_settings())
+
+    assert result is not None
+    assert isinstance(result, str)
+    assert "PLAYER CONTEXT" in result
+    assert "Yoursaviour01" in result

@@ -461,3 +461,137 @@ class TestDoYoutube:
             _do_youtube(tmp_path, "dQw4w9WgXcQ")
 
         assert captured.get("extra_metadata", {}).get("ttl_tier") == "live"
+
+
+# ---------------------------------------------------------------------------
+# Additional branch coverage for run_ingest and _do_seed/_do_corpus
+# ---------------------------------------------------------------------------
+
+
+class TestRunIngestBranches:
+    """Cover the conditional dispatch branches in run_ingest (lines 56-66)."""
+
+    def _fake_settings(self, tmp_path: Path):
+        s = MagicMock()
+        s.data_dir = tmp_path
+        return s
+
+    def test_corpus_flag_skips_seed_calls_corpus(self, tmp_path: Path):
+        """corpus=True, seed=False → if seed or nothing_specified: False (56->59),
+        then _do_corpus is called (line 60)."""
+        corpus = tmp_path / "corpus"
+        corpus.mkdir()
+
+        with (
+            patch(_LOAD_SETTINGS, return_value=self._fake_settings(tmp_path)),
+            patch(_INGEST_TEXT_SRC, return_value=1),
+        ):
+            from valocoach.cli.commands.ingest import run_ingest
+            run_ingest(
+                url=None,
+                youtube=None,
+                corpus=True,
+                seed=False,
+                clear=False,
+                show_stats=False,
+            )
+        # If _do_corpus ran without raising, the branch was covered.
+
+    def test_url_flag_calls_do_url(self, tmp_path: Path):
+        """url='https://...' → _do_url(data_dir, url) is called (line 63)."""
+        from valocoach.retrieval.scrapers import ScrapedContent
+
+        fake_content = ScrapedContent(
+            url="https://example.com",
+            title="Test",
+            text="Some content.",
+            fetched_at="2026-01-01T00:00:00",
+            source="patch_note",
+        )
+        with (
+            patch(_LOAD_SETTINGS, return_value=self._fake_settings(tmp_path)),
+            patch(_SCRAPE_URL_SRC, return_value=fake_content),
+            patch(_INGEST_TEXT_SRC, return_value=2),
+        ):
+            from valocoach.cli.commands.ingest import run_ingest
+            run_ingest(
+                url="https://example.com",
+                youtube=None,
+                corpus=False,
+                seed=False,
+                clear=False,
+                show_stats=False,
+            )
+
+    def test_youtube_flag_calls_do_youtube(self, tmp_path: Path):
+        """youtube='dQw4w...' → _do_youtube(data_dir, youtube) is called (line 66)."""
+        from valocoach.retrieval.scrapers import ScrapedContent
+
+        fake_content = ScrapedContent(
+            url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            title="Best Valorant Tips",
+            text="Great tips for playing Valorant.",
+            fetched_at="2026-01-01T00:00:00",
+            source="youtube",
+        )
+        with (
+            patch(_LOAD_SETTINGS, return_value=self._fake_settings(tmp_path)),
+            patch(_FETCH_TRANSCRIPT_SRC, return_value=fake_content),
+            patch(_INGEST_TEXT_SRC, return_value=3),
+        ):
+            from valocoach.cli.commands.ingest import run_ingest
+            run_ingest(
+                url=None,
+                youtube="dQw4w9WgXcQ",
+                corpus=False,
+                seed=False,
+                clear=False,
+                show_stats=False,
+            )
+
+
+class TestDoSeedOnProgressCallback:
+    """Ensure the _on_progress closure (line 85) is actually invoked."""
+
+    def test_on_progress_body_executes_when_called(self, tmp_path: Path):
+        """ingest_knowledge_base calls on_progress → line 85 executes."""
+
+        def fake_ingest_kb(data_dir, on_progress=None):
+            # Simulate the real function calling the callback.
+            if on_progress:
+                on_progress(1, 3)
+                on_progress(2, 3)
+                on_progress(3, 3)
+            return {"agents": 1, "maps": 1, "meta": 1, "total": 3}
+
+        with patch(_INGEST_KB_SRC, side_effect=fake_ingest_kb):
+            from valocoach.cli.commands.ingest import _do_seed
+            # Must not raise — the progress.update calls (line 85) run inside
+            # the Rich Progress context, which we let run normally.
+            _do_seed(tmp_path)
+
+
+class TestDoCorpusDefaultRoot:
+    """Cover line 126: corpus_root resolved from __file__ when not provided."""
+
+    def test_default_corpus_root_used_when_none(self, tmp_path: Path, monkeypatch):
+        """When corpus_root is omitted, line 126 resolves it from __file__.
+
+        We monkeypatch ingest.py's __file__ to point inside tmp_path so the
+        resolved corpus root doesn't exist → error exit confirms line 126 ran.
+        """
+        import click
+
+        import valocoach.cli.commands.ingest as ingest_mod
+
+        # Point the module's __file__ into a temp tree that has no corpus/.
+        fake_file = tmp_path / "src" / "valocoach" / "cli" / "commands" / "ingest.py"
+        fake_file.parent.mkdir(parents=True)
+        monkeypatch.setattr(ingest_mod, "__file__", str(fake_file))
+
+        from valocoach.cli.commands.ingest import _do_corpus
+
+        with pytest.raises((click.exceptions.Exit, SystemExit)):
+            # No corpus_root kwarg → line 126 executes to compute default path.
+            # The computed path won't exist → error + Exit(1).
+            _do_corpus(tmp_path)

@@ -534,3 +534,77 @@ def test_run_profile_no_round_stats_when_full_matches_empty(tmp_path) -> None:
         run_profile(name="Tester", tag="NA1", console=con)
 
     assert "KAST" not in con.file.getvalue()
+
+
+def test_run_profile_no_round_stats_when_full_matches_have_zero_rounds(tmp_path) -> None:
+    """full_matches non-empty but match.rounds=[] → analyze_rounds returns rounds=0
+    → the KAST section is silently skipped (line 149->156)."""
+    from valocoach.data.orm_models import Match as OrmMatch
+
+    fake_settings = _fake_settings(tmp_path)
+
+    # Match with no rounds — analyze_rounds will return rounds=0.
+    empty_match = OrmMatch(
+        match_id="m-norounds",
+        map_name="Ascent",
+        map_id=None,
+        queue_id="competitive",
+        is_ranked=True,
+        game_version=None,
+        game_length_secs=0,
+        season_short=None,
+        region="na",
+        rounds_played=0,
+        red_score=0,
+        blue_score=0,
+        winning_team=None,
+        started_at="2026-04-19T18:00:00+00:00",
+    )
+    empty_match.rounds = []  # no rounds → _tally_round never called → acc.rounds=0
+    empty_match.players = []
+
+    rows = [_mp(match_id=f"m-{i}") for i in range(5)]
+    data = PlayerData(player=_player(), rows=rows, full_matches=[empty_match])
+
+    con = _capture_console()
+    with (
+        patch("valocoach.cli.commands.profile.load_settings", return_value=fake_settings),
+        patch(
+            "valocoach.cli.commands.profile.load_player_data_async",
+            new=AsyncMock(return_value=data),
+        ),
+    ):
+        run_profile(name="Tester", tag="NA1", console=con)
+
+    # KAST must NOT appear because round_analysis.rounds == 0.
+    assert "KAST" not in con.file.getvalue()
+
+
+def test_run_profile_breakdown_shown_when_multiple_agents(tmp_path) -> None:
+    """When per_agent has ≥ 2 entries, the breakdown section is rendered (lines 158-159)."""
+    fake_settings = _fake_settings(tmp_path)
+
+    # Mix of two different agents so compute_per_agent returns 2+ rows.
+    rows = [
+        _mp(agent="Jett", match_id=f"m-jett-{i}") for i in range(5)
+    ] + [
+        _mp(agent="Reyna", match_id=f"m-reyna-{i}") for i in range(5)
+    ]
+    data = PlayerData(player=_player(), rows=rows, full_matches=[])
+
+    con = _capture_console()
+    with (
+        patch("valocoach.cli.commands.profile.load_settings", return_value=fake_settings),
+        patch(
+            "valocoach.cli.commands.profile.load_player_data_async",
+            new=AsyncMock(return_value=data),
+        ),
+    ):
+        run_profile(name="Tester", tag="NA1", console=con)
+
+    out = con.file.getvalue()
+    # The "Top agents" breakdown table must appear.
+    assert "Top agents" in out
+    # Both agents should appear in the breakdown.
+    assert "Jett" in out
+    assert "Reyna" in out

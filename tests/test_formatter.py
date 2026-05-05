@@ -22,6 +22,8 @@ from io import StringIO
 
 from rich.console import Console
 
+from unittest.mock import patch
+
 from valocoach.cli.formatter import (
     WARN_PREFIX,
     fmt_delta,
@@ -32,6 +34,7 @@ from valocoach.cli.formatter import (
     render_overall,
     render_round_stats,
     render_summary_card,
+    render_trend,
     render_warn_legend,
     render_win_loss_split,
     warn_cell,
@@ -613,3 +616,138 @@ class TestRenderSummaryCard:
         acs_line = next(ln for ln in out.splitlines() if "ACS" in ln)
         assert "⚠️" in hs_line
         assert "⚠️" not in acs_line
+
+
+# ---------------------------------------------------------------------------
+# render_trend — lines 363-375
+# ---------------------------------------------------------------------------
+
+
+def _make_anomaly(*, severity: str = "significant", is_improvement: bool = False):
+    """Build a real Anomaly dataclass for render_trend tests."""
+    from valocoach.stats.baseline import Anomaly
+
+    return Anomaly(
+        metric="acs",
+        label="ACS",
+        baseline_val=250.0,
+        form_val=200.0,
+        delta=-50.0,
+        pct_delta=-0.2,
+        direction="down",
+        severity=severity,  # type: ignore[arg-type]
+        is_improvement=is_improvement,
+        fmt=".0f",
+        z_score=-2.1,
+        baseline_stddev=30.0,
+    )
+
+
+def _make_comparison(anomalies):
+    """Build a real BaselineComparison for render_trend tests."""
+    from valocoach.stats.baseline import BaselineComparison
+    from valocoach.stats.calculator import PlayerStats
+
+    ps = PlayerStats(
+        matches=20,
+        rounds=400,
+        wins=12,
+        losses=8,
+        win_rate=0.6,
+        acs=250.0,
+        adr=150.0,
+        kills=400,
+        deaths=200,
+        assists=100,
+        kd=2.0,
+        kda=2.5,
+        headshots=120,
+        bodyshots=240,
+        legshots=40,
+        hs_pct=0.30,
+        first_bloods=40,
+        first_deaths=20,
+        fb_rate=0.10,
+        fd_rate=0.05,
+        fb_diff=20,
+        plants=10,
+        defuses=5,
+        econ_rating=None,
+    )
+    return BaselineComparison(
+        baseline=ps,
+        form=ps,
+        baseline_matches=15,
+        form_matches=5,
+        anomalies=anomalies,
+    )
+
+
+class TestRenderTrend:
+    """Coverage for formatter.render_trend (lines 363-375)."""
+
+    def test_silent_when_comparison_is_none(self) -> None:
+        """No output when compare_baseline returns None (line 360 early-return)."""
+        con = _con()
+        with patch("valocoach.cli.formatter.compare_baseline", return_value=None):
+            render_trend(con, [])
+        assert _out(con) == ""
+
+    def test_silent_when_no_anomalies(self) -> None:
+        """No output when has_anomalies is False (line 360 second guard)."""
+        comp = _make_comparison(anomalies=[])
+        con = _con()
+        with patch("valocoach.cli.formatter.compare_baseline", return_value=comp):
+            render_trend(con, [])
+        assert _out(con) == ""
+
+    def test_significant_slump_shows_double_bang(self) -> None:
+        """Significant non-improvement → '(!!)' tag (lines 368-370).
+
+        Coverage target: lines 363-375 — the whole trend block executes.
+        """
+        a = _make_anomaly(severity="significant", is_improvement=False)
+        comp = _make_comparison([a])
+        con = _con()
+        with patch("valocoach.cli.formatter.compare_baseline", return_value=comp):
+            render_trend(con, [])
+        out = _out(con)
+        assert "Trend" in out
+        assert "ACS" in out
+        assert "!!" in out  # (!!)-tag for significant
+
+    def test_significant_improvement_also_shows_double_bang(self) -> None:
+        """Significant improvement → 'bold green' branch (line 369)."""
+        a = _make_anomaly(severity="significant", is_improvement=True)
+        comp = _make_comparison([a])
+        con = _con()
+        with patch("valocoach.cli.formatter.compare_baseline", return_value=comp):
+            render_trend(con, [])
+        out = _out(con)
+        assert "Trend" in out
+        assert "!!" in out
+
+    def test_notable_slump_shows_single_bang(self) -> None:
+        """Notable non-improvement → '(!)' tag (lines 371-373)."""
+        a = _make_anomaly(severity="notable", is_improvement=False)
+        comp = _make_comparison([a])
+        con = _con()
+        with patch("valocoach.cli.formatter.compare_baseline", return_value=comp):
+            render_trend(con, [])
+        out = _out(con)
+        assert "Trend" in out
+        # notable uses "(!)" — double-bang must NOT appear
+        assert "(!)" in out
+        assert "(!!" not in out
+
+    def test_notable_improvement_shows_single_bang(self) -> None:
+        """Notable improvement → 'green' branch (line 372)."""
+        a = _make_anomaly(severity="notable", is_improvement=True)
+        comp = _make_comparison([a])
+        con = _con()
+        with patch("valocoach.cli.formatter.compare_baseline", return_value=comp):
+            render_trend(con, [])
+        out = _out(con)
+        assert "Trend" in out
+        assert "(!)" in out
+        assert "(!!" not in out
