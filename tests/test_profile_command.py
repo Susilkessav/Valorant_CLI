@@ -606,3 +606,90 @@ def test_run_profile_breakdown_shown_when_multiple_agents(tmp_path) -> None:
     # Both agents should appear in the breakdown.
     assert "Jett" in out
     assert "Reyna" in out
+
+
+# ---------------------------------------------------------------------------
+# Phase B — coaching section coverage
+# ---------------------------------------------------------------------------
+
+
+def test_run_profile_coaching_sessions_rendered(tmp_path) -> None:
+    """When list_coaching_sessions returns data, the sessions table is shown."""
+    from valocoach.coach.session_manager import SessionInfo
+
+    fake_settings = _fake_settings(tmp_path)
+    rows = [_mp(match_id=f"m-{i}") for i in range(5)]
+    data = PlayerData(player=_player(), rows=rows, full_matches=[])
+
+    sessions = [
+        SessionInfo(id=3, title="Post-plant drill", started_at="2026-05-06T10:00:00",
+                    ended_at="2026-05-06T12:00:00", focus_agent=None, focus_map=None),
+    ]
+
+    con = _capture_console()
+    with (
+        patch("valocoach.cli.commands.profile.load_settings", return_value=fake_settings),
+        patch("valocoach.cli.commands.profile.load_player_data_async", new=AsyncMock(return_value=data)),
+        patch("valocoach.cli.commands.profile.list_coaching_sessions", return_value=sessions),
+        patch("valocoach.cli.commands.profile.list_open_notes", return_value=[]),
+    ):
+        run_profile(name="Tester", tag="NA1", console=con)
+
+    out = con.file.getvalue()
+    assert "Post-plant drill" in out or "coaching sessions" in out.lower()
+
+
+def test_run_profile_open_notes_rendered(tmp_path) -> None:
+    """When list_open_notes returns data, the notes table is shown."""
+    from valocoach.coach.session_manager import NoteInfo
+
+    fake_settings = _fake_settings(tmp_path)
+    rows = [_mp(match_id=f"m-{i}") for i in range(5)]
+    data = PlayerData(player=_player(), rows=rows, full_matches=[])
+
+    notes = [
+        NoteInfo(id=7, body="Work on crossfire at A long", category="tactical",
+                 priority=2, created_at="2026-05-06T10:00:00"),
+    ]
+
+    con = _capture_console()
+    with (
+        patch("valocoach.cli.commands.profile.load_settings", return_value=fake_settings),
+        patch("valocoach.cli.commands.profile.load_player_data_async", new=AsyncMock(return_value=data)),
+        patch("valocoach.cli.commands.profile.list_coaching_sessions", return_value=[]),
+        patch("valocoach.cli.commands.profile.list_open_notes", return_value=notes),
+    ):
+        run_profile(name="Tester", tag="NA1", console=con)
+
+    out = con.file.getvalue()
+    assert "Work on crossfire" in out or "coaching notes" in out.lower()
+
+
+def test_run_profile_coaching_section_exception_silently_skipped(tmp_path) -> None:
+    """If list_coaching_sessions raises, the profile still renders without crashing."""
+    fake_settings = _fake_settings(tmp_path)
+    rows = [_mp(match_id=f"m-{i}") for i in range(5)]
+    data = PlayerData(player=_player(), rows=rows, full_matches=[])
+
+    con = _capture_console()
+    with (
+        patch("valocoach.cli.commands.profile.load_settings", return_value=fake_settings),
+        patch("valocoach.cli.commands.profile.load_player_data_async", new=AsyncMock(return_value=data)),
+        patch("valocoach.cli.commands.profile.list_coaching_sessions",
+              side_effect=RuntimeError("db down")),
+        patch("valocoach.cli.commands.profile.list_open_notes", return_value=[]),
+    ):
+        run_profile(name="Tester", tag="NA1", console=con)  # must not raise
+
+    # Profile card still rendered
+    assert "Yoursaviour01" in con.file.getvalue()
+
+
+def test_run_profile_invalid_limit_raises(tmp_path) -> None:
+    """limit <= 0 raises typer.BadParameter (line 109)."""
+    fake_settings = _fake_settings(tmp_path)
+    with (
+        patch("valocoach.cli.commands.profile.load_settings", return_value=fake_settings),
+        pytest.raises(typer.BadParameter),
+    ):
+        run_profile(limit=0)

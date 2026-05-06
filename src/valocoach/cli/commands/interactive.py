@@ -8,15 +8,21 @@ the LLM sees previous exchanges and can build on earlier advice.
 Sessions are automatically saved to ``~/.valocoach/sessions/`` on exit so
 they can be resumed the next time the REPL starts.
 
+Coaching notes are persisted to the local SQLite DB so they survive between
+REPL sessions and surface in ``valocoach profile``.
+
 Slash commands available inside the REPL::
 
-    /help     — print this command list
-    /clear    — wipe conversation memory (start fresh)
-    /memory   — show how many turns are in memory and their token count
-    /save     — save the current session to disk immediately
-    /sessions — list previously saved sessions
-    /stats    — show your recent stats card (same output as ``valocoach stats``)
-    /quit     — exit the REPL (Ctrl-D or Ctrl-C also exit cleanly)
+    /help          — print this command list
+    /clear         — wipe conversation memory (start fresh)
+    /memory        — show how many turns are in memory and their token count
+    /save          — save the current session to disk immediately
+    /sessions      — list previously saved sessions
+    /stats         — show your recent stats card (same output as ``valocoach stats``)
+    /note <text>   — add a coaching note to the current session
+    /notes         — list your open (unresolved) coaching notes
+    /resolve <id>  — mark coaching note <id> as resolved
+    /quit          — exit the REPL (Ctrl-D or Ctrl-C also exit cleanly)
 """
 
 from __future__ import annotations
@@ -24,6 +30,15 @@ from __future__ import annotations
 from pathlib import Path
 
 from valocoach.cli import display
+from valocoach.coach.session_manager import (
+    REPLCoachState,
+    add_coaching_note,
+    close_coaching_session,
+    get_player_puuid,
+    list_open_notes,
+    open_coaching_session,
+    resolve_coaching_note,
+)
 from valocoach.core.memory import ConversationMemory
 from valocoach.core.session_store import (
     latest_session,
@@ -43,6 +58,9 @@ _SLASH_HELP: dict[str, str] = {
     "/save": "Save the current session to disk immediately.",
     "/sessions": "List previously saved sessions.",
     "/stats": "Display your recent stats card.",
+    "/note": "Add a coaching note: /note <text>",
+    "/notes": "List your open (unresolved) coaching notes.",
+    "/resolve": "Resolve a coaching note by id: /resolve <id>",
     "/quit": "Exit the REPL (also: Ctrl-D, Ctrl-C).",
 }
 
@@ -60,13 +78,26 @@ def _print_help() -> None:
     display.console.print()
 
 
-def _handle_slash(cmd: str, memory: ConversationMemory) -> None:
+def _handle_slash(
+    cmd: str,
+    memory: ConversationMemory,
+    state: REPLCoachState | None = None,
+) -> None:
     """Dispatch a slash command entered in the REPL.
+
+    Args:
+        cmd:    Raw input line starting with ``/`` (may include trailing args
+                for commands like ``/note`` and ``/resolve``).
+        memory: The current :class:`~valocoach.core.memory.ConversationMemory`.
+        state:  Optional :class:`~valocoach.coach.session_manager.REPLCoachState`
+                for note/session commands.  When ``None`` those commands degrade
+                gracefully with an informational message.
 
     Raises ``SystemExit`` for ``/quit`` so the caller can break the REPL
     loop cleanly without an extra return-value protocol.
     """
-    cmd = cmd.strip().lower().split()[0]  # normalize, ignore trailing args
+    raw_input = cmd  # preserve full text (needed for /note and /resolve bodies)
+    cmd = raw_input.strip().lower().split()[0]  # normalized command word
 
     if cmd == "/help":
         _print_help()
@@ -106,6 +137,64 @@ def _handle_slash(cmd: str, memory: ConversationMemory) -> None:
             run_stats()
         except Exception as exc:
             display.warn(f"Couldn't load stats: {exc}")
+
+    # ------------------------------------------------------------------
+    # Note commands — require an active coaching session in the DB
+    # ------------------------------------------------------------------
+
+    elif cmd == "/note":
+        body = raw_input.strip()[len("/note"):].strip()
+        if not body:
+            display.warn("Usage: /note <text>   e.g. /note Work on crossfire at A long")
+            return
+        if state is None or not state.active:
+            display.warn(
+                "No active coaching session — run `valocoach sync` first so "
+                "ValoCoach can identify your player profile."
+            )
+            return
+        note_id = add_coaching_note(state.settings, state.coaching_session_id, state.puuid, body)
+        if note_id is not None:
+            display.success(f"Note #{note_id} saved.")
+        else:
+            display.warn("Couldn't save note — check logs.")
+
+    elif cmd == "/notes":
+        if state is None or state.puuid is None:
+            display.warn(
+                "No player profile found — run `valocoach sync` first."
+            )
+            return
+        notes = list_open_notes(state.settings, state.puuid)
+        if not notes:
+            display.info("No open coaching notes.")
+            return
+        display.console.print(f"\n[bold]Open coaching notes ({len(notes)}):[/bold]")
+        for n in notes:
+            pri_icon = {1: "[red]●[/red]", 2: "[yellow]●[/yellow]", 3: "[dim]●[/dim]"}.get(
+                n.priority, "●"
+            )
+            display.console.print(
+                f"  [dim]{n.id:>4}.[/dim] {pri_icon} [{n.category}] {n.body}"
+            )
+        display.console.print()
+
+    elif cmd == "/resolve":
+        id_str = raw_input.strip()[len("/resolve"):].strip()
+        if not id_str:
+            display.warn("Usage: /resolve <note-id>   e.g. /resolve 12")
+            return
+        if not id_str.isdigit():
+            display.warn(f"Note id must be a number; got: {id_str!r}")
+            return
+        if state is None or state.puuid is None:
+            display.warn("No player profile found — run `valocoach sync` first.")
+            return
+        ok = resolve_coaching_note(state.settings, int(id_str))
+        if ok:
+            display.success(f"Note #{id_str} marked as resolved.")
+        else:
+            display.warn(f"Note #{id_str} not found or already resolved.")
 
     elif cmd == "/quit":
         raise SystemExit(0)
@@ -167,6 +256,19 @@ def run_interactive() -> None:
     # 10 exchanges = 20 individual turns (user + assistant each count as 1).
     memory = ConversationMemory(max_turns=20, max_tokens=3_000)
 
+    # --- Open a DB coaching session for note persistence ---
+    # Non-fatal: if the player has never synced (no row in `players`) or the
+    # DB isn't accessible, the REPL still works — notes just won't persist.
+    coach_state = REPLCoachState()
+    coach_state.settings = settings
+    puuid = get_player_puuid(settings)
+    if puuid:
+        coach_state.puuid = puuid
+        session_id = open_coaching_session(settings, puuid)
+        if session_id is not None:
+            coach_state.coaching_session_id = session_id
+            display.info(f"Coaching session #{session_id} started.  Use /note to save takeaways.")
+
     # --- Resume from previous session? ---
     last = latest_session()
     if last:
@@ -223,7 +325,7 @@ def run_interactive() -> None:
             # --- Slash commands ---
             if user_input.startswith("/"):
                 try:
-                    _handle_slash(user_input, memory)
+                    _handle_slash(user_input, memory, coach_state)
                 except SystemExit:
                     display.console.print("[dim]Bye.[/dim]")
                     break
@@ -257,6 +359,10 @@ def run_interactive() -> None:
                 memory.add("user", user_input)
                 memory.add("assistant", response)
     finally:
+        # Close the DB coaching session so ended_at is stamped.
+        if coach_state.coaching_session_id is not None:
+            close_coaching_session(settings, coach_state.coaching_session_id)
+
         # Auto-save on any exit path (Ctrl-D, /quit, exception).
         # Silently skip if the session is empty — nothing worth keeping.
         saved = save_session(memory.messages)

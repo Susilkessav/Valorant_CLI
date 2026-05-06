@@ -52,6 +52,14 @@ _PTK_SESSION = "prompt_toolkit.PromptSession"
 _PTK_FILE_HISTORY = "prompt_toolkit.history.FileHistory"
 _PTK_AUTO_SUGGEST = "prompt_toolkit.auto_suggest.AutoSuggestFromHistory"
 
+# Session-manager paths (patched at the interactive module's binding site)
+_ADD_NOTE = "valocoach.cli.commands.interactive.add_coaching_note"
+_LIST_NOTES = "valocoach.cli.commands.interactive.list_open_notes"
+_RESOLVE_NOTE = "valocoach.cli.commands.interactive.resolve_coaching_note"
+_OPEN_SESSION = "valocoach.cli.commands.interactive.open_coaching_session"
+_CLOSE_SESSION = "valocoach.cli.commands.interactive.close_coaching_session"
+_GET_PUUID = "valocoach.cli.commands.interactive.get_player_puuid"
+
 _OK = CheckResult(ok=True, message="ok")
 _FAIL = CheckResult(ok=False, message="Ollama not reachable.", hint="ollama serve")
 
@@ -762,3 +770,398 @@ class TestRunInteractive:
         roles = [m["role"] for m in histories_seen[1]]
         assert "user" in roles
         assert "assistant" in roles
+
+
+# ===========================================================================
+# _handle_slash — new note commands (Phase B)
+# ===========================================================================
+
+
+def _active_state(settings=None):
+    """Build an active REPLCoachState for slash command tests."""
+    from valocoach.coach.session_manager import REPLCoachState
+
+    state = REPLCoachState(puuid="puuid-test", coaching_session_id=5)
+    state.settings = settings or MagicMock()
+    return state
+
+
+def _inactive_state():
+    """Build an inactive REPLCoachState (no session yet)."""
+    from valocoach.coach.session_manager import REPLCoachState
+
+    state = REPLCoachState()
+    state.settings = MagicMock()
+    return state
+
+
+class TestHandleSlashNote:
+    """Tests for the /note command."""
+
+    def test_note_with_body_calls_add_coaching_note(self):
+        from valocoach.cli.commands.interactive import _handle_slash
+
+        mem = _memory()
+        state = _active_state()
+        with patch(_ADD_NOTE, return_value=7) as mock_add:
+            _handle_slash("/note Work on crossfire", mem, state)
+        mock_add.assert_called_once()
+        _, kwargs = mock_add.call_args
+        # body is the positional 4th arg (settings, session_id, puuid, body)
+        call_args = mock_add.call_args[0]
+        assert "Work on crossfire" in call_args
+
+    def test_note_success_shows_note_id(self):
+        from valocoach.cli.commands.interactive import _handle_slash
+
+        mem = _memory()
+        state = _active_state()
+        with (
+            patch(_ADD_NOTE, return_value=42),
+            patch("valocoach.cli.commands.interactive.display") as mock_display,
+        ):
+            _handle_slash("/note Body text here", mem, state)
+        mock_display.success.assert_called_once()
+        assert "42" in mock_display.success.call_args[0][0]
+
+    def test_note_empty_body_warns(self):
+        from valocoach.cli.commands.interactive import _handle_slash
+
+        mem = _memory()
+        state = _active_state()
+        with patch("valocoach.cli.commands.interactive.display") as mock_display:
+            _handle_slash("/note", mem, state)
+        mock_display.warn.assert_called_once()
+        assert "usage" in mock_display.warn.call_args[0][0].lower()
+
+    def test_note_whitespace_only_body_warns(self):
+        from valocoach.cli.commands.interactive import _handle_slash
+
+        mem = _memory()
+        state = _active_state()
+        with patch("valocoach.cli.commands.interactive.display") as mock_display:
+            _handle_slash("/note    ", mem, state)
+        mock_display.warn.assert_called_once()
+
+    def test_note_without_state_warns(self):
+        from valocoach.cli.commands.interactive import _handle_slash
+
+        mem = _memory()
+        with patch("valocoach.cli.commands.interactive.display") as mock_display:
+            _handle_slash("/note Something", mem, None)
+        mock_display.warn.assert_called_once()
+
+    def test_note_without_active_session_warns(self):
+        from valocoach.cli.commands.interactive import _handle_slash
+
+        mem = _memory()
+        state = _inactive_state()
+        with patch("valocoach.cli.commands.interactive.display") as mock_display:
+            _handle_slash("/note Something", mem, state)
+        mock_display.warn.assert_called_once()
+
+    def test_note_add_failure_warns(self):
+        from valocoach.cli.commands.interactive import _handle_slash
+
+        mem = _memory()
+        state = _active_state()
+        with (
+            patch(_ADD_NOTE, return_value=None),  # DB failure
+            patch("valocoach.cli.commands.interactive.display") as mock_display,
+        ):
+            _handle_slash("/note Some text", mem, state)
+        mock_display.warn.assert_called_once()
+
+    def test_note_case_insensitive(self):
+        from valocoach.cli.commands.interactive import _handle_slash
+
+        mem = _memory()
+        state = _active_state()
+        with patch(_ADD_NOTE, return_value=1) as mock_add:
+            _handle_slash("/NOTE some text here", mem, state)
+        mock_add.assert_called_once()
+
+
+class TestHandleSlashNotes:
+    """Tests for the /notes command."""
+
+    def test_notes_lists_open_notes(self):
+        from valocoach.cli.commands.interactive import _handle_slash
+        from valocoach.coach.session_manager import NoteInfo
+
+        mem = _memory()
+        state = _active_state()
+        fake_notes = [
+            NoteInfo(id=1, body="Work on crossfire", category="tactical", priority=2, created_at="2026-05-06"),
+            NoteInfo(id=2, body="Eco round tips", category="economy", priority=1, created_at="2026-05-06"),
+        ]
+        with patch(_LIST_NOTES, return_value=fake_notes):
+            _handle_slash("/notes", mem, state)
+        # No exception — that's the basic contract
+
+    def test_notes_shows_note_ids_in_output(self):
+        from valocoach.cli.commands.interactive import _handle_slash
+        from valocoach.coach.session_manager import NoteInfo
+
+        mem = _memory()
+        state = _active_state()
+        output_lines: list[str] = []
+        fake_notes = [NoteInfo(id=99, body="A long spot", category="tactical", priority=2, created_at="t")]
+
+        def _capture_print(*args, **_kw):
+            if args:
+                output_lines.append(str(args[0]))
+
+        with (
+            patch(_LIST_NOTES, return_value=fake_notes),
+            patch("valocoach.cli.commands.interactive.display.console") as mock_con,
+        ):
+            mock_con.print.side_effect = _capture_print
+            _handle_slash("/notes", mem, state)
+
+        combined = " ".join(output_lines)
+        assert "99" in combined
+
+    def test_notes_empty_shows_info(self):
+        from valocoach.cli.commands.interactive import _handle_slash
+
+        mem = _memory()
+        state = _active_state()
+        with (
+            patch(_LIST_NOTES, return_value=[]),
+            patch("valocoach.cli.commands.interactive.display") as mock_display,
+        ):
+            _handle_slash("/notes", mem, state)
+        mock_display.info.assert_called_once()
+        assert "no open" in mock_display.info.call_args[0][0].lower()
+
+    def test_notes_without_state_warns(self):
+        from valocoach.cli.commands.interactive import _handle_slash
+
+        mem = _memory()
+        with patch("valocoach.cli.commands.interactive.display") as mock_display:
+            _handle_slash("/notes", mem, None)
+        mock_display.warn.assert_called_once()
+
+    def test_notes_without_puuid_warns(self):
+        from valocoach.cli.commands.interactive import _handle_slash
+
+        mem = _memory()
+        state = _inactive_state()  # no puuid
+        with patch("valocoach.cli.commands.interactive.display") as mock_display:
+            _handle_slash("/notes", mem, state)
+        mock_display.warn.assert_called_once()
+
+    def test_notes_slash_help_updated(self):
+        """The /notes command must appear in _SLASH_HELP."""
+        from valocoach.cli.commands.interactive import _SLASH_HELP
+
+        assert "/notes" in _SLASH_HELP
+
+    def test_note_slash_help_updated(self):
+        from valocoach.cli.commands.interactive import _SLASH_HELP
+
+        assert "/note" in _SLASH_HELP
+
+
+class TestHandleSlashResolve:
+    """Tests for the /resolve command."""
+
+    def test_resolve_valid_id_calls_resolver(self):
+        from valocoach.cli.commands.interactive import _handle_slash
+
+        mem = _memory()
+        state = _active_state()
+        with patch(_RESOLVE_NOTE, return_value=True) as mock_res:
+            _handle_slash("/resolve 12", mem, state)
+        mock_res.assert_called_once()
+        assert mock_res.call_args[0][-1] == 12  # last positional is note_id
+
+    def test_resolve_success_shows_success_message(self):
+        from valocoach.cli.commands.interactive import _handle_slash
+
+        mem = _memory()
+        state = _active_state()
+        with (
+            patch(_RESOLVE_NOTE, return_value=True),
+            patch("valocoach.cli.commands.interactive.display") as mock_display,
+        ):
+            _handle_slash("/resolve 7", mem, state)
+        mock_display.success.assert_called_once()
+        assert "7" in mock_display.success.call_args[0][0]
+
+    def test_resolve_not_found_warns(self):
+        from valocoach.cli.commands.interactive import _handle_slash
+
+        mem = _memory()
+        state = _active_state()
+        with (
+            patch(_RESOLVE_NOTE, return_value=False),
+            patch("valocoach.cli.commands.interactive.display") as mock_display,
+        ):
+            _handle_slash("/resolve 999", mem, state)
+        mock_display.warn.assert_called_once()
+
+    def test_resolve_missing_id_warns(self):
+        from valocoach.cli.commands.interactive import _handle_slash
+
+        mem = _memory()
+        state = _active_state()
+        with patch("valocoach.cli.commands.interactive.display") as mock_display:
+            _handle_slash("/resolve", mem, state)
+        mock_display.warn.assert_called_once()
+        assert "usage" in mock_display.warn.call_args[0][0].lower()
+
+    def test_resolve_non_numeric_id_warns(self):
+        from valocoach.cli.commands.interactive import _handle_slash
+
+        mem = _memory()
+        state = _active_state()
+        with patch("valocoach.cli.commands.interactive.display") as mock_display:
+            _handle_slash("/resolve abc", mem, state)
+        mock_display.warn.assert_called_once()
+        assert "number" in mock_display.warn.call_args[0][0].lower()
+
+    def test_resolve_without_state_warns(self):
+        from valocoach.cli.commands.interactive import _handle_slash
+
+        mem = _memory()
+        with patch("valocoach.cli.commands.interactive.display") as mock_display:
+            _handle_slash("/resolve 1", mem, None)
+        mock_display.warn.assert_called_once()
+
+    def test_resolve_without_puuid_warns(self):
+        from valocoach.cli.commands.interactive import _handle_slash
+
+        mem = _memory()
+        state = _inactive_state()
+        with patch("valocoach.cli.commands.interactive.display") as mock_display:
+            _handle_slash("/resolve 1", mem, state)
+        mock_display.warn.assert_called_once()
+
+    def test_resolve_slash_help_updated(self):
+        from valocoach.cli.commands.interactive import _SLASH_HELP
+
+        assert "/resolve" in _SLASH_HELP
+
+    def test_resolve_case_insensitive(self):
+        from valocoach.cli.commands.interactive import _handle_slash
+
+        mem = _memory()
+        state = _active_state()
+        with patch(_RESOLVE_NOTE, return_value=True) as mock_res:
+            _handle_slash("/RESOLVE 5", mem, state)
+        mock_res.assert_called_once()
+
+
+# ===========================================================================
+# run_interactive — DB session lifecycle (Phase B)
+# ===========================================================================
+
+
+class TestRunInteractiveSessionLifecycle:
+    """Verify coaching session open/close wiring in run_interactive."""
+
+    def _run_with_session_mocks(
+        self,
+        *prompt_inputs,
+        puuid="p-test",
+        session_id=3,
+    ):
+        """Run run_interactive with all session-manager calls mocked."""
+        ptk_cls, ptk_inst = _ptk_session_mock(*prompt_inputs)
+        with (
+            patch(_LOAD_SETTINGS, return_value=MagicMock()),
+            patch(_CHECK_OLLAMA, return_value=_OK),
+            patch(_LATEST_SESSION, return_value=None),
+            patch(_SAVE_SESSION, return_value=None),
+            patch("builtins.input", return_value="n"),
+            patch(_PTK_FILE_HISTORY),
+            patch(_PTK_AUTO_SUGGEST),
+            patch(_PTK_SESSION, ptk_cls),
+            patch(_RUN_COACH, return_value="advice"),
+            patch(_GET_PUUID, return_value=puuid) as mock_puuid,
+            patch(_OPEN_SESSION, return_value=session_id) as mock_open,
+            patch(_CLOSE_SESSION) as mock_close,
+        ):
+            from valocoach.cli.commands.interactive import run_interactive
+
+            run_interactive()
+        return mock_puuid, mock_open, mock_close
+
+    def test_open_session_called_when_puuid_found(self):
+        _, mock_open, _ = self._run_with_session_mocks()
+        mock_open.assert_called_once()
+
+    def test_close_session_called_on_exit(self):
+        _, _, mock_close = self._run_with_session_mocks()
+        mock_close.assert_called_once()
+
+    def test_open_session_not_called_when_no_puuid(self):
+        """When get_player_puuid returns None, open_coaching_session must not be called."""
+        ptk_cls, _ = _ptk_session_mock()
+        with (
+            patch(_LOAD_SETTINGS, return_value=MagicMock()),
+            patch(_CHECK_OLLAMA, return_value=_OK),
+            patch(_LATEST_SESSION, return_value=None),
+            patch(_SAVE_SESSION, return_value=None),
+            patch("builtins.input", return_value="n"),
+            patch(_PTK_FILE_HISTORY),
+            patch(_PTK_AUTO_SUGGEST),
+            patch(_PTK_SESSION, ptk_cls),
+            patch(_GET_PUUID, return_value=None),
+            patch(_OPEN_SESSION) as mock_open,
+            patch(_CLOSE_SESSION) as mock_close,
+        ):
+            from valocoach.cli.commands.interactive import run_interactive
+
+            run_interactive()
+
+        mock_open.assert_not_called()
+        mock_close.assert_not_called()
+
+    def test_close_session_not_called_when_open_failed(self):
+        """If open_coaching_session returns None, close must not be called."""
+        ptk_cls, _ = _ptk_session_mock()
+        with (
+            patch(_LOAD_SETTINGS, return_value=MagicMock()),
+            patch(_CHECK_OLLAMA, return_value=_OK),
+            patch(_LATEST_SESSION, return_value=None),
+            patch(_SAVE_SESSION, return_value=None),
+            patch("builtins.input", return_value="n"),
+            patch(_PTK_FILE_HISTORY),
+            patch(_PTK_AUTO_SUGGEST),
+            patch(_PTK_SESSION, ptk_cls),
+            patch(_GET_PUUID, return_value="p-1"),
+            patch(_OPEN_SESSION, return_value=None),  # DB failure
+            patch(_CLOSE_SESSION) as mock_close,
+        ):
+            from valocoach.cli.commands.interactive import run_interactive
+
+            run_interactive()
+
+        mock_close.assert_not_called()
+
+    def test_session_info_shown_when_opened(self):
+        """An info message is shown when a coaching session is opened."""
+        ptk_cls, _ = _ptk_session_mock()
+        with (
+            patch(_LOAD_SETTINGS, return_value=MagicMock()),
+            patch(_CHECK_OLLAMA, return_value=_OK),
+            patch(_LATEST_SESSION, return_value=None),
+            patch(_SAVE_SESSION, return_value=None),
+            patch("builtins.input", return_value="n"),
+            patch(_PTK_FILE_HISTORY),
+            patch(_PTK_AUTO_SUGGEST),
+            patch(_PTK_SESSION, ptk_cls),
+            patch(_GET_PUUID, return_value="p-1"),
+            patch(_OPEN_SESSION, return_value=9),
+            patch(_CLOSE_SESSION),
+            patch("valocoach.cli.commands.interactive.display") as mock_display,
+        ):
+            from valocoach.cli.commands.interactive import run_interactive
+
+            run_interactive()
+
+        info_calls = " ".join(str(c) for c in mock_display.info.call_args_list)
+        assert "9" in info_calls  # session id shown

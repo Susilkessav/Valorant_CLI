@@ -29,12 +29,15 @@ from rich.console import Console
 from valocoach.cli import display
 from valocoach.cli.formatter import (
     render_breakdown,
+    render_coaching_sessions,
     render_identity_panel,
+    render_open_notes,
     render_round_stats,
     render_summary_card,
     render_trend,
     render_warn_legend,
 )
+from valocoach.coach.session_manager import list_coaching_sessions, list_open_notes
 from valocoach.core.config import load_settings
 from valocoach.data.loader import load_player_data_async
 from valocoach.stats import compute_per_agent
@@ -172,3 +175,21 @@ def run_profile(
     if any_warn:
         con.print()
         render_warn_legend(con)
+
+    # ── Coaching history ───────────────────────────────────────────────────
+    # Non-fatal: if the DB has no coaching data yet (player never used the
+    # interactive REPL), these lists are empty and nothing is rendered.
+    try:
+        sessions = list_coaching_sessions(settings, player.puuid, limit=5)
+        notes = list_open_notes(settings, player.puuid, limit=10)
+    except Exception:
+        sessions = []
+        notes = []
+
+    if sessions or notes:
+        con.print()
+    if sessions:
+        render_coaching_sessions(con, sessions)
+    if notes:
+        con.print()
+        render_open_notes(con, notes)
