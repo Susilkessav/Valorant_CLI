@@ -36,6 +36,8 @@ Rich renderers
 - ``render_round_stats``       — KAST / clutch / trade / side split  (stats command)
 - ``render_identity_panel``    — player identity panel  (profile command)
 - ``render_summary_card``      — compact "last N matches" table  (profile command)
+- ``render_coaching_sessions`` — recent coaching sessions table  (profile command)
+- ``render_open_notes``        — open coaching notes table  (profile command)
 """
 
 from __future__ import annotations
@@ -552,3 +554,94 @@ def render_summary_card(
     )
     console.print(table)
     return any_warn
+
+
+# ---------------------------------------------------------------------------
+# Coaching sessions / notes renderers  (profile command)
+# ---------------------------------------------------------------------------
+
+#: Priority level → display glyph (1 = high → red dot … 3 = low → dim dot)
+_PRIORITY_ICON: dict[int, str] = {1: "[red]●[/red]", 2: "[yellow]●[/yellow]", 3: "[dim]●[/dim]"}
+
+
+def render_coaching_sessions(
+    console: Console,
+    sessions: list,  # list[SessionInfo] — imported lazily to avoid circular dep
+) -> None:
+    """Render a compact table of recent coaching sessions.
+
+    Each row shows the session id, title (truncated), start date, open/closed
+    status, and focus agent/map when set.  Designed for the bottom of the
+    ``valocoach profile`` card.
+
+    Args:
+        console:  Rich Console to write to.
+        sessions: List of :class:`~valocoach.coach.session_manager.SessionInfo`
+                  objects (may be empty — renders nothing when empty).
+    """
+    if not sessions:
+        return
+
+    table = Table(
+        title=f"Recent coaching sessions ({len(sessions)})",
+        show_header=True,
+        header_style="bold",
+        box=None,
+        pad_edge=False,
+        show_edge=False,
+    )
+    table.add_column("#", style="dim", justify="right", width=4)
+    table.add_column("Title", min_width=18, max_width=28)
+    table.add_column("Started", width=10)
+    table.add_column("Status", width=7)
+    table.add_column("Focus", min_width=8, max_width=14)
+
+    for s in sessions:
+        # Date portion of ISO timestamp (YYYY-MM-DD)
+        started = s.started_at[:10] if s.started_at else "—"
+        status = "[dim]closed[/dim]" if not s.is_open else "[green]open[/green]"
+        focus_parts = [p for p in (s.focus_agent, s.focus_map) if p]
+        focus = " · ".join(focus_parts) if focus_parts else "—"
+        title = (s.title or "—")[:26]
+        table.add_row(str(s.id), title, started, status, focus)
+
+    console.print(table)
+
+
+def render_open_notes(
+    console: Console,
+    notes: list,  # list[NoteInfo]
+) -> None:
+    """Render a compact table of open (unresolved) coaching notes.
+
+    Columns: note id, priority dot, category, truncated body text.
+    Designed to appear after ``render_coaching_sessions`` in the profile card.
+
+    Args:
+        console: Rich Console to write to.
+        notes:   List of :class:`~valocoach.coach.session_manager.NoteInfo`
+                 objects (may be empty — renders nothing when empty).
+    """
+    if not notes:
+        return
+
+    table = Table(
+        title=f"Open coaching notes ({len(notes)})",
+        show_header=True,
+        header_style="bold",
+        box=None,
+        pad_edge=False,
+        show_edge=False,
+    )
+    table.add_column("#", style="dim", justify="right", width=4)
+    table.add_column("P", justify="center", width=2)
+    table.add_column("Category", width=9)
+    table.add_column("Note")
+
+    for n in notes:
+        icon = _PRIORITY_ICON.get(n.priority, "●")
+        cat = n.category[:8]
+        body = n.body[:72] + ("…" if len(n.body) > 72 else "")
+        table.add_row(str(n.id), icon, cat, body)
+
+    console.print(table)
