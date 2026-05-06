@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from valocoach.cli.commands.coach import SYSTEM_PROMPT_STUB, _build_system_prompt, run_coach
+from valocoach.cli.commands.coach import _build_system_prompt, run_coach
 from valocoach.coach.context import _format_context
 from valocoach.core.config import Settings
 from valocoach.data.orm_models import Match, MatchPlayer, Player
@@ -262,7 +262,8 @@ def test_run_coach_injects_context_into_system_prompt() -> None:
     assert mock_stream.call_count == 1
     kwargs = mock_stream.call_args.kwargs
     assert "PLAYER CONTEXT — injected" in kwargs["system_prompt"]
-    assert kwargs["system_prompt"].startswith(SYSTEM_PROMPT_STUB)
+    # All intent templates share the ValorantCoach identity preamble.
+    assert "ValorantCoach" in kwargs["system_prompt"]
     assert "Situation: push A site" in kwargs["user_message"]
     assert "Agent(s): Jett" in kwargs["user_message"]
 
@@ -285,7 +286,8 @@ def test_run_coach_skips_context_when_with_stats_false() -> None:
 
     mock_build.assert_not_called()
     prompt = mock_stream.call_args.kwargs["system_prompt"]
-    assert prompt.startswith(SYSTEM_PROMPT_STUB)
+    # All intent templates share the ValorantCoach identity preamble.
+    assert "ValorantCoach" in prompt
     # Grounded meta context is always injected even without stats
     assert "GROUNDED CONTEXT" in prompt
 
@@ -309,7 +311,7 @@ def test_run_coach_proceeds_when_context_is_none() -> None:
 
     assert mock_stream.call_count == 1
     prompt = mock_stream.call_args.kwargs["system_prompt"]
-    assert prompt.startswith(SYSTEM_PROMPT_STUB)
+    assert "ValorantCoach" in prompt
     assert "GROUNDED CONTEXT" in prompt
     # No stats block appended (stats header includes "—" separator after "PLAYER CONTEXT")
     assert "PLAYER CONTEXT —" not in prompt
@@ -339,7 +341,7 @@ def test_run_coach_survives_context_builder_exception() -> None:
     assert "stats context" in warn_msg.lower() or "continuing" in warn_msg.lower()
     # Stats context is absent when builder failed, but grounded meta is still present
     prompt = mock_stream.call_args.kwargs["system_prompt"]
-    assert prompt.startswith(SYSTEM_PROMPT_STUB)
+    assert "ValorantCoach" in prompt
     assert "PLAYER CONTEXT —" not in prompt
     assert "GROUNDED CONTEXT" in prompt
 
@@ -740,7 +742,7 @@ def test_run_coach_raises_when_llm_fails() -> None:
         run_coach("push B", with_stats=False)
 
     mock_error.assert_called()
-    mock_warn.assert_called()
+    mock_warn.assert_called()  # "Check Ollama is running" warn fires too
     error_msg = mock_error.call_args.args[0]
     assert "LLM call failed" in error_msg
 

@@ -2,40 +2,13 @@ from __future__ import annotations
 
 from valocoach.cli import display
 from valocoach.coach import build_stats_context
+from valocoach.coach.intent import classify_intent
+from valocoach.coach.templates import PANEL_TITLES, PROMPT_TEMPLATES
 from valocoach.core.config import load_settings
 from valocoach.core.context_budget import fit_prompt
 from valocoach.core.parser import Situation, parse_situation
 from valocoach.llm.provider import stream_completion
 from valocoach.retrieval import format_agent_context, format_map_context
-
-SYSTEM_PROMPT_STUB = """You are ValorantCoach, an Immortal-ranked Valorant tactical coach with 5000+ hours.
-You give advice like a real coach reviewing a VOD — specific, actionable, and grounded in actual game mechanics.
-
-Rules:
-- Reference SPECIFIC map callouts (e.g. "A Long", "CT spawn", "Elbow", "Cubby") not vague locations.
-- Name EXACT abilities with costs using the GROUNDED CONTEXT provided below — never invent ability names or costs.
-- Give CONCRETE timing (e.g. "smoke A Long at 1:25 before pushing", "wait 2 seconds after flash").
-- If the player names an agent, tailor the plan to that agent's full kit as defined in GROUNDED CONTEXT.
-- If economy is mentioned, use the economy thresholds from GROUNDED CONTEXT.
-- Never give generic advice like "communicate with team" — assume comms are fine.
-- When PLAYER CONTEXT is provided below, use it to tailor advice to this player's actual recent form — reference their agents, maps, and tendencies where relevant. Do NOT dump the stats back at them.
-- In multi-turn coaching sessions, track context across turns and build on earlier advice rather than repeating it.
-
-Respond in markdown with these sections:
-
-🎯 **Read** — What's actually going wrong and why (root cause, not symptoms).
-
-🛠️ **Pre-round** — Exact utility usage, buy decisions, and positioning before the barrier drops.
-
-⚔️ **Execute** — Numbered step-by-step with specific callouts, timings, and ability usage.
-  Each step should say WHO does WHAT, WHERE, and WHEN.
-
-🔄 **If it breaks** — Concrete re-route or retake plan, not "regroup and try again".
-
-💡 **Key detail** — One non-obvious tip that separates ranked players from pros in this scenario.
-
-Keep response under 350 words. Prioritize specificity over completeness.
-""".strip()
 
 
 def _build_system_prompt(
@@ -144,6 +117,11 @@ def run_coach(
     # the LLM will see in the user message — keeps the two paths consistent.
     parsed, agent, map_, side = _resolve_fields(situation, agent, map_, side)
 
+    # Classify intent — determines which prompt template and panel title to use.
+    intent = classify_intent(parsed, situation)
+    system_prompt_base = PROMPT_TEMPLATES[intent]
+    panel_title = PANEL_TITLES[intent]
+
     # Retrieve grounded context (abilities, callouts, meta) — always included.
     grounded_context = _build_grounded_context(
         agent=agent,
@@ -193,15 +171,15 @@ def run_coach(
     # Trims lowest-priority blocks first (vector hits, then stats) so the
     # load-bearing JSON facts and the verbatim user message are never cut.
     grounded_context, stats_context = fit_prompt(
-        system_base=SYSTEM_PROMPT_STUB,
+        system_base=system_prompt_base,
         grounded_context=grounded_context,
         stats_context=stats_context,
         user_msg=user_msg,
     )
 
-    system_prompt = _build_system_prompt(SYSTEM_PROMPT_STUB, grounded_context, stats_context)
+    system_prompt = _build_system_prompt(system_prompt_base, grounded_context, stats_context)
 
-    display.info(f"Using model: {settings.ollama_model}")
+    display.info(f"Using model: {settings.ollama_model} [{intent}]")
 
     try:
         token_stream = stream_completion(
@@ -210,7 +188,7 @@ def run_coach(
             user_message=user_msg,
             conversation_history=conversation_history,
         )
-        response_text = display.stream_to_panel(token_stream)
+        response_text = display.stream_to_panel(token_stream, title=panel_title)
     except Exception as e:
         display.error(f"LLM call failed: {e}")
         display.warn("Check Ollama is running: `ollama list`")
