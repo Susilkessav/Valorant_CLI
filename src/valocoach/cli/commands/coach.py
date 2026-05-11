@@ -10,11 +10,7 @@ from valocoach.core.parser import Situation, parse_situation
 from valocoach.llm.provider import stream_completion
 from valocoach.retrieval import format_agent_context, format_map_context
 
-# Intents that rely on current patch meta data — show a staleness warning
-# when these are used and the last patch check is older than the threshold.
 _META_SENSITIVE_INTENTS: frozenset[str] = frozenset({"meta", "agent_info"})
-
-# Days after which patch meta data is considered potentially stale.
 _PATCH_STALE_THRESHOLD_DAYS: int = 21
 
 
@@ -60,13 +56,6 @@ def _resolve_fields(
     map_: str | None,
     side: str | None,
 ) -> tuple[Situation, str | None, str | None, str | None]:
-    """Merge CLI flags with parsed-from-text fields.
-
-    CLI flags take precedence — if the user passed ``--agent Jett`` we use
-    that even when the situation text mentions someone else.  The parser
-    fills in the gaps so e.g. ``"push A on Ascent attack"`` no longer
-    requires ``--map`` and ``--side`` flags to route retrieval correctly.
-    """
     parsed = parse_situation(situation)
     return (
         parsed,
@@ -85,29 +74,10 @@ def run_coach(
     with_stats: bool = True,
     conversation_history: list[dict[str, str]] | None = None,
 ) -> str | None:
-    """Run a single coaching turn.
-
-    Args:
-        situation:             Free-text description of the match situation.
-        agent:                 Optional agent override (beats parser output).
-        map_:                  Optional map override.
-        side:                  Optional side override ("attack" / "defense").
-        with_stats:            If True, fetch and inject player recent-form stats.
-        conversation_history:  Prior turns from ``ConversationMemory.messages``.
-                               When provided, the LLM sees the full multi-turn
-                               context before the current user message.
-
-    Returns:
-        The full assistant response text on success, or None when streaming
-        produced no output.  The interactive REPL uses this return value to
-        store the assistant turn in conversation memory.
-    """
     settings = load_settings()
 
     from valocoach.core.preflight import check_riot_id, check_vector_store
 
-    # Non-fatal: warn when stats are requested but Riot ID is not configured.
-    # Coaching still works; the user just loses personalised stats injection.
     if with_stats:
         riot_result = check_riot_id(settings)
         if not riot_result.ok:
@@ -117,22 +87,16 @@ def run_coach(
                 f"  {riot_result.hint}"
             )
 
-    # Non-fatal: warn when the vector store is empty.  The LLM falls back to
-    # its training knowledge but cannot cite exact ability costs or callouts.
     vs_result = check_vector_store(settings)
     if not vs_result.ok:
         display.warn(f"{vs_result.message}\n  {vs_result.hint}")
 
-    # Parse the situation up front so retrieval gets the same agent/map/side
-    # the LLM will see in the user message — keeps the two paths consistent.
     parsed, agent, map_, side = _resolve_fields(situation, agent, map_, side)
 
-    # Classify intent — determines which prompt template and panel title to use.
     intent = classify_intent(parsed, situation)
     system_prompt_base = PROMPT_TEMPLATES[intent]
     panel_title = PANEL_TITLES[intent]
 
-    # Retrieve grounded context (abilities, callouts, meta) — always included.
     grounded_context = _build_grounded_context(
         agent=agent,
         map_=map_,
@@ -141,7 +105,6 @@ def run_coach(
         data_dir=settings.data_dir,
     )
 
-    # Fetch player context — non-fatal.
     stats_context: str | None = None
     if with_stats:
         try:
@@ -152,9 +115,6 @@ def run_coach(
     if stats_context is not None:
         display.info("Personalised with your recent stats.")
 
-    # Fetch last-match context — a compact one-liner injected into the user
-    # message so the LLM can reference the player's most recent game without
-    # needing to ask.  Non-fatal: any error silently skips this block.
     last_match_context: str | None = None
     if with_stats:
         try:
@@ -167,11 +127,8 @@ def run_coach(
             if lm is not None:
                 last_match_context = format_last_match_context(lm)
         except Exception:
-            pass  # last-match context is advisory — never crash the coaching turn
+            pass
 
-    # Fetch open (unresolved) coaching notes — inject as "COACHING FOCUS" so
-    # the LLM knows what the player is actively working on and can weave those
-    # topics into its advice even when not explicitly asked.  Non-fatal.
     notes_context: str | None = None
     if with_stats:
         try:
@@ -186,15 +143,8 @@ def run_coach(
                 open_notes = list_open_notes(settings, puuid, limit=5)
                 notes_context = format_open_notes_context(open_notes)
         except Exception:
-            pass  # notes context is advisory — never crash the coaching turn
+            pass
 
-    # User message: structured metadata block (when any field was extracted),
-    # followed by last-match context (when available), then the verbatim situation.
-    #
-    # Build the metadata block from resolved fields — CLI flags (agent, map_,
-    # side) take precedence over the parser, so if the user passed --agent Jett
-    # but didn't write "Jett" in the situation text the block still shows the
-    # agent so the LLM is keyed into the right frame.
     resolved_agents: list[str] = parsed.agents
     if agent and agent not in parsed.agents:
         resolved_agents = [agent, *parsed.agents]
@@ -214,9 +164,6 @@ def run_coach(
     user_msg_parts.append(f"Situation: {situation}")
     user_msg = "\n\n".join(user_msg_parts)
 
-    # Adaptive context trimming — keep the prompt within the hard token limit.
-    # Trims lowest-priority blocks first (vector hits, then stats) so the
-    # load-bearing JSON facts and the verbatim user message are never cut.
     grounded_context, stats_context = fit_prompt(
         system_base=system_prompt_base,
         grounded_context=grounded_context,
@@ -228,7 +175,7 @@ def run_coach(
         system_prompt_base, grounded_context, stats_context, notes_context
     )
 
-    display.info(f"Using model: {settings.ollama_model} [{intent}]")
+    display.info(f"Using model: [heading]{settings.ollama_model}[/heading] [muted][{intent}][/muted]")
 
     try:
         token_stream = stream_completion(
@@ -237,16 +184,18 @@ def run_coach(
             user_message=user_msg,
             conversation_history=conversation_history,
         )
-        response_text = display.stream_to_panel(token_stream, title=panel_title)
+        response_text = display.stream_to_panel(
+            token_stream,
+            title=panel_title,
+            subtitle=settings.ollama_model,
+        )
     except Exception as e:
-        display.error(f"LLM call failed: {e}")
-        display.warn("Check Ollama is running: `ollama list`")
+        display.error_with_hint(
+            f"LLM call failed: {e}",
+            "Check Ollama is running: ollama list",
+        )
         raise
 
-    # ── Patch-staleness warning ─────────────────────────────────────────────
-    # Only shown for intents that specifically draw on current patch meta data.
-    # Non-fatal: any error inside get_patch_staleness_days returns None, which
-    # is treated as "never checked" → warning fires to encourage a refresh.
     if intent in _META_SENSITIVE_INTENTS:
         try:
             from valocoach.retrieval.patch_tracker import get_patch_staleness_days
@@ -259,10 +208,10 @@ def run_coach(
                     else f"{stale_days:.0f}d since last check"
                 )
                 display.console.print(
-                    f"[dim]⚠ Meta info may be outdated ({age_str}) — "
-                    "run [cyan]valocoach patch --check[/cyan] to refresh.[/dim]"
+                    f"[muted]⚠ Meta info may be outdated ({age_str}) — "
+                    "run [info]valocoach patch --check[/info] to refresh.[/muted]"
                 )
         except Exception:
-            pass  # staleness check is advisory — never crash the coaching turn
+            pass
 
     return response_text or None

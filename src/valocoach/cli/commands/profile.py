@@ -1,23 +1,4 @@
-"""`valocoach profile` — player identity + compact recent-performance card.
-
-Stats and profile share machinery but answer different questions:
-
-    stats   — "how am I actually playing?"     period-filtered, per-map breakdown
-    profile — "who is this player, at a glance?"  identity + rank + last-N summary
-
-Argument resolution:
-    valocoach profile                        → uses settings.riot_name / riot_tag
-    valocoach profile --name X --tag Y       → looks up that player
-    valocoach profile --name X               → error (name and tag go together)
-
-Data flow (stats engine):
-    1. _resolve_identity()             → (name, tag)
-    2. load_player_data_async()        → PlayerData  (DB bridge, include_rounds=True)
-    3. compute_per_agent(rows)         → per-agent breakdown
-    4. analyze_rounds(full_matches, …) → KAST / clutch / trade  (when available)
-    5. compare_baseline(rows)          → recent-form anomalies  (when enough history)
-    6. Formatter renderers             → display
-"""
+"""`valocoach profile` — player identity + compact recent-performance card."""
 
 from __future__ import annotations
 
@@ -48,17 +29,8 @@ from valocoach.data.loader import load_player_data_async
 from valocoach.stats import compute_per_agent
 from valocoach.stats.round_analyzer import analyze_rounds
 
-# Default number of recent matches to summarise.  Profile is "at a glance" —
-# a larger N starts looking like the stats dashboard.
 DEFAULT_LIMIT = 20
-
-# Top agents to surface in the profile card.
 TOP_AGENTS = 3
-
-
-# ---------------------------------------------------------------------------
-# Argument resolution  (pure — tested directly)
-# ---------------------------------------------------------------------------
 
 
 def _resolve_identity(
@@ -68,17 +40,6 @@ def _resolve_identity(
     settings_name: str,
     settings_tag: str,
 ) -> tuple[str, str]:
-    """Work out which player to look up.
-
-    Rules:
-        - Both CLI args given    → use them.
-        - Neither CLI arg given  → fall back to settings.
-        - One but not the other  → typer.BadParameter.
-        - Fallback with empty settings → typer.BadParameter.
-
-    Raises:
-        typer.BadParameter: surfaces as a clean Typer error (exit 2).
-    """
     if (name is None) != (tag is None):
         raise typer.BadParameter(
             "--name and --tag must be given together (or both omitted to use your configured identity)."
@@ -95,11 +56,6 @@ def _resolve_identity(
     return settings_name, settings_tag
 
 
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
-
-
 def run_profile(
     *,
     name: str | None = None,
@@ -107,7 +63,6 @@ def run_profile(
     limit: int = DEFAULT_LIMIT,
     console: Console | None = None,
 ) -> None:
-    """CLI entry: ``valocoach profile`` dispatches here."""
     con = console or display.console
 
     if limit <= 0:
@@ -121,9 +76,6 @@ def run_profile(
         settings_tag=settings.riot_tag,
     )
 
-    # Use the shared async loader with name/tag overrides so profile can look
-    # up any player, not just the Settings-configured one.  include_rounds=True
-    # so we can show KAST / clutch / trade when round data is available.
     data = asyncio.run(
         load_player_data_async(
             settings,
@@ -135,72 +87,66 @@ def run_profile(
     )
 
     if data is None:
-        display.warn(
-            f"No local data for {resolved_name}#{resolved_tag}. "
-            "Run `valocoach sync` first to pull match history."
+        display.error_with_hint(
+            f"No local data for {resolved_name}#{resolved_tag}.",
+            "Run: valocoach sync",
         )
         raise typer.Exit(1)
 
     player, rows = data.player, data.rows
 
-    # ── Identity panel ─────────────────────────────────────────────────────
-    render_identity_panel(con, player)
+    with display.command_frame("Player Profile", subtitle=f"{resolved_name}#{resolved_tag}", con=con):
+        # Identity panel
+        render_identity_panel(con, player)
 
-    # ── Rank trend (ELO progression from mmr_history snapshots) ────────────
-    # Non-fatal: silently absent when the player has just one sync or no data.
-    mmr_history = get_mmr_trend(settings, player.puuid, limit=20)
-    if mmr_history:
-        render_rank_trend(con, mmr_history)
+        # Rank trend
+        mmr_history = get_mmr_trend(settings, player.puuid, limit=20)
+        if mmr_history:
+            display.render_section(con, "Rank Progression")
+            render_rank_trend(con, mmr_history)
 
-    # ── Compact summary (last N matches) ───────────────────────────────────
-    any_warn = render_summary_card(con, rows, limit=limit)
+        # Summary card
+        display.render_section(con, f"Last {min(len(rows), limit)} Matches")
+        any_warn = render_summary_card(con, rows, limit=limit)
 
-    # ── Round-level stats: KAST / clutch / trade ───────────────────────────
-    # Silently absent when rounds weren't synced (pre-migration data) or when
-    # no round events exist for this player in the DB.
-    if data.full_matches:
-        round_analysis = analyze_rounds(data.full_matches, player.puuid)
-        if round_analysis.rounds > 0:
+        # Round stats
+        if data.full_matches:
+            round_analysis = analyze_rounds(data.full_matches, player.puuid)
+            if round_analysis.rounds > 0:
+                display.render_section(con, "Round Mastery")
+                any_warn |= render_round_stats(con, round_analysis, len(rows))
+
+        # Top agents
+        per_agent = compute_per_agent(rows)
+        if len(per_agent) >= 2:
+            display.render_section(con, "Top Agents")
+            any_warn |= render_breakdown(
+                con,
+                title="Top Agents",
+                group_col="Agent",
+                rows=per_agent,
+                top_n=TOP_AGENTS,
+            )
+
+        # Trend
+        render_trend(con, rows)
+
+        if any_warn:
             con.print()
-            any_warn |= render_round_stats(con, round_analysis, len(rows))
+            render_warn_legend(con)
 
-    # ── Top agents ─────────────────────────────────────────────────────────
-    # Skip when every game was on the same agent — a single-row table adds
-    # no information beyond what the summary card already shows.
-    per_agent = compute_per_agent(rows)
-    if len(per_agent) >= 2:
-        con.print()
-        any_warn |= render_breakdown(
-            con,
-            title="Top agents",
-            group_col="Agent",
-            rows=per_agent,
-            top_n=TOP_AGENTS,
-        )
+        # Coaching section — sessions + notes combined
+        try:
+            sessions = list_coaching_sessions(settings, player.puuid, limit=5)
+            notes = list_open_notes(settings, player.puuid, limit=10)
+        except Exception:
+            sessions = []
+            notes = []
 
-    # ── Recent form anomalies ──────────────────────────────────────────────
-    # compare_baseline returns None when the window is too thin; render_trend
-    # is silent when there are no anomalies.  Neither clutters a clean card.
-    render_trend(con, rows)
-
-    if any_warn:
-        con.print()
-        render_warn_legend(con)
-
-    # ── Coaching history ───────────────────────────────────────────────────
-    # Non-fatal: if the DB has no coaching data yet (player never used the
-    # interactive REPL), these lists are empty and nothing is rendered.
-    try:
-        sessions = list_coaching_sessions(settings, player.puuid, limit=5)
-        notes = list_open_notes(settings, player.puuid, limit=10)
-    except Exception:
-        sessions = []
-        notes = []
-
-    if sessions or notes:
-        con.print()
-    if sessions:
-        render_coaching_sessions(con, sessions)
-    if notes:
-        con.print()
-        render_open_notes(con, notes)
+        if sessions or notes:
+            display.render_section(con, "Coaching")
+            if sessions:
+                render_coaching_sessions(con, sessions)
+            if notes:
+                con.print()
+                render_open_notes(con, notes)

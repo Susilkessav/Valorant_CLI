@@ -49,7 +49,8 @@ from valocoach.stats.round_analyzer import RoundAnalysis
 
 def _con() -> Console:
     """Capture console — no ANSI escapes, stable width, writes to StringIO."""
-    return Console(file=StringIO(), force_terminal=False, width=120)
+    from valocoach.cli.display import THEME
+    return Console(file=StringIO(), force_terminal=False, width=120, theme=THEME)
 
 
 def _out(console: Console) -> str:
@@ -192,7 +193,7 @@ class TestWarnCell:
 
     def test_warn_prefix_constant_matches_glyph(self) -> None:
         """Changing WARN_PREFIX in formatter must be reflected here."""
-        assert WARN_PREFIX.strip() == "⚠️"
+        assert WARN_PREFIX.strip() == "⚠"
 
 
 # ---------------------------------------------------------------------------
@@ -205,13 +206,13 @@ class TestRenderWarnLegend:
         con = _con()
         render_warn_legend(con)
         out = _out(con)
-        assert "⚠️" in out
+        assert WARN_PREFIX.strip() in out
 
     def test_contains_stable_phrase(self) -> None:
-        """'sample-size threshold' is what integration tests grep for."""
+        """Legend describes small sample size in plain language."""
         con = _con()
         render_warn_legend(con)
-        assert "sample-size threshold" in _out(con)
+        assert "sample size" in _out(con)
 
     def test_same_text_as_stats_legend(self) -> None:
         """Single source — calling it twice produces identical output."""
@@ -245,9 +246,10 @@ class TestRenderHeader:
         assert "SK04" in out
         assert "Gold 1" in out
         assert "NA" in out
-        assert "period=30d" in out
+        # filters are in the command_frame subtitle, not the identity line
 
     def test_optional_filters_appear_when_set(self) -> None:
+        # render_header is now a compact identity line; filters are in the frame subtitle
         con = _con()
         render_header(
             con,
@@ -262,9 +264,8 @@ class TestRenderHeader:
             result_filter="win",
         )
         out = _out(con)
-        assert "agent=Jett" in out
-        assert "map=Ascent" in out
-        assert "result=win" in out
+        assert "T#X" in out
+        assert "Iron 1" in out
 
     def test_optional_filters_absent_when_none(self) -> None:
         con = _con()
@@ -357,7 +358,7 @@ class TestRenderBreakdown:
         out = _out(con)
         assert any_warn is True
         reyna_line = next(ln for ln in out.splitlines() if "Reyna" in ln)
-        assert "⚠️" in reyna_line
+        assert WARN_PREFIX.strip() in reyna_line
 
     def test_map_breakdown_shows_map_names(self) -> None:
         rows = [
@@ -584,8 +585,8 @@ class TestRenderSummaryCard:
         con = _con()
         render_summary_card(con, rows, limit=20)
         out = _out(con)
-        assert "Last 3 match" in out
-        assert "Last 20 match" not in out
+        assert "Last 3 Match" in out
+        assert "Last 20 Match" not in out
 
     def test_fb_diff_has_explicit_sign(self) -> None:
         rows = [_mp(first_bloods=5, first_deaths=2)]
@@ -613,8 +614,8 @@ class TestRenderSummaryCard:
         out = _out(con)
         hs_line = next(ln for ln in out.splitlines() if "HS%" in ln)
         acs_line = next(ln for ln in out.splitlines() if "ACS" in ln)
-        assert "⚠️" in hs_line
-        assert "⚠️" not in acs_line
+        assert WARN_PREFIX.strip() in hs_line
+        assert WARN_PREFIX.strip() not in acs_line
 
 
 # ---------------------------------------------------------------------------
@@ -713,10 +714,10 @@ class TestRenderTrend:
         out = _out(con)
         assert "Trend" in out
         assert "ACS" in out
-        assert "!!" in out  # (!!)-tag for significant
+        assert "CRIT" in out  # CRIT badge for significant
 
     def test_significant_improvement_also_shows_double_bang(self) -> None:
-        """Significant improvement → 'bold green' branch (line 369)."""
+        """Significant improvement → CRIT badge."""
         a = _make_anomaly(severity="significant", is_improvement=True)
         comp = _make_comparison([a])
         con = _con()
@@ -724,10 +725,10 @@ class TestRenderTrend:
             render_trend(con, [])
         out = _out(con)
         assert "Trend" in out
-        assert "!!" in out
+        assert "CRIT" in out
 
     def test_notable_slump_shows_single_bang(self) -> None:
-        """Notable non-improvement → '(!)' tag (lines 371-373)."""
+        """Notable non-improvement → WATCH badge (not CRIT)."""
         a = _make_anomaly(severity="notable", is_improvement=False)
         comp = _make_comparison([a])
         con = _con()
@@ -735,12 +736,11 @@ class TestRenderTrend:
             render_trend(con, [])
         out = _out(con)
         assert "Trend" in out
-        # notable uses "(!)" — double-bang must NOT appear
-        assert "(!)" in out
-        assert "(!!" not in out
+        assert "WATCH" in out
+        assert "CRIT" not in out
 
     def test_notable_improvement_shows_single_bang(self) -> None:
-        """Notable improvement → 'green' branch (line 372)."""
+        """Notable improvement → WATCH badge (not CRIT)."""
         a = _make_anomaly(severity="notable", is_improvement=True)
         comp = _make_comparison([a])
         con = _con()
@@ -748,5 +748,5 @@ class TestRenderTrend:
             render_trend(con, [])
         out = _out(con)
         assert "Trend" in out
-        assert "(!)" in out
-        assert "(!!" not in out
+        assert "WATCH" in out
+        assert "CRIT" not in out

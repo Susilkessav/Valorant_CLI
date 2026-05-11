@@ -33,9 +33,10 @@ def run_ingest(
         from valocoach.retrieval.searcher import collection_stats
 
         s = collection_stats(data_dir)
-        display.console.print(f"Vector store: [bold]{s['total']}[/bold] document(s)")
-        for doc_type, count in sorted(s["by_type"].items()):
-            display.console.print(f"  {doc_type}: {count}")
+        with display.command_frame("Knowledge Base"):
+            display.console.print(f"Vector store: [stat.value]{s['total']}[/stat.value] document(s)")
+            for doc_type, count in sorted(s["by_type"].items()):
+                display.console.print(f"  [stat.label]{doc_type}:[/stat.label] {count}")
         return
 
     if clear:
@@ -52,18 +53,18 @@ def run_ingest(
 
     nothing_specified = not corpus and url is None and youtube is None
 
-    # Default: seed from JSON when nothing else is specified.
-    if seed or nothing_specified:
-        _do_seed(data_dir)
+    with display.command_frame("Knowledge Base"):
+        if seed or nothing_specified:
+            _do_seed(data_dir)
 
-    if corpus:
-        _do_corpus(data_dir)
+        if corpus:
+            _do_corpus(data_dir)
 
-    if url:
-        _do_url(data_dir, url)
+        if url:
+            _do_url(data_dir, url)
 
-    if youtube:
-        _do_youtube(data_dir, youtube)
+        if youtube:
+            _do_youtube(data_dir, youtube)
 
 
 def _do_seed(data_dir: Path) -> None:
@@ -74,7 +75,7 @@ def _do_seed(data_dir: Path) -> None:
         TextColumn("[progress.description]{task.description}"),
         BarColumn(),
         TaskProgressColumn(),
-        TextColumn("[dim]{task.completed}/{task.total} docs[/dim]"),
+        TextColumn("[muted]{task.completed}/{task.total} docs[/muted]"),
         TimeElapsedColumn(),
         console=display.console,
         transient=False,
@@ -100,14 +101,14 @@ def _do_url(data_dir: Path, url: str) -> None:
     from valocoach.retrieval.ingester import ingest_text
     from valocoach.retrieval.scrapers.web import scrape_url
 
-    with display.console.status(f"Scraping {url} …"):
+    with display.console.status(f"[info]Scraping {url} …[/info]"):
         content = scrape_url(url, source="patch_note")
 
     if content is None:
         display.error(f"Could not extract content from {url}")
         raise typer.Exit(1)
 
-    with display.console.status("Embedding and indexing…"):
+    with display.console.status("[info]Embedding and indexing…[/info]"):
         n = ingest_text(
             data_dir,
             content.text,
@@ -125,9 +126,9 @@ def _do_corpus(data_dir: Path, corpus_root: Path | None = None) -> None:
     if corpus_root is None:
         corpus_root = Path(__file__).resolve().parents[4] / "corpus"
     if not corpus_root.exists():
-        display.error(
-            f"Corpus directory not found: {corpus_root}\n"
-            "  Run  python scripts/build_corpus.py  first."
+        display.error_with_hint(
+            f"Corpus directory not found: {corpus_root}",
+            "Run: python scripts/build_corpus.py",
         )
         raise typer.Exit(1)
 
@@ -150,8 +151,7 @@ def _do_corpus(data_dir: Path, corpus_root: Path | None = None) -> None:
         task = progress.add_task("Ingesting corpus…", total=len(md_files))
         for path in sorted(md_files):
             text = path.read_text(encoding="utf-8")
-            # Derive doc_type from parent folder name (agents→agent, maps→map, etc.)
-            folder = path.parent.name.rstrip("s")  # agents→agent, maps→map, concepts→concept
+            folder = path.parent.name.rstrip("s")
             doc_type = folder if folder in ("agent", "map", "meta", "concept") else "web"
             n = ingest_text(
                 data_dir,
@@ -171,7 +171,7 @@ def _do_youtube(data_dir: Path, youtube: str) -> None:
     from valocoach.retrieval.ingester import ingest_text
     from valocoach.retrieval.scrapers.youtube import fetch_transcript
 
-    with display.console.status(f"Fetching YouTube transcript: {youtube} …"):
+    with display.console.status(f"[info]Fetching YouTube transcript: {youtube} …[/info]"):
         content = fetch_transcript(youtube)
 
     if content is None:
@@ -179,7 +179,7 @@ def _do_youtube(data_dir: Path, youtube: str) -> None:
         raise typer.Exit(1)
 
     try:
-        with display.console.status("Embedding and indexing…"):
+        with display.console.status("[info]Embedding and indexing…[/info]"):
             n = ingest_text(
                 data_dir,
                 content.text,

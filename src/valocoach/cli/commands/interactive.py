@@ -2,27 +2,6 @@
 
 Wraps ``run_coach`` in a persistent prompt_toolkit session so the player
 can have a multi-turn conversation without re-typing the command each time.
-The session maintains sliding-window conversation memory across turns so
-the LLM sees previous exchanges and can build on earlier advice.
-
-Sessions are automatically saved to ``~/.valocoach/sessions/`` on exit so
-they can be resumed the next time the REPL starts.
-
-Coaching notes are persisted to the local SQLite DB so they survive between
-REPL sessions and surface in ``valocoach profile``.
-
-Slash commands available inside the REPL::
-
-    /help          — print this command list
-    /clear         — wipe conversation memory (start fresh)
-    /memory        — show how many turns are in memory and their token count
-    /save          — save the current session to disk immediately
-    /sessions      — list previously saved sessions
-    /stats         — show your recent stats card (same output as ``valocoach stats``)
-    /note <text>   — add a coaching note to the current session
-    /notes         — list your open (unresolved) coaching notes
-    /resolve <id>  — mark coaching note <id> as resolved
-    /quit          — exit the REPL (Ctrl-D or Ctrl-C also exit cleanly)
 """
 
 from __future__ import annotations
@@ -48,9 +27,6 @@ from valocoach.core.session_store import (
     session_summary,
 )
 
-# Slash command descriptions used in /help.  Single source of truth — the
-# WordCompleter pulls keys from this dict so adding a command here is enough
-# to make it tab-completable.
 _SLASH_HELP: dict[str, str] = {
     "/help": "Show this help message.",
     "/clear": "Clear conversation memory — start a fresh session.",
@@ -64,17 +40,22 @@ _SLASH_HELP: dict[str, str] = {
     "/quit": "Exit the REPL (also: Ctrl-D, Ctrl-C).",
 }
 
-_WELCOME = """
-[bold green]ValoCoach interactive mode[/bold green]
-Type a coaching question, e.g. [italic]"losing on Ascent attack as Jett 8-12"[/italic].
-Slash commands: [cyan]{cmds}[/cyan]  ·  [dim]Ctrl-D / Ctrl-C to quit[/dim]
-""".strip()
+_WELCOME_PARTS = [
+    "",
+    "[val.red]━━━ Interactive Coaching Mode ━━━[/val.red]",
+    "",
+    "[heading]Ask anything about your gameplay.[/heading]",
+    '[muted]Example: "losing on Ascent attack as Jett, score is 8-12"[/muted]',
+    "",
+    "[muted]Commands: {cmds}  ·  Ctrl-D to exit[/muted]",
+]
 
 
 def _print_help() -> None:
-    display.console.print("\n[bold]Slash commands:[/bold]")
+    display.console.print()
+    display.console.print("[heading]Slash commands:[/heading]")
     for cmd, desc in _SLASH_HELP.items():
-        display.console.print(f"  [cyan]{cmd:<10}[/cyan] {desc}")
+        display.console.print(f"  [info]{cmd:<10}[/info] {desc}")
     display.console.print()
 
 
@@ -83,21 +64,8 @@ def _handle_slash(
     memory: ConversationMemory,
     state: REPLCoachState | None = None,
 ) -> None:
-    """Dispatch a slash command entered in the REPL.
-
-    Args:
-        cmd:    Raw input line starting with ``/`` (may include trailing args
-                for commands like ``/note`` and ``/resolve``).
-        memory: The current :class:`~valocoach.core.memory.ConversationMemory`.
-        state:  Optional :class:`~valocoach.coach.session_manager.REPLCoachState`
-                for note/session commands.  When ``None`` those commands degrade
-                gracefully with an informational message.
-
-    Raises ``SystemExit`` for ``/quit`` so the caller can break the REPL
-    loop cleanly without an extra return-value protocol.
-    """
-    raw_input = cmd  # preserve full text (needed for /note and /resolve bodies)
-    cmd = raw_input.strip().lower().split()[0]  # normalized command word
+    raw_input = cmd
+    cmd = raw_input.strip().lower().split()[0]
 
     if cmd == "/help":
         _print_help()
@@ -123,10 +91,11 @@ def _handle_slash(
         if not sessions:
             display.info("No saved sessions found.")
         else:
-            display.console.print("\n[bold]Saved sessions:[/bold]")
+            display.console.print()
+            display.console.print("[heading]Saved sessions:[/heading]")
             for i, p in enumerate(sessions[:10], 1):
                 display.console.print(
-                    f"  [cyan]{i:>2}.[/cyan] {p.name}  [dim]{session_summary(p)}[/dim]"
+                    f"  [info]{i:>2}.[/info] {p.name}  [muted]{session_summary(p)}[/muted]"
                 )
             display.console.print()
 
@@ -137,10 +106,6 @@ def _handle_slash(
             run_stats()
         except Exception as exc:
             display.warn(f"Couldn't load stats: {exc}")
-
-    # ------------------------------------------------------------------
-    # Note commands — require an active coaching session in the DB
-    # ------------------------------------------------------------------
 
     elif cmd == "/note":
         body = raw_input.strip()[len("/note"):].strip()
@@ -169,13 +134,13 @@ def _handle_slash(
         if not notes:
             display.info("No open coaching notes.")
             return
-        display.console.print(f"\n[bold]Open coaching notes ({len(notes)}):[/bold]")
+        display.console.print(f"\n[heading]Open coaching notes ({len(notes)}):[/heading]")
         for n in notes:
-            pri_icon = {1: "[red]●[/red]", 2: "[yellow]●[/yellow]", 3: "[dim]●[/dim]"}.get(
+            pri_icon = {1: "[val.red]●[/val.red]", 2: "[warning]●[/warning]", 3: "[muted]●[/muted]"}.get(
                 n.priority, "●"
             )
             display.console.print(
-                f"  [dim]{n.id:>4}.[/dim] {pri_icon} [{n.category}] {n.body}"
+                f"  [muted]{n.id:>4}.[/muted] {pri_icon} [{n.category}] {n.body}"
             )
         display.console.print()
 
@@ -204,11 +169,6 @@ def _handle_slash(
 
 
 def _build_completer():
-    """Build a WordCompleter with agent names, map names, and slash commands.
-
-    Returns None if prompt_toolkit / the JSON loaders are unavailable so the
-    REPL still works (no autocomplete) on a stripped-down install.
-    """
     try:
         from prompt_toolkit.completion import WordCompleter
 
@@ -224,22 +184,17 @@ _OLLAMA_RECONNECT_KEYWORDS = ("connection", "refused", "timeout", "unreachable",
 
 
 def run_interactive() -> None:
-    """Start the interactive coaching REPL.
-
-    Exits cleanly on Ctrl-D (EOF), ``/quit``, or repeated Ctrl-C.
-    """
-    # Pre-flight: verify Ollama is reachable before bothering with prompt_toolkit.
-    # Checked first so users get the most actionable error even when prompt_toolkit
-    # is also missing — "start ollama serve" is always the first thing to fix.
+    """Start the interactive coaching REPL."""
     from valocoach.core.config import load_settings
     from valocoach.core.preflight import check_ollama
 
     settings = load_settings()
     ollama_result = check_ollama(settings)
     if not ollama_result.ok:
-        display.error(ollama_result.message)
-        if ollama_result.hint:
-            display.warn(ollama_result.hint)
+        display.error_with_hint(
+            ollama_result.message,
+            ollama_result.hint or "Start Ollama with: ollama serve",
+        )
         return
 
     try:
@@ -247,18 +202,14 @@ def run_interactive() -> None:
         from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
         from prompt_toolkit.history import FileHistory
     except ImportError:
-        display.error(
-            "prompt_toolkit is required for interactive mode. "
-            "Install it with: pip install prompt-toolkit"
+        display.error_with_hint(
+            "prompt_toolkit is required for interactive mode.",
+            "Install it with: pip install prompt-toolkit",
         )
         return
 
-    # 10 exchanges = 20 individual turns (user + assistant each count as 1).
     memory = ConversationMemory(max_turns=20, max_tokens=3_000)
 
-    # --- Open a DB coaching session for note persistence ---
-    # Non-fatal: if the player has never synced (no row in `players`) or the
-    # DB isn't accessible, the REPL still works — notes just won't persist.
     coach_state = REPLCoachState()
     coach_state.settings = settings
     puuid = get_player_puuid(settings)
@@ -269,11 +220,10 @@ def run_interactive() -> None:
             coach_state.coaching_session_id = session_id
             display.info(f"Coaching session #{session_id} started.  Use /note to save takeaways.")
 
-    # --- Resume from previous session? ---
     last = latest_session()
     if last:
         summary = session_summary(last)
-        display.console.print(f"\n[dim]Previous session found:[/dim] [cyan]{summary}[/cyan]")
+        display.console.print(f"\n[muted]Previous session found:[/muted] [info]{summary}[/info]")
         try:
             answer = input("Resume? [y/N] ").strip().lower()
         except (EOFError, KeyboardInterrupt):
@@ -288,7 +238,6 @@ def run_interactive() -> None:
                 display.warn("Could not load session — starting fresh.")
         display.console.print()
 
-    # History file — persist ↑↓ command recall across sessions.
     history_path = Path.home() / ".valocoach" / "history"
     history_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -296,45 +245,39 @@ def run_interactive() -> None:
         history=FileHistory(str(history_path)),
         auto_suggest=AutoSuggestFromHistory(),
         completer=_build_completer(),
-        complete_while_typing=False,  # Tab-only, not intrusive mid-sentence
+        complete_while_typing=False,
     )
 
     cmd_list = "  ".join(_SLASH_HELP.keys())
-    display.console.print(_WELCOME.format(cmds=cmd_list))
+    welcome = "\n".join(_WELCOME_PARTS).format(cmds=cmd_list)
+    display.console.print(welcome)
     display.console.print()
 
-    # Lazy-import run_coach so prompt_toolkit ImportError above can return
-    # before we pull the heavy LLM/retrieval graph into memory.
     from valocoach.cli.commands.coach import run_coach
 
     try:
         while True:
             try:
-                raw = session.prompt("valocoach> ")
+                raw = session.prompt("vc > ")
             except KeyboardInterrupt:
-                display.console.print("\n[dim]Interrupted — type /quit or Ctrl-D to exit.[/dim]")
+                display.console.print("\n[muted]Interrupted — type /quit or Ctrl-D to exit.[/muted]")
                 continue
             except EOFError:
-                display.console.print("\n[dim]Bye.[/dim]")
+                display.console.print("\n[muted]Bye.[/muted]")
                 break
 
             user_input = raw.strip()
             if not user_input:
                 continue
 
-            # --- Slash commands ---
             if user_input.startswith("/"):
                 try:
                     _handle_slash(user_input, memory, coach_state)
                 except SystemExit:
-                    display.console.print("[dim]Bye.[/dim]")
+                    display.console.print("[muted]Bye.[/muted]")
                     break
                 continue
 
-            # --- Coaching turn ---
-            # Snapshot the prior history *before* adding the new user turn — the
-            # LLM should see [prev_user, prev_assistant, …] and then the current
-            # user message that ``run_coach`` builds itself, not the question twice.
             prior_history = memory.messages if not memory.is_empty else None
 
             try:
@@ -343,28 +286,23 @@ def run_interactive() -> None:
                     conversation_history=prior_history,
                 )
             except Exception as exc:
-                # Surface a targeted reconnect hint when the error looks like an
-                # Ollama connectivity failure (e.g. the server was killed mid-session).
                 err_lower = str(exc).lower()
                 if any(kw in err_lower for kw in _OLLAMA_RECONNECT_KEYWORDS):
-                    display.error("LLM call failed — Ollama may have stopped.")
-                    display.warn("Check with:  ollama list  |  Restart with:  ollama serve")
+                    display.error_with_hint(
+                        "LLM call failed — Ollama may have stopped.",
+                        "Check with: ollama list  |  Restart with: ollama serve",
+                    )
                 else:
                     display.error(f"Coaching failed: {exc}")
                 continue
 
-            # Store both sides only when we got a response — partial / failed
-            # streams should not pollute memory with one-sided turns.
             if response:
                 memory.add("user", user_input)
                 memory.add("assistant", response)
     finally:
-        # Close the DB coaching session so ended_at is stamped.
         if coach_state.coaching_session_id is not None:
             close_coaching_session(settings, coach_state.coaching_session_id)
 
-        # Auto-save on any exit path (Ctrl-D, /quit, exception).
-        # Silently skip if the session is empty — nothing worth keeping.
         saved = save_session(memory.messages)
         if saved:
-            display.console.print(f"[dim]Session saved → {saved.name}[/dim]")
+            display.console.print(f"[muted]Session saved → {saved.name}[/muted]")

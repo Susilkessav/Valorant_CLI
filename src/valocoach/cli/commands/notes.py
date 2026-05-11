@@ -1,31 +1,4 @@
-"""`valocoach notes` — standalone coaching-note management.
-
-Complements the ``/note``, ``/notes``, and ``/resolve`` REPL slash commands
-by exposing the same operations as regular CLI sub-commands so players can
-manage notes without entering interactive mode.
-
-Sub-commands
-------------
-    valocoach notes          — alias for ``list`` (open notes table)
-    valocoach notes list     — list all open (unresolved) notes
-    valocoach notes add TEXT — add a new note; category auto-inferred from text
-    valocoach notes resolve ID — mark note <ID> as resolved
-
-Category inference
-------------------
-Note text is run through the intent classifier so that "work on eco" lands in
-the ``economy`` category and "improve clutch" lands in ``tactical`` — without
-the player needing to specify a category manually.  The inferred category is
-shown in the success message so the player can verify it.
-
-The mapping from intent to category is intentionally coarse:
-
-    clutch / post_plant / retake / tactical  →  tactical
-    economy                                  →  economy
-    agent_info                               →  agent
-    meta                                     →  meta
-    stat_analysis / general                  →  general
-"""
+"""`valocoach notes` — standalone coaching-note management."""
 
 from __future__ import annotations
 
@@ -42,11 +15,6 @@ from valocoach.coach.session_manager import (
 )
 from valocoach.core.config import load_settings
 
-# ---------------------------------------------------------------------------
-# Intent → note category mapping
-# ---------------------------------------------------------------------------
-
-#: Maps intent classifier output to the short category tag stored in the DB.
 _INTENT_TO_CATEGORY: dict[str, str] = {
     "clutch": "tactical",
     "post_plant": "tactical",
@@ -61,11 +29,6 @@ _INTENT_TO_CATEGORY: dict[str, str] = {
 
 
 def _infer_category(text: str) -> str:
-    """Classify *text* with the intent classifier and map to a note category.
-
-    Falls back to ``"general"`` on any error so the caller never has to handle
-    a failure from the classifier.
-    """
     try:
         from valocoach.coach.intent import classify_intent
         from valocoach.core.parser import parse_situation
@@ -77,20 +40,14 @@ def _infer_category(text: str) -> str:
         return "general"
 
 
-# ---------------------------------------------------------------------------
-# Command implementations (called by the Typer app in app.py)
-# ---------------------------------------------------------------------------
-
-
 def run_notes_list() -> None:
-    """List all open (unresolved) coaching notes."""
     settings = load_settings()
     puuid = get_player_puuid(settings)
 
     if not puuid:
-        display.warn(
-            "No player profile found — run `valocoach sync` first so "
-            "ValoCoach can identify your player."
+        display.error_with_hint(
+            "No player profile found.",
+            "Run: valocoach sync",
         )
         raise typer.Exit(1)
 
@@ -99,16 +56,11 @@ def run_notes_list() -> None:
         display.info("No open coaching notes.  Add one with:  valocoach notes add <text>")
         return
 
-    render_open_notes(display.console, notes)
+    with display.command_frame("Coaching Notes"):
+        render_open_notes(display.console, notes)
 
 
 def run_notes_add(text: str, *, priority: int = 2) -> None:
-    """Add a new coaching note with auto-inferred category.
-
-    Args:
-        text:     Note body text.
-        priority: 1 (high), 2 (medium — default), or 3 (low).
-    """
     if not text.strip():
         display.warn("Note text cannot be empty.")
         raise typer.Exit(1)
@@ -121,9 +73,9 @@ def run_notes_add(text: str, *, priority: int = 2) -> None:
     puuid = get_player_puuid(settings)
 
     if not puuid:
-        display.warn(
-            "No player profile found — run `valocoach sync` first so "
-            "ValoCoach can identify your player."
+        display.error_with_hint(
+            "No player profile found.",
+            "Run: valocoach sync",
         )
         raise typer.Exit(1)
 
@@ -146,11 +98,10 @@ def run_notes_add(text: str, *, priority: int = 2) -> None:
         display.warn("Couldn't save note — check logs.")
         raise typer.Exit(1)
 
-    display.success(f"Note #{note_id} saved  [dim](category: {category})[/dim]")
+    display.success(f"Note #{note_id} saved  [muted](category: {category})[/muted]")
 
 
 def run_notes_resolve(note_id: int) -> None:
-    """Mark coaching note *note_id* as resolved."""
     settings = load_settings()
 
     ok = resolve_coaching_note(settings, note_id)

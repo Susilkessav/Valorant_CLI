@@ -120,15 +120,13 @@ def _render_result(result: object, *, dry_run: bool) -> None:
         )
         return
 
-    # Header
     patch_label = (
-        f"[bold green]{r.patch_version}[/bold green] (new patch)"
+        f"[stat.good]{r.patch_version}[/stat.good] (new patch)"
         if r.is_new_patch
-        else f"[bold yellow]{r.patch_version}[/bold yellow] (forced)"
+        else f"[warning]{r.patch_version}[/warning] (forced)"
     )
     display.console.print(f"  Patch detected: {patch_label}")
 
-    # Step checkmarks
     rows = [
         ("Patch notes",   r.patch_notes_scraped),
         ("Ranked stats",  r.ranked_stats_scraped),
@@ -138,12 +136,12 @@ def _render_result(result: object, *, dry_run: bool) -> None:
         ("Re-ingest KB",  r.meta_ingested),
     ]
     for label, ok in rows:
-        icon = "[green]✓[/green]" if ok else "[dim]–[/dim]"
+        icon = "[success]✔[/success]" if ok else "[muted]–[/muted]"
         display.console.print(f"  {icon}  {label}")
 
     if r.youtube_chunks_ingested:
         display.console.print(
-            f"  [green]✓[/green]  YouTube ({r.youtube_chunks_ingested} chunks)"
+            f"  [success]✔[/success]  YouTube ({r.youtube_chunks_ingested} chunks)"
         )
 
     display.console.print()

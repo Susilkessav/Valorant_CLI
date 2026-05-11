@@ -109,7 +109,8 @@ def _mp(
 
 def _capture_console() -> Console:
     """A Console that writes to a string buffer, no ANSI, stable width."""
-    return Console(file=StringIO(), force_terminal=False, width=120)
+    from valocoach.cli.display import THEME
+    return Console(file=StringIO(), force_terminal=False, width=120, theme=THEME)
 
 
 # ---------------------------------------------------------------------------
@@ -274,8 +275,7 @@ def test_render_header_shows_filters() -> None:
     assert "SK04" in out
     assert "Gold 1" in out
     assert "NA" in out
-    assert "period=30d" in out
-    assert "agent=Jett" in out
+    # Filters are now in the command_frame subtitle, not in the header identity line
 
 
 def test_render_per_map_labels_map_column() -> None:
@@ -317,7 +317,7 @@ def test_render_overall_warns_on_thin_sample() -> None:
     assert WARN_PREFIX in out
     # Spot-check: the ACS cell should be tagged. Exact column layout is
     # Rich's business; we just assert the glyph co-occurs with the value.
-    assert "⚠️" in out and "ACS" in out
+    assert WARN_PREFIX.strip() in out and "ACS" in out
 
 
 def test_render_overall_does_not_warn_on_thick_sample() -> None:
@@ -345,7 +345,7 @@ def test_render_breakdown_warns_on_thin_split_even_when_overall_is_fat() -> None
     # Reyna row is thin — must carry ⚠️. Use the row-level canary: the G cell.
     # We locate Reyna's line in the output and assert the warn glyph on it.
     reyna_line = next(line for line in out.splitlines() if "Reyna" in line)
-    assert "⚠️" in reyna_line, f"Reyna row missing warn glyph: {reyna_line!r}"
+    assert WARN_PREFIX.strip() in reyna_line, f"Reyna row missing warn glyph: {reyna_line!r}"
 
 
 def test_render_breakdown_split_needs_30_for_win_rate() -> None:
@@ -407,7 +407,7 @@ def test_run_stats_shows_legend_only_when_warnings_fired(tmp_path, monkeypatch) 
         out = con.file.getvalue()
         # Footer is keyed on a stable phrase, not the full sentence, to
         # avoid brittle wording coupling.
-        has_legend = "sample-size threshold" in out
+        has_legend = "sample size" in out
         assert has_legend is expect_legend, (
             f"legend expectation mismatch (rows={len(rows)}): "
             f"got has_legend={has_legend}, expected {expect_legend}"
@@ -446,7 +446,7 @@ def test_legend_mentions_the_warn_glyph() -> None:
     out = con.file.getvalue()
     assert WARN_PREFIX.strip() in out  # glyph appears in body
     # And the legend line carries it too, so the user can map cell→meaning.
-    legend_lines = [line for line in out.splitlines() if "sample-size threshold" in line]
+    legend_lines = [line for line in out.splitlines() if "sample size" in line]
     assert legend_lines, "no legend found"
     assert any(WARN_PREFIX.strip() in line for line in legend_lines)
     # Ensure `stats` imported above is actually used (keeps ruff happy on
@@ -578,20 +578,20 @@ def test_run_stats_agent_filter_skips_per_agent_table():
     """Lines 180→185: per-agent breakdown omitted when agent filter active."""
     rows = _make_rows(20, agent="Jett")
     out = _run(rows=rows, agent="Jett")
-    # With agent filter active, the "By agent" table must NOT appear.
-    assert "By agent" not in out
+    # With agent filter active, the "By Agent" table must NOT appear.
+    assert "By Agent" not in out
     # But the per-map table should still appear (map_ is None).
-    assert "By map" in out
+    assert "By Map" in out
 
 
 def test_run_stats_map_filter_skips_per_map_table():
     """Lines 185→194: per-map breakdown omitted when map filter active."""
     rows = _make_rows(20, map_name="Ascent")
     out = _run(rows=rows, map_="Ascent")
-    # With map filter active, "By map" table must NOT appear.
-    assert "By map" not in out
+    # With map filter active, "By Map" table must NOT appear.
+    assert "By Map" not in out
     # Per-agent table should still appear (agent is None).
-    assert "By agent" in out
+    assert "By Agent" in out
 
 
 def test_run_stats_round_stats_rendered_when_full_matches_available():

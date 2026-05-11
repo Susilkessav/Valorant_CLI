@@ -48,7 +48,7 @@ def _sync_result(
 def test_version():
     result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0
-    assert "valocoach" in result.stdout
+    assert "v0.1.0" in result.stdout
 
 
 def test_help_shows_all_commands():

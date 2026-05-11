@@ -1,12 +1,12 @@
 # ValoCoach CLI Guide
 
-This guide explains how to use the ValoCoach command line as it works today. It
-is written for players who want to install the CLI, sync match history, seed the
-knowledge base, and get tactical coaching from the terminal.
+This guide covers the ValoCoach CLI — a Valorant-branded coaching tool that runs
+entirely from the terminal. It syncs your match history, analyzes your stats, and
+gives tactical coaching backed by an LLM and a local knowledge base.
 
 During local development, run commands through `uv run`, for example
-`uv run valocoach stats`. If you installed the package as a command, you can
-drop the `uv run` prefix and use `valocoach stats`.
+`uv run valocoach stats`. If you installed the package as a command, drop the
+`uv run` prefix.
 
 ## Quick Start
 
@@ -16,7 +16,7 @@ drop the `uv run` prefix and use `valocoach stats`.
 uv sync
 ```
 
-For development tools, use:
+For development tools:
 
 ```bash
 uv sync --extra dev
@@ -50,9 +50,6 @@ riot_region = "na"
 henrikdev_api_key = "hdev-..."
 ```
 
-Current behavior: `config init` may not create every documented key. If a key is
-missing, add it manually to the TOML file.
-
 5. Seed the built-in knowledge base.
 
 ```bash
@@ -71,28 +68,31 @@ uv run valocoach sync
 uv run valocoach coach "we keep losing 8-12 on Ascent attack as Jett, they stack A"
 ```
 
-## Command Overview
+## First Run Experience
 
-| Command | Purpose |
-|---|---|
-| `valocoach coach` | Get one-shot tactical coaching for a described situation. |
-| `valocoach interactive` | Start a multi-turn coaching REPL with conversation memory. |
-| `valocoach sync` | Fetch match history from HenrikDev into the local SQLite DB. |
-| `valocoach stats` | Show performance stats from synced matches. |
-| `valocoach profile` | Show player identity, rank, and recent summary. |
-| `valocoach meta` | Show bundled agent, map, and meta information. |
-| `valocoach ingest` | Populate or inspect the vector store used for RAG. |
-| `valocoach index` | Index the static markdown corpus into the vector store. |
-| `valocoach patch` | Show or refresh the known Valorant game version. |
-| `valocoach config` | Create or display local configuration. |
+Running `valocoach` with no arguments shows a branded banner and quick-start
+commands — it does not fall through to the help text.
 
-Use `--help` on any command to inspect the live options:
+```bash
+uv run valocoach
+```
+
+To see the full command list with groupings:
 
 ```bash
 uv run valocoach --help
-uv run valocoach coach --help
-uv run valocoach stats --help
 ```
+
+## Command Groups
+
+Commands are organized into four groups visible in `--help`:
+
+| Group | Commands |
+|---|---|
+| **Coaching** | `coach`, `interactive`, `notes`, `sessions` |
+| **Performance** | `stats`, `profile` |
+| **Data** | `sync`, `ingest`, `index` |
+| **Game Info** | `meta`, `meta-refresh`, `patch` |
 
 ## Configuration
 
@@ -131,13 +131,7 @@ llm_max_tokens = 3000
 | `llm_temperature` | Coaching response randomness. Default is `0.6`. |
 | `llm_max_tokens` | Maximum generated response tokens. Default is `3000`. |
 
-Current behavior: `coach` and `interactive` run an Ollama preflight before the
-LLM call. Even though the provider wrapper can route prefixed LiteLLM models,
-the CLI currently expects Ollama to be reachable for coaching commands.
-
 ### Environment overrides
-
-The current settings model uses unprefixed variable names. Examples:
 
 ```bash
 export OLLAMA_MODEL=qwen3:14b
@@ -150,27 +144,22 @@ You can also place those keys in a project-local `.env` file.
 
 ### Config safety
 
-`valocoach config show` prints the current effective settings. Current behavior:
-it may include `henrikdev_api_key`. Do not paste full `config show` output into
-public chats, bug reports, screenshots, or issue trackers unless you have
-redacted the key first.
+`valocoach config show` prints the current effective settings and may include
+`henrikdev_api_key`. Do not paste full `config show` output into public chats,
+bug reports, screenshots, or issue trackers unless you have redacted the key first.
 
 ## Coaching
 
-Use `coach` for one situation and one streamed answer.
+### One-shot coach
+
+Use `coach` for a single situation and one streamed answer.
 
 ```bash
 uv run valocoach coach "losing 8-12 on Ascent attack as Jett, they always stack A"
 ```
 
-ValoCoach parses the situation text before calling the LLM. It tries to detect:
-
-- agent names, such as `Jett`, `Sage`, `KAY/O`
-- map names, such as `Ascent`, `Bind`, `Haven`
-- side, such as `attack`, `defense`, `T-side`, `CT-side`
-- site, score, clutch state, economy state, and phase
-
-When the text is ambiguous, pass explicit flags:
+ValoCoach detects agent, map, side, site, score, and economy state from the text.
+Pass explicit flags when the text is ambiguous:
 
 ```bash
 uv run valocoach coach "keep dying in mid" --agent Omen --map Haven --side defense
@@ -183,8 +172,11 @@ Options:
 | `--agent`, `-a` | Override the detected agent. |
 | `--map`, `-m` | Override the detected map. |
 | `--side`, `-s` | Override the detected side: `attack` or `defense`. |
-| `--with-stats` | Include recent synced stats in the prompt. This is the default. |
-| `--no-stats` | Skip player stats and use only situation plus knowledge context. |
+| `--with-stats` | Include recent synced stats in the prompt (default). |
+| `--no-stats` | Skip player stats, use only situation + knowledge context. |
+
+The model name is shown in the coach panel subtitle. If the LLM call fails you see
+an error with a hint explaining how to fix it (e.g. check Ollama is running).
 
 Examples:
 
@@ -195,24 +187,25 @@ uv run valocoach coach "Sage on Split defense, A site gets hit every round"
 uv run valocoach coach "best Jett dash angles on Ascent A site" --no-stats
 ```
 
-## Interactive Mode
+### Interactive mode
 
-Use `interactive` for a longer coaching session.
+Use `interactive` for a multi-turn coaching session.
 
 ```bash
 uv run valocoach interactive
 ```
 
-The REPL keeps recent conversation turns in memory so follow-up questions can
-build on prior advice. It stores up to 20 turns or 3000 tokens, whichever limit
-is hit first. Older turns are evicted automatically.
+The REPL keeps recent conversation turns in memory so follow-up questions build on
+prior advice (up to 20 turns or 3000 tokens). Prior sessions can be resumed on
+start. Sessions are saved to `~/.valocoach/sessions/` on exit.
 
-REPL features:
+Features:
 
 - Up/down arrows use persistent prompt history from `~/.valocoach/history`.
 - Tab completion covers agent names, map names, and slash commands.
-- Prior sessions can be resumed when the REPL starts.
-- Sessions are saved under `~/.valocoach/sessions/` on exit.
+- Coaching notes can be added and reviewed without leaving the REPL.
+
+Prompt: `vc > `
 
 Slash commands:
 
@@ -224,23 +217,62 @@ Slash commands:
 | `/save` | Save the current session immediately. |
 | `/sessions` | List recently saved sessions. |
 | `/stats` | Show the same recent stats card as `valocoach stats`. |
-| `/quit` | Exit the REPL. Ctrl-D also exits. Ctrl-C interrupts the current prompt. |
+| `/note <text>` | Add a coaching note from within the session. |
+| `/notes` | List open (unresolved) coaching notes. |
+| `/resolve <id>` | Mark a coaching note as resolved by its ID. |
+| `/quit` | Exit the REPL. Ctrl-D also exits. |
 
 Example session:
 
 ```text
-valocoach> losing on Ascent A execute as Jett
+vc > losing on Ascent A execute as Jett
 ...
-valocoach> what if they run two sentinels?
+vc > what if they run two sentinels?
 ...
-valocoach> /memory
-valocoach> /save
-valocoach> /quit
+vc > /note work on smoke timings for A default
+vc > /memory
+vc > /save
+vc > /quit
 ```
 
-## Syncing Match History
+## Coaching Notes
 
-Use `sync` to fetch recent matches from HenrikDev and store them locally.
+Notes let you capture action items from coaching sessions and track them over time.
+
+```bash
+uv run valocoach notes list
+uv run valocoach notes add "practice smoke timings on Ascent A"
+uv run valocoach notes resolve 3
+```
+
+Sub-commands:
+
+| Sub-command | Meaning |
+|---|---|
+| `notes list` | Show all open (unresolved) coaching notes. |
+| `notes add <text>` | Create a new note. |
+| `notes resolve <id>` | Mark note `<id>` as resolved. |
+
+Notes are also accessible from interactive mode with `/note`, `/notes`, and
+`/resolve`.
+
+## Coaching Sessions
+
+Sessions are the saved conversation histories from `interactive` mode.
+
+```bash
+uv run valocoach sessions list
+uv run valocoach sessions close <id>
+```
+
+Sub-commands:
+
+| Sub-command | Meaning |
+|---|---|
+| `sessions list` | Show saved sessions with date, turn count, and topic. |
+| `sessions close <id>` | Archive a session so it no longer appears in the list. |
+
+## Syncing Match History
 
 ```bash
 uv run valocoach sync
@@ -248,11 +280,10 @@ uv run valocoach sync
 
 Default behavior:
 
-- Uses your configured `riot_name`, `riot_tag`, and `riot_region`.
-- Fetches stored matches with `mode=competitive`.
+- Fetches stored matches in `competitive` mode.
 - Inspects up to 20 matches.
 - Stops early when it reaches an already stored match.
-- Stores match data in `~/.valocoach/data/valocoach.db`.
+- Stores data in `~/.valocoach/data/valocoach.db`.
 
 Options:
 
@@ -271,16 +302,27 @@ uv run valocoach sync --full --limit 50
 uv run valocoach sync --mode unrated
 ```
 
-Stats and personalized coaching only become useful after syncing at least one
-competitive match.
-
 ## Stats Dashboard
-
-Use `stats` to inspect your recent performance.
 
 ```bash
 uv run valocoach stats
 ```
+
+Output is wrapped in a branded frame titled **Stats Dashboard** with a subtitle
+showing active filters. Inside the frame, sections appear in this order:
+
+1. **Identity line** — name, rank, region, match count
+2. **Core Performance** — Combat group (K/D/A, KDA, HS%, ACS, ADR) and Match
+   group (record, win%, rounds, FB/FD) side by side
+3. **Recent Form** — trend anomalies only, hidden when performance is stable
+4. **Win vs Loss** — split comparison, hidden when a result filter is active
+5. **Round Mastery** — round-level stats when round data is available
+6. **Agent Breakdown** — top agents, hidden when agent filter is active
+7. **Map Breakdown** — top maps, hidden when map filter is active
+
+Cells marked with `⚠` are below sample-size thresholds and should be treated as
+directional, not definitive. A legend line appears at the bottom when any warnings
+fired.
 
 Options:
 
@@ -300,25 +342,22 @@ uv run valocoach stats --map Bind --result loss
 uv run valocoach stats --period all
 ```
 
-The stats output can include:
-
-- overall record, ACS, ADR, K/D, KDA, HS%, first blood/death counts
-- win/loss split
-- per-agent breakdown
-- per-map breakdown
-- trend/anomaly notes when enough history exists
-- round-level stats when round data is available
-
-Cells marked with a warning symbol are below sample-size thresholds and should
-be treated as directional, not definitive.
-
-## Profile
-
-Use `profile` for a compact identity and recent-form card.
+## Player Profile
 
 ```bash
 uv run valocoach profile
 ```
+
+Output is wrapped in a **Player Profile** frame with the Riot ID as subtitle.
+Sections inside the frame:
+
+1. **Identity panel** — rank, RR, peak rank, account level, last match
+2. **Rank Progression** — ELO trend chart when rank history is available
+3. **Last N Matches** — compact stats card
+4. **Round Mastery** — round-level stats when data is available
+5. **Top Agents** — per-agent breakdown
+6. **Coaching** — open coaching notes + recent sessions (silently skipped if
+   the player hasn't been coached yet)
 
 Options:
 
@@ -336,20 +375,27 @@ uv run valocoach profile --name SomePlayer --tag NA1
 uv run valocoach profile --limit 50
 ```
 
-The player must already exist in the local DB. To view another player, sync that
-player's data first by changing config or using the configured account workflow.
+The player must already exist in the local DB.
 
 ## Meta and Knowledge Base
 
 ### Meta lookup
-
-Use `meta` to read bundled knowledge without invoking the LLM.
 
 ```bash
 uv run valocoach meta
 uv run valocoach meta --agent Jett
 uv run valocoach meta --map Ascent
 ```
+
+- No flags: shows the global tier list in an **Agent Intel** frame. Tier colors
+  follow the Valorant palette (S=red, A=green, B=amber, C=dim).
+- `--agent`: shows ability summary and meta standing (tier, pick rate, win rate,
+  reason) in a single panel inside an **Agent Intel** frame.
+- `--map`: shows callouts and meta standing (top agents, notes) in a **Map Intel**
+  frame.
+
+When live patch data differs from the bundled meta, a warning appears showing the
+patch mismatch.
 
 Options:
 
@@ -358,9 +404,41 @@ Options:
 | `--agent`, `-a` | Show ability and meta info for one agent. |
 | `--map`, `-m` | Show callouts and meta info for one map. |
 
+### Meta refresh
+
+Use `meta-refresh` to run the full automated meta sync pipeline. It detects the
+current patch, scrapes official patch notes and ranked/pro stats, optionally
+ingests YouTube transcripts, regenerates the tier list via LLM, updates
+`meta.json`, and re-embeds everything into ChromaDB.
+
+```bash
+uv run valocoach meta-refresh
+```
+
+Options:
+
+| Option | Meaning |
+|---|---|
+| `--force` | Run even when no new patch is detected. |
+| `--dry-run` | Execute all steps but don't write `meta.json` or re-ingest. |
+| `--watch` | Run continuously: check daily, full sync on new patch. |
+| `--install-cron` | Write a crontab entry to run daily patch checks at 08:00. |
+| `--youtube URL` | Also ingest a YouTube transcript as part of the sync. |
+
+Examples:
+
+```bash
+uv run valocoach meta-refresh
+uv run valocoach meta-refresh --force
+uv run valocoach meta-refresh --dry-run
+uv run valocoach meta-refresh --watch
+uv run valocoach meta-refresh --install-cron
+uv run valocoach meta-refresh --youtube "https://www.youtube.com/watch?v=VIDEO_ID"
+```
+
 ### Ingest
 
-Use `ingest` to populate the vector store used by coach retrieval.
+Use `ingest` to populate or inspect the vector store used for RAG retrieval.
 
 ```bash
 uv run valocoach ingest --seed
@@ -388,8 +466,7 @@ uv run valocoach ingest --stats
 uv run valocoach ingest --clear
 ```
 
-`--clear` returns after clearing. If you want a full reset and re-seed, run both
-commands:
+Full reset and re-seed:
 
 ```bash
 uv run valocoach ingest --clear
@@ -398,25 +475,21 @@ uv run valocoach ingest --seed
 
 ### Index
 
-Use `index` to embed static markdown corpus files from `corpus/`.
+Embeds static markdown corpus files from `corpus/`.
 
 ```bash
 uv run valocoach index
 ```
 
-This is equivalent to indexing the static corpus, not to scraping live web
-sources.
-
 ### Patch
 
-Use `patch` to show the latest patch version recorded locally.
+Shows the latest patch version stored locally.
 
 ```bash
 uv run valocoach patch
 ```
 
-Use `--check` to fetch the current version from HenrikDev and update the local
-patch table:
+Use `--check` to fetch the current version from HenrikDev:
 
 ```bash
 uv run valocoach patch --check
@@ -430,12 +503,15 @@ uv run valocoach patch --check
 |---|---|
 | Get advice now | `uv run valocoach coach "retaking B on Bind as Sova"` |
 | Start a multi-turn session | `uv run valocoach interactive` |
+| Add a note during session | `/note work on smoke timings` |
+| Review open notes | `uv run valocoach notes list` |
 | Sync recent ranked matches | `uv run valocoach sync` |
 | Sync more history | `uv run valocoach sync --full --limit 50` |
 | Check Jett on Ascent | `uv run valocoach stats --agent Jett --map Ascent` |
 | Show your profile | `uv run valocoach profile` |
 | Inspect Jett knowledge | `uv run valocoach meta --agent Jett` |
 | Inspect Ascent callouts | `uv run valocoach meta --map Ascent` |
+| Update meta after patch | `uv run valocoach meta-refresh` |
 | Refresh patch info | `uv run valocoach patch --check` |
 | Check vector store contents | `uv run valocoach ingest --stats` |
 | Reset vector store | `uv run valocoach ingest --clear` |
@@ -443,31 +519,30 @@ uv run valocoach patch --check
 
 ## Local Data Paths
 
-Default paths:
-
 | Path | Contents |
 |---|---|
 | `~/.valocoach/config.toml` | User configuration. |
-| `~/.valocoach/data/valocoach.db` | SQLite DB for players, matches, rounds, stats, cache rows, patch versions. |
+| `~/.valocoach/data/valocoach.db` | SQLite DB for players, matches, rounds, stats, patch versions. |
 | `~/.valocoach/data/chroma/` | ChromaDB vector store for static and live retrieval collections. |
 | `~/.valocoach/history` | Interactive REPL prompt history. |
-| `~/.valocoach/sessions/` | Saved interactive conversations. |
+| `~/.valocoach/sessions/` | Saved interactive coaching conversations. |
 
-If `data_dir` is changed in config, the database and ChromaDB paths move under
-that configured directory.
+If `data_dir` is set in config, the database and ChromaDB paths move under that
+directory.
 
 ## Troubleshooting
 
-### `Ollama is not reachable`
+When something goes wrong, the CLI shows a plain-language error with an actionable
+hint directly below it. The hint tells you exactly what to run next.
 
-Start Ollama and verify the host:
+### `Ollama is not reachable`
 
 ```bash
 ollama serve
 ollama list
 ```
 
-If you use a non-default host, set it in config:
+If you use a non-default host:
 
 ```toml
 ollama_host = "http://localhost:11434"
@@ -475,22 +550,29 @@ ollama_host = "http://localhost:11434"
 
 ### `Model 'qwen3:8b' is not pulled`
 
-Pull the configured model:
-
 ```bash
 ollama pull qwen3:8b
 ```
 
-If you configured `ollama_model = "qwen3:14b"`, pull that model instead.
+If you configured a different model (e.g. `qwen3:14b`), pull that instead.
 
 ### `riot_name / riot_tag not configured`
 
-Edit `~/.valocoach/config.toml` and set both fields:
+Run: `valocoach config init`
+
+Or edit `~/.valocoach/config.toml` manually:
 
 ```toml
 riot_name = "YourName"
 riot_tag = "NA1"
 ```
+
+### No local match data
+
+Run: `valocoach sync`
+
+If there are still no matches, verify your Riot ID and region are correct and that
+HenrikDev can see recent matches for the account.
 
 ### Missing HenrikDev API key
 
@@ -502,64 +584,47 @@ henrikdev_api_key = "hdev-..."
 
 ### Empty vector store
 
-Seed the knowledge base:
+Run: `valocoach ingest --seed`
 
-```bash
-uv run valocoach ingest --seed
-```
-
-If seeding fails halfway, reset and seed again:
+If seeding fails halfway, reset and re-seed:
 
 ```bash
 uv run valocoach ingest --clear
 uv run valocoach ingest --seed
 ```
 
-### No local match data
-
-Run sync:
-
-```bash
-uv run valocoach sync
-```
-
-If there are still no matches, check that your Riot ID and region are correct
-and that HenrikDev can see recent matches for the account.
-
 ### Scraper or URL ingest returns no content
 
-Some sites are JavaScript-heavy or block scraping. Prefer official Valorant
-patch notes, server-rendered articles, or the bundled corpus. If a URL fails,
-the CLI skips it rather than trying to bypass anti-bot protections.
+Some sites are JavaScript-heavy or block scraping. Prefer official Valorant patch
+notes or server-rendered articles. If a URL fails, the CLI skips it rather than
+trying to bypass anti-bot protections.
 
 ### YouTube transcript ingest fails
 
 Possible causes:
 
-- the URL or video ID is invalid
-- the video has no available transcript
-- transcripts are disabled or unavailable in English
+- The URL or video ID is invalid.
+- The video has no available transcript.
+- Transcripts are disabled or unavailable in English.
 
 Try a different video or verify that captions are visible on YouTube.
 
 ### HenrikDev rate limiting
 
-Reduce each sync run:
+Use smaller sync runs:
 
 ```bash
 uv run valocoach sync --limit 5
 ```
 
-The default sync path is intentionally incremental, so repeated smaller syncs
-are safe.
+The default sync path is incremental, so repeated smaller syncs are safe.
 
 ## Current Limitations
 
-- `coach` and `interactive` currently require Ollama preflight to pass.
+- `coach` and `interactive` require Ollama preflight to pass.
 - Synced stats require HenrikDev data and a configured Riot ID.
-- Live scraped meta quality depends on source availability and extractability.
+- Live scraped meta quality depends on source availability.
 - `config show` may print `henrikdev_api_key`; redact before sharing output.
-- `config init` may not create every optional key; add missing TOML keys
-  manually when needed.
-- The CLI assumes one configured player for most workflows, although the schema
-  can store multiple players.
+- `config init` may not create every optional key; add missing TOML keys manually.
+- Most workflows assume one configured player, although the schema can store
+  multiple players.

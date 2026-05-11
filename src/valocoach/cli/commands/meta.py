@@ -20,11 +20,11 @@ def _tier_table() -> Table:
     meta = get_meta()
     tier_list = meta.get("tier_list", {})
 
-    table = Table(show_header=True, header_style="bold cyan", box=None, padding=(0, 1))
+    table = Table(show_header=True, header_style="bold", box=None, padding=(0, 1))
     table.add_column("Tier", style="bold", width=6)
     table.add_column("Agents")
 
-    colors = {"S": "bold green", "A": "green", "B": "yellow", "C": "dim white"}
+    colors = {"S": "tier.s", "A": "tier.a", "B": "tier.b", "C": "tier.c"}
     for tier in ("S", "A", "B", "C"):
         agents = tier_list.get(tier, [])
         if agents:
@@ -38,22 +38,18 @@ def _tier_table() -> Table:
 def _eco_line() -> str:
     eco = get_meta().get("economy", {})
     return (
-        f"Full buy: [bold green]{eco.get('full_buy', 3900)} cr[/bold green]  "
-        f"Half buy: [yellow]{eco.get('half_buy', 2400)} cr[/yellow]  "
-        f"Eco/save: [dim]<{eco.get('eco_save', 1600)} cr[/dim]"
+        f"Full buy: [stat.good]{eco.get('full_buy', 3900)} cr[/stat.good]  "
+        f"Half buy: [warning]{eco.get('half_buy', 2400)} cr[/warning]  "
+        f"Eco/save: [muted]<{eco.get('eco_save', 1600)} cr[/muted]"
     )
 
 
 def _meta_header() -> str:
     meta = get_meta()
-    return f"[bold]Patch {meta['patch']}[/bold]  ·  updated {meta['updated']}  ·  {meta.get('notes', '')}"
+    return f"[heading]Patch {meta['patch']}[/heading]  [muted]·  updated {meta['updated']}  ·  {meta.get('notes', '')}[/muted]"
 
 
 def _try_get_live_patch(settings) -> str | None:
-    """Read the most recently detected game version from the DB. Non-fatal.
-
-    Returns None if the DB hasn't been initialised (e.g. first run, no sync yet).
-    """
     try:
         import asyncio
 
@@ -70,13 +66,12 @@ def run_meta(agent: str | None, map_: str | None) -> None:
     settings = load_settings()
     meta = get_meta()
 
-    # Show live-patch alert in every view if a newer patch was detected by sync.
     live_patch = _try_get_live_patch(settings)
     json_patch = meta.get("patch", "")
     if live_patch and live_patch != json_patch:
         display.warn(
             f"New patch detected: [bold]{live_patch}[/bold] "
-            f"(meta data still reflects {json_patch} — run `valocoach sync` to refresh)"
+            f"(meta data still reflects {json_patch} — run `valocoach meta-refresh` to update)"
         )
 
     # --- agent-specific view ---
@@ -89,38 +84,40 @@ def run_meta(agent: str | None, map_: str | None) -> None:
         resolved = agent_data["name"]
         agent_meta = meta.get("agent_meta", {}).get(resolved, {})
 
-        # Ability block
+        # Build body with abilities + meta standing combined
         ability_text = format_agent_context(resolved) or ""
-        display.console.print(
-            Panel(
-                ability_text,
-                title=f"[bold cyan]{resolved}[/bold cyan] — {agent_data['role']}",
-                border_style="cyan",
-                padding=(1, 2),
-            )
-        )
+        body_parts = [ability_text]
 
-        # Meta standing
         if agent_meta:
             tier = agent_meta.get("tier", "?")
             pick = agent_meta.get("pick_rate", "N/A")
             win = agent_meta.get("win_rate", "N/A")
             reason = agent_meta.get("reason", "")
-            tier_color = {"S": "bold green", "A": "green", "B": "yellow", "C": "dim white"}.get(
+            tier_color = {"S": "tier.s", "A": "tier.a", "B": "tier.b", "C": "tier.c"}.get(
                 tier, "white"
             )
-            display.console.print(
-                f"  Tier: [{tier_color}]{tier}[/{tier_color}]  ·  "
-                f"Pick rate: [cyan]{pick}[/cyan]  ·  "
-                f"Win rate: [cyan]{win}[/cyan]"
+            body_parts.append("")
+            body_parts.append(
+                f"Tier: [{tier_color}]{tier}[/{tier_color}]  ·  "
+                f"Pick rate: [val.blue]{pick}[/val.blue]  ·  "
+                f"Win rate: [val.blue]{win}[/val.blue]"
             )
             if reason:
-                display.console.print(f"  [dim]{reason}[/dim]")
-        else:
-            display.warn(f"No meta stats available for {resolved} in the current dataset.")
+                body_parts.append(f"[muted]{reason}[/muted]")
 
-        display.console.print()
-        display.console.print(_eco_line())
+        with display.command_frame("Agent Intel", subtitle=resolved):
+            display.console.print(
+                Panel(
+                    "\n".join(body_parts),
+                    title=f"[heading]{resolved}[/heading] [muted]— {agent_data['role']}[/muted]",
+                    border_style="border.dim",
+                    padding=(1, 2),
+                )
+            )
+            if not agent_meta:
+                display.warn(f"No meta stats available for {resolved} in the current dataset.")
+            display.console.print()
+            display.console.print(_eco_line())
         return
 
     # --- map-specific view ---
@@ -134,42 +131,44 @@ def run_meta(agent: str | None, map_: str | None) -> None:
         resolved = map_data["name"]
         map_meta = meta.get("map_meta", {}).get(resolved, {})
 
-        # Callout block
         callout_text = format_map_context(resolved) or ""
-        display.console.print(
-            Panel(
-                callout_text,
-                title=f"[bold cyan]{resolved}[/bold cyan] — Callouts",
-                border_style="cyan",
-                padding=(1, 2),
-            )
-        )
+        body_parts = [callout_text]
 
-        # Map meta
         if map_meta:
             top = ", ".join(map_meta.get("top_agents", []))
-            display.console.print(f"  [bold]Top agents on {resolved}:[/bold] {top}")
+            body_parts.append("")
+            body_parts.append(f"[heading]Top agents:[/heading] {top}")
             if map_meta.get("notes"):
-                display.console.print(f"  [dim]{map_meta['notes']}[/dim]")
-        else:
-            display.warn(f"No map-specific meta available for {resolved}.")
+                body_parts.append(f"[muted]{map_meta['notes']}[/muted]")
 
-        display.console.print()
-        display.console.print(_eco_line())
+        with display.command_frame("Map Intel", subtitle=resolved):
+            display.console.print(
+                Panel(
+                    "\n".join(body_parts),
+                    title=f"[heading]{resolved}[/heading] [muted]— Callouts[/muted]",
+                    border_style="border.dim",
+                    padding=(1, 2),
+                )
+            )
+            if not map_meta:
+                display.warn(f"No map-specific meta available for {resolved}.")
+            display.console.print()
+            display.console.print(_eco_line())
         return
 
     # --- global overview ---
-    display.console.print(_meta_header())
-    display.console.print()
-    display.console.print(
-        Panel(
-            _tier_table(),
-            title="[bold]Agent Tier List[/bold]",
-            border_style="cyan",
-            padding=(1, 2),
+    with display.command_frame("Current Meta", subtitle=f"Patch {meta.get('patch', '?')}"):
+        display.console.print(_meta_header())
+        display.console.print()
+        display.console.print(
+            Panel(
+                _tier_table(),
+                title="[heading]Agent Tier List[/heading]",
+                border_style="border",
+                padding=(1, 2),
+            )
         )
-    )
-    display.console.print()
-    display.console.print(_eco_line())
-    display.console.print()
-    display.info("Use [bold]--agent <name>[/bold] or [bold]--map <name>[/bold] for detailed info.")
+        display.console.print()
+        display.console.print(_eco_line())
+        display.console.print()
+        display.info("Use [bold]--agent <name>[/bold] or [bold]--map <name>[/bold] for detailed info.")

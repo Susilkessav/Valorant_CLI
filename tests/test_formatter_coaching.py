@@ -30,8 +30,9 @@ from valocoach.coach.session_manager import MMRHistoryInfo, NoteInfo, SessionInf
 
 def _console() -> tuple[Console, StringIO]:
     """Return a Console that writes to a StringIO buffer for assertion."""
+    from valocoach.cli.display import THEME
     buf = StringIO()
-    con = Console(file=buf, highlight=False, no_color=True, width=120)
+    con = Console(file=buf, highlight=False, no_color=True, width=120, theme=THEME)
     return con, buf
 
 

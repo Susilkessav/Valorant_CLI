@@ -8,19 +8,20 @@ from valocoach.cli import display
 app = typer.Typer(
     name="valocoach",
     help="Valorant tactical coaching CLI",
-    no_args_is_help=True,
+    no_args_is_help=False,
     add_completion=True,
 )
 
 
 def _version_callback(value: bool) -> None:
     if value:
-        display.console.print(f"valocoach v{__version__}")
+        display.render_banner()
         raise typer.Exit()
 
 
-@app.callback()
+@app.callback(invoke_without_command=True)
 def main(
+    ctx: typer.Context,
     version: bool = typer.Option(
         False,
         "--version",
@@ -31,9 +32,20 @@ def main(
     ),
 ) -> None:
     """Valorant tactical coaching CLI."""
+    if ctx.invoked_subcommand is None:
+        display.render_banner()
+        display.console.print()
+        display.console.print("[heading]Quick start:[/heading]")
+        display.console.print("  [info]valocoach config init[/info]    [muted]Set up your Riot ID and API key[/muted]")
+        display.console.print("  [info]valocoach sync[/info]           [muted]Pull your match history[/muted]")
+        display.console.print("  [info]valocoach stats[/info]          [muted]View your performance dashboard[/muted]")
+        display.console.print("  [info]valocoach coach[/info] [muted]\"...\"    Get tactical advice[/muted]")
+        display.console.print("  [info]valocoach interactive[/info]    [muted]Start a coaching session[/muted]")
+        display.console.print()
+        display.console.print("[muted]Run valocoach --help for all commands.[/muted]")
 
 
-@app.command()
+@app.command(rich_help_panel="Coaching")
 def coach(
     situation: str = typer.Argument(..., help="Describe the match situation"),
     agent: str | None = typer.Option(None, "--agent", "-a"),
@@ -53,9 +65,10 @@ def coach(
     settings = load_settings()
     ollama_result = check_ollama(settings)
     if not ollama_result.ok:
-        display.error(ollama_result.message)
-        if ollama_result.hint:
-            display.warn(ollama_result.hint)
+        display.error_with_hint(
+            ollama_result.message,
+            ollama_result.hint or "Start Ollama with: ollama serve",
+        )
         raise typer.Exit(1)
 
     run_coach(
@@ -67,7 +80,7 @@ def coach(
     )
 
 
-@app.command()
+@app.command(rich_help_panel="Performance")
 def stats(
     agent: str | None = typer.Option(None, "--agent", "-a", help="Filter to a single agent."),
     map_: str | None = typer.Option(None, "--map", "-m", help="Filter to a single map."),
@@ -90,7 +103,7 @@ def stats(
     run_stats(agent=agent, map_=map_, period=period, result=result)
 
 
-@app.command()
+@app.command(rich_help_panel="Data")
 def sync(
     full: bool = typer.Option(
         False,
@@ -143,11 +156,10 @@ def sync(
 
         return result
 
-    result = asyncio.run(_run())
+    with display.command_frame("Match Sync"):
+        display.info("Syncing match history…")
+        result = asyncio.run(_run())
 
-    # ── Rank delta (shown when new matches were stored and MMR history exists) ──
-    # Non-fatal: silently skipped when the player has no MMR history or the
-    # DB is empty — just a nice bonus, never blocks the happy path.
     if result is not None and result.matches_new > 0:
         try:
             from valocoach.coach.session_manager import get_mmr_trend
@@ -159,13 +171,13 @@ def sync(
                 arrow = "↑" if elo_delta > 0 else ("↓" if elo_delta < 0 else "→")
                 display.info(
                     f"Rank snapshot: {history[0].tier_patched} ({history[0].rr} RR)  "
-                    f"[dim]{arrow} {delta_str} elo since last sync[/dim]"
+                    f"[muted]{arrow} {delta_str} elo since last sync[/muted]"
                 )
         except Exception:
             pass
 
 
-@app.command()
+@app.command(rich_help_panel="Performance")
 def profile(
     name: str | None = typer.Option(
         None,
@@ -192,7 +204,7 @@ def profile(
     run_profile(name=name, tag=tag, limit=limit)
 
 
-@app.command()
+@app.command(rich_help_panel="Game Info")
 def meta(
     agent: str | None = typer.Option(
         None, "--agent", "-a", help="Agent name for ability and meta info."
@@ -207,7 +219,7 @@ def meta(
     run_meta(agent=agent, map_=map_)
 
 
-@app.command()
+@app.command(rich_help_panel="Data")
 def ingest(
     url: str | None = typer.Option(
         None, "--url", "-u", help="Scrape and ingest a URL (patch notes, blog post, etc.)."
@@ -235,7 +247,7 @@ def ingest(
     )
 
 
-@app.command()
+@app.command(rich_help_panel="Data")
 def index() -> None:
     """Index the static corpus into the vector store (agents, maps, concepts)."""
     from pathlib import Path
@@ -244,13 +256,16 @@ def index() -> None:
 
     corpus_dir = Path("corpus")
     if not corpus_dir.exists():
-        display.error("corpus/ not found. Run  python scripts/build_corpus.py  first.")
+        display.error_with_hint(
+            "corpus/ not found.",
+            "Run  python scripts/build_corpus.py  first.",
+        )
         raise typer.Exit(1)
 
     run_ingest(url=None, youtube=None, corpus=True, seed=False, clear=False, show_stats=False)
 
 
-@app.command()
+@app.command(rich_help_panel="Game Info")
 def patch(
     check: bool = typer.Option(
         False,
@@ -264,7 +279,7 @@ def patch(
     run_patch(check=check)
 
 
-@app.command("meta-refresh")
+@app.command("meta-refresh", rich_help_panel="Game Info")
 def meta_refresh(
     force: bool = typer.Option(
         False,
@@ -320,7 +335,7 @@ def meta_refresh(
     )
 
 
-@app.command()
+@app.command(rich_help_panel="Coaching")
 def interactive() -> None:
     """Start an interactive multi-turn coaching session (REPL)."""
     from valocoach.cli.commands.interactive import run_interactive
@@ -329,7 +344,7 @@ def interactive() -> None:
 
 
 notes_app = typer.Typer(help="Manage coaching notes (list, add, resolve).")
-app.add_typer(notes_app, name="notes")
+app.add_typer(notes_app, name="notes", rich_help_panel="Coaching")
 
 
 @notes_app.callback(invoke_without_command=True)
@@ -376,7 +391,7 @@ def notes_resolve(
 
 
 sessions_app = typer.Typer(help="Manage coaching sessions (list, close).")
-app.add_typer(sessions_app, name="sessions")
+app.add_typer(sessions_app, name="sessions", rich_help_panel="Coaching")
 
 
 @sessions_app.callback(invoke_without_command=True)
@@ -433,11 +448,11 @@ def config_show() -> None:
 
     s = load_settings()
     data = s.model_dump()
-    # Redact secrets so they are never accidentally exposed in terminal output,
-    # shell history captures, or screenshots.
     if data.get("henrikdev_api_key"):
         data["henrikdev_api_key"] = "***redacted***"
-    display.console.print(data)
+
+    with display.command_frame("Configuration"):
+        display.console.print(data)
 
 
 if __name__ == "__main__":

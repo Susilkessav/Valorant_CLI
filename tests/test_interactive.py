@@ -560,9 +560,9 @@ class TestRunInteractive:
                 run_interactive()
 
         error_calls = " ".join(str(c) for c in mock_display.error.call_args_list)
-        warn_calls = " ".join(str(c) for c in mock_display.warn.call_args_list)
+        hint_calls = " ".join(str(c) for c in mock_display.error_with_hint.call_args_list)
         # Should mention Ollama having stopped, not just "coaching failed"
-        assert "ollama" in (error_calls + warn_calls).lower()
+        assert "ollama" in (error_calls + hint_calls).lower()
 
     def test_session_autosaved_on_exit(self):
         """save_session is always called on exit (finally block)."""

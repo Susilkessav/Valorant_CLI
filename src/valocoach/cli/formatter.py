@@ -1,50 +1,15 @@
 """Rich rendering for all CLI output — the single source of truth for display.
 
-Separation of concerns
-----------------------
 Commands own: argument parsing, data loading, filter application, error handling.
-This module owns: every Rich table, panel, and formatted value that ends up on screen.
-
-Design goals
-------------
-- Pure render layer — no I/O, no DB, no API calls. Functions take computed
-  objects (PlayerStats, AgentStats, Player, …) and a Console; they write output.
-- Public names — nothing private-by-convention. Callers import exactly what
-  they need without reaching into each other's command modules.
-- Testable — each render function returns a ``bool`` (``True`` = at least one
-  ⚠️ cell was shown) so tests can assert on the warn/no-warn contract without
-  parsing the rendered string, and integration tests that DO parse the string
-  can be explicit about what they're looking for.
-- One legend — ``render_warn_legend`` is the only place the ⚠️ footer text
-  lives. Both ``stats`` and ``profile`` call it; it cannot drift.
-
-Formatting primitives
----------------------
-- ``fmt_pct``      — 0.27 → "27.0%"
-- ``fmt_delta``    — signed difference between two floats
-- ``WARN_PREFIX``  — the ⚠️ glyph prepended to unreliable cells
-- ``warn_cell``    — conditionally prepend WARN_PREFIX
-
-Rich renderers
---------------
-- ``render_warn_legend``       — the ⚠️ explanation footer
-- ``render_header``            — top panel (name, rank, region, active filters)
-- ``render_overall``           — overall stats two-column table  (stats command)
-- ``render_breakdown``         — per-agent or per-map table  (stats + profile)
-- ``render_win_loss_split``    — wins vs losses comparison table  (stats command)
-- ``render_trend``             — recent-form anomaly block  (stats command)
-- ``render_round_stats``       — KAST / clutch / trade / side split  (stats command)
-- ``render_identity_panel``    — player identity panel  (profile command)
-- ``render_summary_card``      — compact "last N matches" table  (profile command)
-- ``render_rank_trend``         — ELO/rank progression line  (profile command)
-- ``render_coaching_sessions`` — recent coaching sessions table  (profile command)
-- ``render_open_notes``        — open coaching notes table  (profile command)
+This module owns: every Rich table, panel, and formatted value on screen.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Final
 
+from rich import box
+from rich.columns import Columns
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -60,52 +25,19 @@ if TYPE_CHECKING:
 # Formatting primitives
 # ---------------------------------------------------------------------------
 
-WARN_PREFIX: Final[str] = "⚠️ "
-"""Glyph prepended to unreliable metric cells.
-
-Exposed as a constant so tests can assert ``WARN_PREFIX in output`` without
-duplicating the Unicode literal, and so any future theming swap stays in one
-place.
-"""
-
+WARN_PREFIX: Final[str] = "⚠ "
 
 def fmt_pct(ratio: float) -> str:
-    """Render a [0.0, 1.0] ratio as a percentage string.
-
-    >>> fmt_pct(0.2734)
-    '27.3%'
-    >>> fmt_pct(1.0)
-    '100.0%'
-    """
     return f"{ratio * 100:.1f}%"
 
 
 def fmt_delta(a: float, b: float, *, fmt: str = ".1f") -> str:
-    """Signed difference ``a - b`` with a leading ``+`` when non-negative.
-
-    Used in the win/loss split table to show "how much better/worse in wins".
-
-    >>> fmt_delta(210.0, 170.0, fmt=".0f")
-    '+40'
-    >>> fmt_delta(0.95, 1.10, fmt=".2f")
-    '-0.15'
-    """
     d = a - b
     sign = "+" if d >= 0 else ""
     return f"{sign}{d:{fmt}}"
 
 
 def warn_cell(value: str, reliable: bool) -> str:
-    """Prepend ``WARN_PREFIX`` when ``reliable`` is ``False``.
-
-    Pure presentation concern — the reliability truth-value comes from
-    ``calculator.reliability_flags``, never re-derived here.
-
-    >>> warn_cell("245", True)
-    '245'
-    >>> warn_cell("245", False).startswith("⚠️")
-    True
-    """
     return value if reliable else f"{WARN_PREFIX}{value}"
 
 
@@ -115,20 +47,25 @@ def warn_cell(value: str, reliable: bool) -> str:
 
 
 def render_warn_legend(console: Console) -> None:
-    """Print the ⚠️ explanation footer.
-
-    Call this after rendering when at least one ``warn_cell`` fired (i.e.
-    when a render function returned ``True``). The footer teaches the user
-    what ⚠️ means so it's never a mystery.
-
-    This is the single source of truth for that text — both ``stats`` and
-    ``profile`` call this function; the message cannot drift between them.
-    """
     console.print(
-        f"[dim]{WARN_PREFIX.strip()}  = below the sample-size threshold for this metric; "
-        "treat as indicative, not reliable "
-        "(see BUILD_PLAN.md \u00a7 sample-size thresholds).[/dim]"
+        f"[muted]{WARN_PREFIX.strip()} Metric has a small sample size. "
+        "Treat as directional, not definitive.[/muted]"
     )
+
+
+# ---------------------------------------------------------------------------
+# Rank tier color helper
+# ---------------------------------------------------------------------------
+
+def _rank_style(tier_patched: str) -> str:
+    t = tier_patched.lower()
+    if "radiant" in t or "immortal" in t:
+        return "val.red"
+    if "ascendant" in t or "diamond" in t:
+        return "val.blue"
+    if "platinum" in t or "gold" in t:
+        return "stat.good"
+    return "stat.value"
 
 
 # ---------------------------------------------------------------------------
@@ -149,74 +86,69 @@ def render_header(
     map_filter: str | None,
     result_filter: str | None = None,
 ) -> None:
-    """Top panel: who we're showing, over what window."""
-    filter_bits = [f"period={period}"]
-    if agent_filter:
-        filter_bits.append(f"agent={agent_filter}")
-    if map_filter:
-        filter_bits.append(f"map={map_filter}")
-    if result_filter:
-        filter_bits.append(f"result={result_filter}")
-
-    title = f"[bold]{name}#{tag}[/bold]  [dim]·[/dim]  {tier}  [dim]·[/dim]  {region.upper()}"
-    subtitle = f"{matches_shown} match(es) after filters · " + " · ".join(filter_bits)
-    console.print(Panel(subtitle, title=title, border_style="cyan", padding=(0, 2)))
+    rank_style = _rank_style(tier)
+    console.print(
+        f"  [heading]{name}#{tag}[/heading]  [muted]·[/muted]  "
+        f"[{rank_style}]{tier}[/{rank_style}]  [muted]·[/muted]  "
+        f"[muted]{region.upper()}[/muted]  [muted]·[/muted]  "
+        f"[stat.value]{matches_shown}[/stat.value] [muted]match(es)[/muted]"
+    )
 
 
 def render_overall(console: Console, stats: PlayerStats) -> bool:
-    """Overall stats — two-column layout of the numbers that matter most.
-
-    Returns ``True`` if any metric was tagged as unreliable (⚠️). Callers
-    roll that up to decide whether to show the footer legend.
-    """
     flags = reliability_flags(stats)
     any_warn = not all(flags.values())
 
-    table = Table(title="Overall", show_header=False, box=None, pad_edge=False)
-    table.add_column("Label", style="dim")
-    table.add_column("Value", justify="right")
-    table.add_column("Label", style="dim")
-    table.add_column("Value", justify="right")
+    # Combat stats group
+    combat = Table(
+        title="[heading]Combat[/heading]",
+        show_header=False,
+        box=box.SIMPLE,
+        pad_edge=True,
+        padding=(0, 1),
+    )
+    combat.add_column("Label", style="stat.label")
+    combat.add_column("Value", justify="right", style="stat.value")
 
-    table.add_row(
-        "Matches",
-        str(stats.matches),
-        "Win rate",
+    combat.add_row(
+        "K / D / A",
+        f"{stats.kills} / {stats.deaths} / {stats.assists}",
+    )
+    combat.add_row("K/D", warn_cell(f"{stats.kd:.2f}", flags["kd"]))
+    combat.add_row("KDA", warn_cell(f"{stats.kda:.2f}", flags["kda"]))
+    combat.add_row("HS%", warn_cell(fmt_pct(stats.hs_pct), flags["hs_pct"]))
+    combat.add_row("ACS", warn_cell(f"{stats.acs:.1f}", flags["acs"]))
+    combat.add_row("ADR", warn_cell(f"{stats.adr:.1f}", flags["adr"]))
+
+    # Match stats group
+    match_t = Table(
+        title="[heading]Match[/heading]",
+        show_header=False,
+        box=box.SIMPLE,
+        pad_edge=True,
+        padding=(0, 1),
+    )
+    match_t.add_column("Label", style="stat.label")
+    match_t.add_column("Value", justify="right", style="stat.value")
+
+    match_t.add_row(
+        "Record",
         warn_cell(
             f"{stats.wins}-{stats.losses}  ({fmt_pct(stats.win_rate)})",
             flags["win_rate"],
         ),
     )
-    table.add_row(
-        "Rounds",
-        str(stats.rounds),
-        "ACS",
-        warn_cell(f"{stats.acs:.1f}", flags["acs"]),
-    )
-    table.add_row(
-        "K / D / A",
-        f"{stats.kills} / {stats.deaths} / {stats.assists}",
-        "ADR",
-        warn_cell(f"{stats.adr:.1f}", flags["adr"]),
-    )
-    table.add_row(
-        "K/D",
-        warn_cell(f"{stats.kd:.2f}", flags["kd"]),
-        "KDA",
-        warn_cell(f"{stats.kda:.2f}", flags["kda"]),
-    )
-    table.add_row(
-        "HS%",
-        warn_cell(fmt_pct(stats.hs_pct), flags["hs_pct"]),
-        "FB / FD (diff)",
-        # FB and FD share a threshold (same rarity). Either being thin
-        # warrants a ⚠️ on the combined cell.
+    match_t.add_row("Matches", str(stats.matches))
+    match_t.add_row("Rounds", str(stats.rounds))
+    match_t.add_row(
+        "FB / FD",
         warn_cell(
             f"{stats.first_bloods} / {stats.first_deaths}  ({stats.fb_diff:+d})",
             flags["fb_rate"] and flags["fd_rate"],
         ),
     )
-    console.print(table)
+
+    console.print(Columns([combat, match_t], padding=(0, 4)))
     return any_warn
 
 
@@ -228,20 +160,17 @@ def render_breakdown(
     rows: list[AgentStats] | list[MapStats],
     top_n: int,
 ) -> bool:
-    """Per-agent or per-map table, top ``top_n`` rows by matches.
-
-    Returns ``True`` if any cell was tagged as unreliable. Per-split rows
-    use the stricter ``is_split=True`` floor — a 4-game Jett split should
-    ⚠️ even when the overall sample is reliable.
-
-    Used by both ``valocoach stats`` (agent + map breakdown) and
-    ``valocoach profile`` (top agents).
-    """
     if not rows:
         return False
 
-    table = Table(title=title, show_header=True, header_style="bold", pad_edge=False)
-    table.add_column(group_col, style="cyan")
+    table = Table(
+        title=f"[heading]{title}[/heading]",
+        show_header=True,
+        header_style="bold",
+        box=box.HEAVY_HEAD,
+        pad_edge=True,
+    )
+    table.add_column(group_col, style="heading")
     table.add_column("G", justify="right")
     table.add_column("W-L", justify="right")
     table.add_column("Win%", justify="right")
@@ -258,9 +187,6 @@ def render_breakdown(
             any_warn = True
         table.add_row(
             label,
-            # Mark the G column when *any* split-metric is thin — this is
-            # the user's "don't trust this row" canary, keyed off the
-            # sample size that drives everything else.
             warn_cell(str(s.matches), all(flags.values())),
             warn_cell(f"{s.wins}-{s.losses}", flags["win_rate"]),
             warn_cell(fmt_pct(s.win_rate), flags["win_rate"]),
@@ -277,18 +203,6 @@ def render_win_loss_split(
     wins_rows: list[MatchPlayer],
     losses_rows: list[MatchPlayer],
 ) -> bool:
-    """Win/Loss performance comparison table.
-
-    Shows ACS, K/D, ADR, HS%, and FB diff split by outcome, with a delta
-    column so the user immediately sees "I play better/worse when winning".
-    Both halves are computed independently as PlayerStats so every metric
-    is correctly round-weighted within each subset.
-
-    Returns ``True`` when *either* half is below reliability threshold.
-
-    Skipped (returns ``False``) when either half is empty — a 0-game split
-    tells the coach nothing useful.
-    """
     from valocoach.stats.calculator import compute_player_stats
 
     if not wins_rows or not losses_rows:
@@ -297,46 +211,53 @@ def render_win_loss_split(
     ws = compute_player_stats(wins_rows)
     ls = compute_player_stats(losses_rows)
 
-    # Use split-level reliability (stricter) for each half.
     wf = reliability_flags(ws, is_split=True)
     lf = reliability_flags(ls, is_split=True)
     any_warn = not all(wf.values()) or not all(lf.values())
 
     table = Table(
-        title="Win / Loss split",
+        title="[heading]Win / Loss Split[/heading]",
         show_header=True,
         header_style="bold",
-        pad_edge=False,
+        box=box.HEAVY_HEAD,
+        pad_edge=True,
     )
     table.add_column("Metric")
-    table.add_column(f"Wins ({ws.matches}g)", justify="right", style="green")
-    table.add_column(f"Losses ({ls.matches}g)", justify="right", style="red")
-    table.add_column("Delta (W\u2212L)", justify="right")
+    table.add_column(f"Wins ({ws.matches}g)", justify="right", style="stat.good")
+    table.add_column(f"Losses ({ls.matches}g)", justify="right", style="stat.bad")
+    table.add_column("Delta (W−L)", justify="right")
+
+    def _delta_style(a: float, b: float) -> str:
+        return "stat.good" if a >= b else "stat.bad"
+
+    acs_delta = fmt_delta(ws.acs, ls.acs, fmt=".0f")
+    kd_delta = fmt_delta(ws.kd, ls.kd, fmt=".2f")
+    adr_delta = fmt_delta(ws.adr, ls.adr, fmt=".0f")
+    hs_delta = fmt_delta(ws.hs_pct * 100, ls.hs_pct * 100, fmt=".1f") + "pp"
 
     table.add_row(
         "ACS",
         warn_cell(f"{ws.acs:.0f}", wf["acs"]),
         warn_cell(f"{ls.acs:.0f}", lf["acs"]),
-        fmt_delta(ws.acs, ls.acs, fmt=".0f"),
+        f"[{_delta_style(ws.acs, ls.acs)}]{acs_delta}[/{_delta_style(ws.acs, ls.acs)}]",
     )
     table.add_row(
         "K/D",
         warn_cell(f"{ws.kd:.2f}", wf["kd"]),
         warn_cell(f"{ls.kd:.2f}", lf["kd"]),
-        fmt_delta(ws.kd, ls.kd, fmt=".2f"),
+        f"[{_delta_style(ws.kd, ls.kd)}]{kd_delta}[/{_delta_style(ws.kd, ls.kd)}]",
     )
     table.add_row(
         "ADR",
         warn_cell(f"{ws.adr:.0f}", wf["adr"]),
         warn_cell(f"{ls.adr:.0f}", lf["adr"]),
-        fmt_delta(ws.adr, ls.adr, fmt=".0f"),
+        f"[{_delta_style(ws.adr, ls.adr)}]{adr_delta}[/{_delta_style(ws.adr, ls.adr)}]",
     )
     table.add_row(
         "HS%",
         warn_cell(fmt_pct(ws.hs_pct), wf["hs_pct"]),
         warn_cell(fmt_pct(ls.hs_pct), lf["hs_pct"]),
-        # Percentage-point delta — append 'pp' so it's clear it's not a ratio.
-        fmt_delta(ws.hs_pct * 100, ls.hs_pct * 100, fmt=".1f") + "pp",
+        f"[{_delta_style(ws.hs_pct, ls.hs_pct)}]{hs_delta}[/{_delta_style(ws.hs_pct, ls.hs_pct)}]",
     )
     table.add_row(
         "FB diff",
@@ -353,28 +274,23 @@ def render_trend(
     console: Console,
     rows: list[MatchPlayer],
 ) -> None:
-    """Recent-form anomaly block — shown only when anomalies are detected.
-
-    Silent when the row window is too thin for a meaningful comparison or
-    when performance is stable. The section never shows a "no changes"
-    placeholder — absence means stability.
-    """
     comparison = compare_baseline(rows)
     if comparison is None or not comparison.has_anomalies:
         return
 
     console.print(
-        f"[bold]Trend[/bold] [dim](last {comparison.form_matches}g"
-        f" vs {comparison.baseline_matches}g baseline)[/dim]"
+        f"  [heading]Trend[/heading] [muted](last {comparison.form_matches}g"
+        f" vs {comparison.baseline_matches}g baseline)[/muted]"
     )
+
     for a in comparison.anomalies:
         if a.severity == "significant":
-            style = "bold red" if not a.is_improvement else "bold green"
-            tag = "  [dim](!!)[/dim]"
+            style = "stat.bad" if not a.is_improvement else "stat.good"
+            badge = "[error] CRIT [/error]"
         else:
-            style = "yellow" if not a.is_improvement else "green"
-            tag = "  [dim](!)[/dim]"
-        console.print(f"  [{style}]{a.one_liner()}[/{style}]{tag}")
+            style = "stat.bad" if not a.is_improvement else "stat.good"
+            badge = "[warning] WATCH [/warning]"
+        console.print(f"  {badge}  [{style}]{a.one_liner()}[/{style}]")
     console.print()
 
 
@@ -385,18 +301,9 @@ def render_trend(
 
 def render_round_stats(
     console: Console,
-    analysis: object,  # RoundAnalysis — imported lazily to avoid circular deps
+    analysis: object,
     matches: int,
 ) -> bool:
-    """KAST%, clutch rate, trade stats, and attack/defense win rates.
-
-    This section is only shown when round-level data is available (the loader
-    was called with ``include_rounds=True`` and the DB has rounds for the
-    filtered match set). It is a supplement to ``render_overall``, not a
-    replacement — the two tables together give a complete picture.
-
-    Returns ``True`` if any cell was tagged ⚠️ (drives the legend footer).
-    """
     from valocoach.stats.round_analyzer import (
         RoundAnalysis,
         clutch_stat,
@@ -415,11 +322,16 @@ def render_round_stats(
 
     any_warn = not all([ks.is_reliable, cs.is_reliable, te.is_reliable, tp.is_reliable])
 
-    table = Table(title="Round-level Stats", show_header=False, box=None, pad_edge=False)
-    table.add_column("Label", style="dim")
-    table.add_column("Value", justify="right")
-    table.add_column("Label", style="dim")
-    table.add_column("Value", justify="right")
+    table = Table(
+        title="[heading]Round Stats[/heading]",
+        show_header=False,
+        box=box.SIMPLE,
+        pad_edge=True,
+    )
+    table.add_column("Label", style="stat.label")
+    table.add_column("Value", justify="right", style="stat.value")
+    table.add_column("Label", style="stat.label")
+    table.add_column("Value", justify="right", style="stat.value")
 
     table.add_row(
         "KAST%",
@@ -434,7 +346,6 @@ def render_round_stats(
         warn_cell(f"{tp.value:.1f}%", tp.is_reliable),
     )
 
-    # Multi-kill summary — compact, no reliability gate (raw counts).
     mk_parts = []
     if analysis.double_kills:
         mk_parts.append(f"2K×{analysis.double_kills}")
@@ -451,8 +362,6 @@ def render_round_stats(
         str(analysis.clutch_opportunities),
     )
 
-    # Attack / defense win rates — only shown when side data is available.
-    # Side tracking requires plant-event data; pre-migration rows may lack it.
     atk_wr = analysis.attack_win_rate
     def_wr = analysis.defense_win_rate
     if atk_wr is not None and def_wr is not None:
@@ -473,19 +382,27 @@ def render_round_stats(
 
 
 def render_identity_panel(console: Console, player: Player) -> None:
-    """Top panel: name, rank, peak, region, account level, last match."""
     last_match = player.last_match_at or "never"
+    rank_style = _rank_style(player.current_tier_patched)
 
-    body_lines = [
-        f"[bold]Current[/bold]   {player.current_tier_patched}"
-        f"  [dim]({player.current_rr} RR · elo {player.elo})[/dim]",
-        f"[bold]Peak[/bold]      {player.peak_tier_patched}",
-        f"[bold]Region[/bold]    {player.region.upper()}   "
-        f"[dim]· level {player.account_level}[/dim]",
-        f"[bold]Last match[/bold]  [dim]{last_match}[/dim]",
-    ]
-    title = f"[bold]{player.riot_name}#{player.riot_tag}[/bold]"
-    console.print(Panel("\n".join(body_lines), title=title, border_style="cyan", padding=(0, 2)))
+    body = Table(show_header=False, box=None, pad_edge=False, padding=(0, 2))
+    body.add_column("Label", style="stat.label", width=12)
+    body.add_column("Value", style="stat.value")
+
+    body.add_row(
+        "Rank",
+        f"[{rank_style}]{player.current_tier_patched}[/{rank_style}]"
+        f"  [muted]({player.current_rr} RR · elo {player.elo})[/muted]",
+    )
+    body.add_row("Peak", f"[{_rank_style(player.peak_tier_patched)}]{player.peak_tier_patched}[/{_rank_style(player.peak_tier_patched)}]")
+    body.add_row(
+        "Region",
+        f"{player.region.upper()}  [muted]· level {player.account_level}[/muted]",
+    )
+    body.add_row("Last match", f"[muted]{last_match}[/muted]")
+
+    title = f"[heading]{player.riot_name}#{player.riot_tag}[/heading]"
+    console.print(Panel(body, title=title, border_style="border", padding=(1, 2)))
 
 
 def render_summary_card(
@@ -494,18 +411,10 @@ def render_summary_card(
     *,
     limit: int,
 ) -> bool:
-    """Compact "last N matches" summary. One table, dense numbers.
-
-    Different shape from ``render_overall`` — tighter, meant to fit
-    alongside the identity panel rather than dominate the screen.
-
-    Returns ``True`` if any cell was tagged ⚠️; ``False`` on the
-    empty-rows branch (nothing to warn about → no legend needed).
-    """
     from valocoach.stats.calculator import compute_player_stats
 
     if not rows:
-        console.print("[dim]No matches in the local DB yet.[/dim]")
+        console.print("[muted]No matches in the local DB yet.[/muted]")
         return False
 
     stats = compute_player_stats(rows)
@@ -514,15 +423,15 @@ def render_summary_card(
     shown = min(len(rows), limit)
 
     table = Table(
-        title=f"Last {shown} match(es)",
+        title=f"[heading]Last {shown} Match(es)[/heading]",
         show_header=False,
-        box=None,
-        pad_edge=False,
+        box=box.SIMPLE,
+        pad_edge=True,
     )
-    table.add_column("Label", style="dim")
-    table.add_column("Value", justify="right")
-    table.add_column("Label", style="dim")
-    table.add_column("Value", justify="right")
+    table.add_column("Label", style="stat.label")
+    table.add_column("Value", justify="right", style="stat.value")
+    table.add_column("Label", style="stat.label")
+    table.add_column("Value", justify="right", style="stat.value")
 
     table.add_row(
         "Record",
@@ -547,8 +456,6 @@ def render_summary_card(
     )
     table.add_row(
         "FB diff",
-        # FB diff meaning hinges on the underlying rates being reliable —
-        # tag when either rate is thin (same rule as in render_overall).
         warn_cell(f"{stats.fb_diff:+d}", flags["fb_rate"] and flags["fd_rate"]),
         "Rounds",
         str(stats.rounds),
@@ -564,40 +471,28 @@ def render_summary_card(
 
 def render_rank_trend(
     console: Console,
-    history: list,  # list[MMRHistoryInfo] — newest first
+    history: list,
 ) -> None:
-    """Render a compact ELO / rank progression line.
-
-    Silently skipped when fewer than 2 snapshots are available — a single
-    snapshot gives no trend information worth showing.
-
-    Args:
-        console: Rich Console to write to.
-        history: Newest-first list of
-                 :class:`~valocoach.coach.session_manager.MMRHistoryInfo`
-                 objects, as returned by ``get_mmr_trend``.
-    """
     if len(history) < 2:
         return
 
-    newest = history[0]   # most recent snapshot
-    oldest = history[-1]  # oldest in the window
+    newest = history[0]
+    oldest = history[-1]
 
     elo_delta = newest.elo - oldest.elo
     delta_str = (f"+{elo_delta}" if elo_delta >= 0 else str(elo_delta)) + " elo"
     if elo_delta > 0:
-        delta_markup = f"[green]{delta_str}[/green]"
-        arrow = "[green]↑[/green]"
+        delta_markup = f"[rank.up]{delta_str}[/rank.up]"
+        arrow = "[rank.up]↑[/rank.up]"
     elif elo_delta < 0:
-        delta_markup = f"[red]{delta_str}[/red]"
-        arrow = "[red]↓[/red]"
+        delta_markup = f"[rank.down]{delta_str}[/rank.down]"
+        arrow = "[rank.down]↓[/rank.down]"
     else:
-        delta_markup = f"[dim]{delta_str}[/dim]"
-        arrow = "[dim]→[/dim]"
+        delta_markup = f"[muted]{delta_str}[/muted]"
+        arrow = "[muted]→[/muted]"
 
-    # Text sparkline from mmr_change values (oldest → newest, capped at 15 chars).
     spark_chars: list[str] = []
-    for h in reversed(history):  # reversed: oldest → newest
+    for h in reversed(history):
         if h.mmr_change is None:
             spark_chars.append("·")
         elif h.mmr_change > 0:
@@ -616,8 +511,8 @@ def render_rank_trend(
     )
 
     console.print(
-        f"[bold]Rank trend[/bold] [dim]({n} snapshot(s))[/dim]  "
-        f"{rank_range}  {delta_markup}  {arrow}  [dim]{sparkline}[/dim]"
+        f"  [heading]Rank Trend[/heading] [muted]({n} snapshot(s))[/muted]  "
+        f"{rank_range}  {delta_markup}  {arrow}  [muted]{sparkline}[/muted]"
     )
 
 
@@ -625,46 +520,37 @@ def render_rank_trend(
 # Coaching sessions / notes renderers  (profile command)
 # ---------------------------------------------------------------------------
 
-#: Priority level → display glyph (1 = high → red dot … 3 = low → dim dot)
-_PRIORITY_ICON: dict[int, str] = {1: "[red]●[/red]", 2: "[yellow]●[/yellow]", 3: "[dim]●[/dim]"}
+_PRIORITY_ICON: dict[int, str] = {
+    1: "[val.red]●[/val.red]",
+    2: "[warning]●[/warning]",
+    3: "[muted]●[/muted]",
+}
 
 
 def render_coaching_sessions(
     console: Console,
-    sessions: list,  # list[SessionInfo] — imported lazily to avoid circular dep
+    sessions: list,
 ) -> None:
-    """Render a compact table of recent coaching sessions.
-
-    Each row shows the session id, title (truncated), start date, open/closed
-    status, and focus agent/map when set.  Designed for the bottom of the
-    ``valocoach profile`` card.
-
-    Args:
-        console:  Rich Console to write to.
-        sessions: List of :class:`~valocoach.coach.session_manager.SessionInfo`
-                  objects (may be empty — renders nothing when empty).
-    """
     if not sessions:
         return
 
     table = Table(
-        title=f"Recent coaching sessions ({len(sessions)})",
+        title=f"[heading]Recent Coaching Sessions ({len(sessions)})[/heading]",
         show_header=True,
         header_style="bold",
-        box=None,
-        pad_edge=False,
+        box=box.HEAVY_HEAD,
+        pad_edge=True,
         show_edge=False,
     )
-    table.add_column("#", style="dim", justify="right", width=4)
+    table.add_column("#", style="muted", justify="right", width=4)
     table.add_column("Title", min_width=18, max_width=28)
     table.add_column("Started", width=10)
     table.add_column("Status", width=7)
     table.add_column("Focus", min_width=8, max_width=14)
 
     for s in sessions:
-        # Date portion of ISO timestamp (YYYY-MM-DD)
         started = s.started_at[:10] if s.started_at else "—"
-        status = "[dim]closed[/dim]" if not s.is_open else "[green]open[/green]"
+        status = "[muted]closed[/muted]" if not s.is_open else "[stat.good]open[/stat.good]"
         focus_parts = [p for p in (s.focus_agent, s.focus_map) if p]
         focus = " · ".join(focus_parts) if focus_parts else "—"
         title = (s.title or "—")[:26]
@@ -675,30 +561,20 @@ def render_coaching_sessions(
 
 def render_open_notes(
     console: Console,
-    notes: list,  # list[NoteInfo]
+    notes: list,
 ) -> None:
-    """Render a compact table of open (unresolved) coaching notes.
-
-    Columns: note id, priority dot, category, truncated body text.
-    Designed to appear after ``render_coaching_sessions`` in the profile card.
-
-    Args:
-        console: Rich Console to write to.
-        notes:   List of :class:`~valocoach.coach.session_manager.NoteInfo`
-                 objects (may be empty — renders nothing when empty).
-    """
     if not notes:
         return
 
     table = Table(
-        title=f"Open coaching notes ({len(notes)})",
+        title=f"[heading]Open Coaching Notes ({len(notes)})[/heading]",
         show_header=True,
         header_style="bold",
-        box=None,
-        pad_edge=False,
+        box=box.HEAVY_HEAD,
+        pad_edge=True,
         show_edge=False,
     )
-    table.add_column("#", style="dim", justify="right", width=4)
+    table.add_column("#", style="muted", justify="right", width=4)
     table.add_column("P", justify="center", width=2)
     table.add_column("Category", width=9)
     table.add_column("Note")
@@ -706,7 +582,7 @@ def render_open_notes(
     for n in notes:
         icon = _PRIORITY_ICON.get(n.priority, "●")
         cat = n.category[:8]
-        body = n.body[:72] + ("…" if len(n.body) > 72 else "")
-        table.add_row(str(n.id), icon, cat, body)
+        body_text = n.body[:72] + ("…" if len(n.body) > 72 else "")
+        table.add_row(str(n.id), icon, cat, body_text)
 
     console.print(table)

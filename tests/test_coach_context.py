@@ -732,8 +732,7 @@ def test_run_coach_raises_when_llm_fails() -> None:
             side_effect=RuntimeError("ollama is down"),
         ),
         patch("valocoach.cli.commands.coach.display.stream_to_panel"),
-        patch("valocoach.cli.commands.coach.display.error") as mock_error,
-        patch("valocoach.cli.commands.coach.display.warn") as mock_warn,
+        patch("valocoach.cli.commands.coach.display.error_with_hint") as mock_error_hint,
         # check_vector_store is always called (not guarded by with_stats).
         # Patch at the source module since it's lazily imported inside run_coach.
         patch("valocoach.core.preflight.check_vector_store", return_value=_check_ok()),
@@ -741,9 +740,8 @@ def test_run_coach_raises_when_llm_fails() -> None:
     ):
         run_coach("push B", with_stats=False)
 
-    mock_error.assert_called()
-    mock_warn.assert_called()  # "Check Ollama is running" warn fires too
-    error_msg = mock_error.call_args.args[0]
+    mock_error_hint.assert_called()
+    error_msg = mock_error_hint.call_args.args[0]
     assert "LLM call failed" in error_msg
 
 

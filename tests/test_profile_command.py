@@ -127,7 +127,8 @@ def _player(
 
 
 def _capture_console() -> Console:
-    return Console(file=StringIO(), force_terminal=False, width=120)
+    from valocoach.cli.display import THEME
+    return Console(file=StringIO(), force_terminal=False, width=120, theme=THEME)
 
 
 def _player_data(rows: list[MatchPlayer]) -> PlayerData:
@@ -233,7 +234,7 @@ def test_summary_card_shows_record_and_key_stats() -> None:
     con = _capture_console()
     _render_summary_card(con, rows, limit=20)
     out = con.file.getvalue()
-    assert "Last 1 match" in out
+    assert "Last 1 Match" in out
     assert "Record" in out
     assert "1-0" in out
     assert "ACS" in out
@@ -254,8 +255,8 @@ def test_summary_card_limit_clamps_shown_count() -> None:
     con = _capture_console()
     _render_summary_card(con, rows, limit=20)
     out = con.file.getvalue()
-    assert "Last 3 match" in out
-    assert "Last 20 match" not in out
+    assert "Last 3 Match" in out
+    assert "Last 20 Match" not in out
 
 
 def test_summary_card_includes_fb_diff_with_sign() -> None:
@@ -284,8 +285,8 @@ def test_summary_card_warns_on_thin_sample() -> None:
     # HS% row must be tagged; ACS row must NOT be (20 >= 15).
     hs_line = next(line for line in out.splitlines() if "HS%" in line)
     acs_line = next(line for line in out.splitlines() if "ACS" in line)
-    assert "⚠️" in hs_line, f"HS% should warn at 20 matches: {hs_line!r}"
-    assert "⚠️" not in acs_line, f"ACS should NOT warn at 20 matches: {acs_line!r}"
+    assert WARN_PREFIX.strip() in hs_line, f"HS% should warn at 20 matches: {hs_line!r}"
+    assert WARN_PREFIX.strip() not in acs_line, f"ACS should NOT warn at 20 matches: {acs_line!r}"
 
 
 def test_summary_card_no_warn_at_full_reliability() -> None:
@@ -338,7 +339,7 @@ def test_run_profile_legend_only_when_warnings_fire(tmp_path) -> None:
         ):
             run_profile(name="Tester", tag="NA1", console=con)
         out = con.file.getvalue()
-        has_legend = "sample-size threshold" in out
+        has_legend = "sample size" in out
         assert has_legend is expect_legend, (
             f"profile legend mismatch (rows={len(rows)}): "
             f"got has_legend={has_legend}, expected {expect_legend}"
@@ -602,7 +603,7 @@ def test_run_profile_breakdown_shown_when_multiple_agents(tmp_path) -> None:
 
     out = con.file.getvalue()
     # The "Top agents" breakdown table must appear.
-    assert "Top agents" in out
+    assert "Top Agents" in out
     # Both agents should appear in the breakdown.
     assert "Jett" in out
     assert "Reyna" in out
@@ -725,7 +726,7 @@ def test_run_profile_rank_trend_rendered_when_history_present(tmp_path) -> None:
 
     out = con.file.getvalue()
     # render_rank_trend writes "Rank trend" and the tier names
-    assert "Rank trend" in out
+    assert "Rank Trend" in out
     assert "Plat I" in out or "Gold II" in out
 
 
@@ -745,7 +746,7 @@ def test_run_profile_rank_trend_skipped_when_no_history(tmp_path) -> None:
     ):
         run_profile(name="Tester", tag="NA1", console=con)
 
-    assert "Rank trend" not in con.file.getvalue()
+    assert "Rank Trend" not in con.file.getvalue()
 
 
 def test_run_profile_rank_trend_skipped_with_single_snapshot(tmp_path) -> None:
@@ -770,7 +771,7 @@ def test_run_profile_rank_trend_skipped_with_single_snapshot(tmp_path) -> None:
     ):
         run_profile(name="Tester", tag="NA1", console=con)
 
-    assert "Rank trend" not in con.file.getvalue()
+    assert "Rank Trend" not in con.file.getvalue()
 
 
 def test_run_profile_rank_trend_elo_delta_shown(tmp_path) -> None:

@@ -14,9 +14,11 @@ Covers:
 
 from __future__ import annotations
 
+from io import StringIO
 from unittest.mock import MagicMock, patch
 
 import pytest
+from rich.console import Console
 
 # ---------------------------------------------------------------------------
 # Shared fake data
@@ -96,8 +98,9 @@ def _render_table(table) -> str:
     from io import StringIO
 
     from rich.console import Console
+    from valocoach.cli.display import THEME
 
-    buf = Console(file=StringIO(), force_terminal=False, width=120)
+    buf = Console(file=StringIO(), force_terminal=False, width=120, theme=THEME)
     buf.print(table)
     return buf.file.getvalue()
 
@@ -233,11 +236,11 @@ class TestRunMetaAgent:
         console_mock.assert_not_called()
 
     def test_agent_with_reason_renders_reason(self):
-        """When agent_meta has a non-empty reason, it is printed (line 118)."""
-        console_calls: list[str] = []
-
-        def _print_capture(text="", *_a, **_kw):
-            console_calls.append(str(text))
+        """When agent_meta has a non-empty reason, it appears in rendered output."""
+        from valocoach.cli import display
+        from valocoach.cli.display import THEME
+        buf = StringIO()
+        cap = Console(file=buf, force_terminal=False, width=120, theme=THEME)
 
         with (
             patch(_PATCH_META, return_value=_FAKE_META),
@@ -245,13 +248,13 @@ class TestRunMetaAgent:
             patch(_PATCH_LIVE, return_value=None),
             patch(_PATCH_GET_AGENT, return_value=_JETT),
             patch(_PATCH_FMT_AGENT, return_value="Jett abilities"),
-            patch(_PATCH_CONSOLE_PRINT, side_effect=_print_capture),
+            patch.object(display, "console", cap),
         ):
             from valocoach.cli.commands.meta import run_meta
 
             run_meta(agent="Jett", map_=None)
 
-        combined = " ".join(console_calls)
+        combined = buf.getvalue()
         assert "Strong entry fragger" in combined
 
     def test_agent_with_empty_reason_skips_reason_line(self):
@@ -327,10 +330,10 @@ class TestRunMetaMap:
 
     def test_map_with_notes_renders_notes(self):
         """map_meta has 'notes' → notes line rendered (line 153)."""
-        console_calls: list[str] = []
-
-        def _print_capture(text="", *_a, **_kw):
-            console_calls.append(str(text))
+        from valocoach.cli import display
+        from valocoach.cli.display import THEME
+        buf = StringIO()
+        cap = Console(file=buf, force_terminal=False, width=120, theme=THEME)
 
         with (
             patch(_PATCH_META, return_value=_FAKE_META),
@@ -338,13 +341,13 @@ class TestRunMetaMap:
             patch(_PATCH_LIVE, return_value=None),
             patch(_PATCH_GET_MAP, return_value=_ASCENT),
             patch(_PATCH_FMT_MAP, return_value="Ascent callouts"),
-            patch(_PATCH_CONSOLE_PRINT, side_effect=_print_capture),
+            patch.object(display, "console", cap),
         ):
             from valocoach.cli.commands.meta import run_meta
 
             run_meta(agent=None, map_="Ascent")
 
-        combined = " ".join(console_calls)
+        combined = buf.getvalue()
         assert "Mid control is key" in combined
 
     def test_map_without_notes_skips_notes_line(self):
