@@ -20,10 +20,11 @@ _P_SETTINGS = "valocoach.core.config.load_settings"
 
 
 def _fake_settings():
+    from pathlib import Path
     s = MagicMock()
     s.riot_name = "T"
     s.riot_tag = "X"
-    s.data_dir = MagicMock()
+    s.data_dir = Path("/tmp/valocoach_test_cli")
     return s
 
 
@@ -232,8 +233,8 @@ def test_config_show_empty_api_key_not_redacted():
 
 def test_config_init_creates_file():
     """config init must create a default config and report its path."""
-    from unittest.mock import patch as mock_patch
     from pathlib import Path
+    from unittest.mock import patch as mock_patch
 
     with mock_patch(
         "valocoach.core.config.write_default_config",

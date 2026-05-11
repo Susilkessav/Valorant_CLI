@@ -183,6 +183,7 @@ class TestGetPatchStalenessDays:
 
     def test_returns_none_when_no_patch_recorded(self):
         from pathlib import Path
+
         from valocoach.retrieval.patch_tracker import get_patch_staleness_days
 
         with (
@@ -197,6 +198,7 @@ class TestGetPatchStalenessDays:
         """detected_at = now → staleness ≈ 0.0."""
         from datetime import UTC, datetime
         from pathlib import Path
+
         from valocoach.retrieval.patch_tracker import get_patch_staleness_days
 
         now_iso = datetime.now(UTC).isoformat()
@@ -213,6 +215,7 @@ class TestGetPatchStalenessDays:
         """detected_at = 30 days ago → result ≈ 30."""
         from datetime import UTC, datetime, timedelta
         from pathlib import Path
+
         from valocoach.retrieval.patch_tracker import get_patch_staleness_days
 
         thirty_days_ago = (datetime.now(UTC) - timedelta(days=30)).isoformat()
@@ -228,6 +231,7 @@ class TestGetPatchStalenessDays:
     def test_returns_none_on_exception(self):
         """DB errors return None — never crash the coaching turn."""
         from pathlib import Path
+
         from valocoach.retrieval.patch_tracker import get_patch_staleness_days
 
         with patch(self._ENSURE_DB, new_callable=AsyncMock, side_effect=RuntimeError("no db")):
@@ -238,6 +242,7 @@ class TestGetPatchStalenessDays:
     def test_handles_utc_z_suffix(self):
         """ISO timestamps with a trailing 'Z' are parsed correctly."""
         from pathlib import Path
+
         from valocoach.retrieval.patch_tracker import get_patch_staleness_days
 
         # Z-suffix ISO string (common from some storage paths)
@@ -255,6 +260,7 @@ class TestGetPatchStalenessDays:
         """Return type is always float when a row exists."""
         from datetime import UTC, datetime, timedelta
         from pathlib import Path
+
         from valocoach.retrieval.patch_tracker import get_patch_staleness_days
 
         ts = (datetime.now(UTC) - timedelta(days=5)).isoformat()

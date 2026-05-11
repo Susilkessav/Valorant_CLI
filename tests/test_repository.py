@@ -15,7 +15,13 @@ from valocoach.data.models import (
 from valocoach.data.models import (
     MatchPlayer as MatchPlayerModel,
 )
-from valocoach.data.orm_models import CoachingNote, CoachingSession, MMRHistory, Match, MatchPlayer, Player
+from valocoach.data.orm_models import (
+    CoachingNote,
+    Match,
+    MatchPlayer,
+    MMRHistory,
+    Player,
+)
 from valocoach.data.repository import (
     add_coaching_note,
     close_stale_syncs,

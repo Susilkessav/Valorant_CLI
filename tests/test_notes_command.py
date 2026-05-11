@@ -16,11 +16,10 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
 from typer.testing import CliRunner
 
 from valocoach.cli.app import app
-from valocoach.cli.commands.notes import _infer_category, _INTENT_TO_CATEGORY
+from valocoach.cli.commands.notes import _INTENT_TO_CATEGORY, _infer_category
 
 runner = CliRunner()
 

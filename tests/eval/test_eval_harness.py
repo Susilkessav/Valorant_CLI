@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import sys
 import textwrap
-from io import StringIO
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -275,15 +274,15 @@ class TestRunScenario:
     no real Ollama connection is needed."""
 
     def _scenario(self, **kwargs) -> Scenario:
-        defaults = dict(
-            id="s1",
-            description="test",
-            situation="Use Jett on Ascent",
-            agent="Jett",
-            map="Ascent",
-            must_contain=["Tailwind"],
-            must_not_contain=["Paranoia"],
-        )
+        defaults = {
+            "id": "s1",
+            "description": "test",
+            "situation": "Use Jett on Ascent",
+            "agent": "Jett",
+            "map": "Ascent",
+            "must_contain": ["Tailwind"],
+            "must_not_contain": ["Paranoia"],
+        }
         defaults.update(kwargs)
         return Scenario(**defaults)
 

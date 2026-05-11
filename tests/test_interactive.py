@@ -806,7 +806,7 @@ class TestHandleSlashNote:
         with patch(_ADD_NOTE, return_value=7) as mock_add:
             _handle_slash("/note Work on crossfire", mem, state)
         mock_add.assert_called_once()
-        _, kwargs = mock_add.call_args
+        _, _kwargs = mock_add.call_args
         # body is the positional 4th arg (settings, session_id, puuid, body)
         call_args = mock_add.call_args[0]
         assert "Work on crossfire" in call_args
@@ -1069,7 +1069,7 @@ class TestRunInteractiveSessionLifecycle:
         session_id=3,
     ):
         """Run run_interactive with all session-manager calls mocked."""
-        ptk_cls, ptk_inst = _ptk_session_mock(*prompt_inputs)
+        ptk_cls, _ptk_inst = _ptk_session_mock(*prompt_inputs)
         with (
             patch(_LOAD_SETTINGS, return_value=MagicMock()),
             patch(_CHECK_OLLAMA, return_value=_OK),

@@ -9,12 +9,9 @@ templates.py — PROMPT_TEMPLATES has all 9 keys; PANEL_TITLES has all 9 keys;
 
 from __future__ import annotations
 
-import pytest
-
 from valocoach.coach.intent import IntentType, classify_intent
 from valocoach.coach.templates import PANEL_TITLES, PROMPT_TEMPLATES
 from valocoach.core.parser import Situation
-
 
 # ---------------------------------------------------------------------------
 # Helpers

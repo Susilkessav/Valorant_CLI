@@ -8,6 +8,7 @@ __pycache__/
 *.db
 *.db-journal
 .coverage
+htmlcov/
 dist/
 build/
 *.egg-info/
@@ -15,10 +16,12 @@ build/
 .vscode/
 *.code-workspace
 .claude/
+.uv-cache/
 
 # Editor swap files
 *.swp
 *.swo
 
-# One-off API validation dumps from scripts/validate_api_data.py
+# Local docs and review logs
+docs/reviews/
 validate_api_output.txt
