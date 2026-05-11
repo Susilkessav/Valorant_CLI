@@ -22,6 +22,7 @@ def _build_system_prompt(
     base_prompt: str,
     grounded_context: str | None,
     stats_context: str | None,
+    notes_context: str | None = None,
 ) -> str:
     parts = [base_prompt]
     if grounded_context:
@@ -30,6 +31,8 @@ def _build_system_prompt(
         )
     if stats_context:
         parts.append(f"---\n\n{stats_context}")
+    if notes_context:
+        parts.append(f"---\n\n{notes_context}")
     return "\n\n".join(parts)
 
 
@@ -166,6 +169,25 @@ def run_coach(
         except Exception:
             pass  # last-match context is advisory — never crash the coaching turn
 
+    # Fetch open (unresolved) coaching notes — inject as "COACHING FOCUS" so
+    # the LLM knows what the player is actively working on and can weave those
+    # topics into its advice even when not explicitly asked.  Non-fatal.
+    notes_context: str | None = None
+    if with_stats:
+        try:
+            from valocoach.coach.session_manager import (
+                format_open_notes_context,
+                get_player_puuid,
+                list_open_notes,
+            )
+
+            puuid = get_player_puuid(settings)
+            if puuid:
+                open_notes = list_open_notes(settings, puuid, limit=5)
+                notes_context = format_open_notes_context(open_notes)
+        except Exception:
+            pass  # notes context is advisory — never crash the coaching turn
+
     # User message: structured metadata block (when any field was extracted),
     # followed by last-match context (when available), then the verbatim situation.
     #
@@ -202,7 +224,9 @@ def run_coach(
         user_msg=user_msg,
     )
 
-    system_prompt = _build_system_prompt(system_prompt_base, grounded_context, stats_context)
+    system_prompt = _build_system_prompt(
+        system_prompt_base, grounded_context, stats_context, notes_context
+    )
 
     display.info(f"Using model: {settings.ollama_model} [{intent}]")
 

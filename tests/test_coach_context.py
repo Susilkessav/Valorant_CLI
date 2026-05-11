@@ -1213,3 +1213,145 @@ def test_run_coach_last_match_non_fatal() -> None:
         result = run_coach("push A site", with_stats=True)
 
     assert result == "the response"  # coach completed despite the error
+
+
+# ---------------------------------------------------------------------------
+# Open-notes injection in run_coach  (Phase H)
+# ---------------------------------------------------------------------------
+
+_GET_PUUID = "valocoach.coach.session_manager.get_player_puuid"
+_LIST_NOTES = "valocoach.coach.session_manager.list_open_notes"
+_FMT_NOTES = "valocoach.coach.session_manager.format_open_notes_context"
+
+
+def _make_note_info(*, note_id: int = 1, body: str = "Stop peeking wide", category: str = "aim"):
+    from valocoach.coach.session_manager import NoteInfo
+
+    return NoteInfo(id=note_id, body=body, category=category, priority=2, created_at="2026-05-06")
+
+
+def _run_coach_with_notes(notes, *, with_stats: bool = True):
+    """Run coach with DB fully mocked; return (system_prompt, user_msg)."""
+    from valocoach.coach.session_manager import format_open_notes_context
+
+    notes_str = format_open_notes_context(notes)
+
+    with (
+        patch("valocoach.cli.commands.coach.load_settings", return_value=_settings()),
+        patch("valocoach.cli.commands.coach.build_stats_context", return_value=None),
+        patch(
+            "valocoach.cli.commands.coach.stream_completion",
+            return_value=_stream(["ok"]),
+        ) as mock_stream,
+        patch("valocoach.cli.commands.coach.display.stream_to_panel", return_value="ok"),
+        patch(_GET_LAST_MATCH, return_value=None),
+        patch(_GET_PUUID, return_value="p-abc"),
+        patch(_LIST_NOTES, return_value=notes),
+    ):
+        run_coach("push A site", with_stats=with_stats)
+
+    kwargs = mock_stream.call_args.kwargs
+    return kwargs["system_prompt"], kwargs.get("user_message", ""), notes_str
+
+
+def test_run_coach_injects_open_notes_into_system_prompt() -> None:
+    """When open notes exist, COACHING FOCUS block lands in system_prompt."""
+    notes = [
+        _make_note_info(body="Stop peeking wide", category="aim"),
+        _make_note_info(note_id=2, body="Full-buy discipline", category="economy"),
+    ]
+    system_prompt, _, notes_str = _run_coach_with_notes(notes)
+    assert notes_str is not None
+    assert "COACHING FOCUS" in system_prompt
+    assert "Stop peeking wide" in system_prompt
+    assert "Full-buy discipline" in system_prompt
+
+
+def test_run_coach_notes_absent_when_no_open_notes() -> None:
+    """Empty notes list → no COACHING FOCUS block in system_prompt."""
+    system_prompt, _, _ = _run_coach_with_notes([])
+    assert "COACHING FOCUS" not in system_prompt
+
+
+def test_run_coach_notes_skipped_when_with_stats_false() -> None:
+    """with_stats=False → get_player_puuid is never called for notes."""
+    called: list = []
+
+    with (
+        patch("valocoach.cli.commands.coach.load_settings", return_value=_settings()),
+        patch("valocoach.cli.commands.coach.build_stats_context", return_value=None),
+        patch(
+            "valocoach.cli.commands.coach.stream_completion",
+            return_value=_stream(["ok"]),
+        ),
+        patch("valocoach.cli.commands.coach.display.stream_to_panel", return_value="ok"),
+        patch(_GET_LAST_MATCH, return_value=None),
+        patch(_GET_PUUID, side_effect=lambda *a, **k: called.append(1) or "p-abc"),
+        patch(_LIST_NOTES, return_value=[]),
+    ):
+        run_coach("push A site", with_stats=False)
+
+    assert called == [], "get_player_puuid should not be called when with_stats=False"
+
+
+def test_run_coach_notes_non_fatal() -> None:
+    """Exception in notes fetch must not crash the coaching turn."""
+    with (
+        patch("valocoach.cli.commands.coach.load_settings", return_value=_settings()),
+        patch("valocoach.cli.commands.coach.build_stats_context", return_value=None),
+        patch(
+            "valocoach.cli.commands.coach.stream_completion",
+            return_value=_stream(["ok"]),
+        ),
+        patch(
+            "valocoach.cli.commands.coach.display.stream_to_panel",
+            return_value="the response",
+        ),
+        patch(_GET_LAST_MATCH, return_value=None),
+        patch(_GET_PUUID, side_effect=RuntimeError("db down")),
+    ):
+        result = run_coach("push A site", with_stats=True)
+
+    assert result == "the response"
+
+
+def test_run_coach_notes_absent_when_puuid_not_found() -> None:
+    """get_player_puuid returns None → notes block skipped (no player in DB)."""
+    with (
+        patch("valocoach.cli.commands.coach.load_settings", return_value=_settings()),
+        patch("valocoach.cli.commands.coach.build_stats_context", return_value=None),
+        patch(
+            "valocoach.cli.commands.coach.stream_completion",
+            return_value=_stream(["ok"]),
+        ) as mock_stream,
+        patch("valocoach.cli.commands.coach.display.stream_to_panel", return_value="ok"),
+        patch(_GET_LAST_MATCH, return_value=None),
+        patch(_GET_PUUID, return_value=None),
+        patch(_LIST_NOTES, return_value=[_make_note_info()]),
+    ):
+        run_coach("push A site", with_stats=True)
+
+    system_prompt = mock_stream.call_args.kwargs["system_prompt"]
+    assert "COACHING FOCUS" not in system_prompt
+
+
+def test_build_system_prompt_includes_notes_context() -> None:
+    """_build_system_prompt appends notes_context as a fourth section."""
+    from valocoach.cli.commands.coach import _build_system_prompt
+
+    notes_block = "COACHING FOCUS (1 open note — address these when relevant):\n• [aim] Crossfire timing"
+    out = _build_system_prompt("BASE", "GROUNDED stuff", "PLAYER stats", notes_block)
+    assert "COACHING FOCUS" in out
+    assert "Crossfire timing" in out
+    # All four sections present
+    assert "BASE" in out
+    assert "GROUNDED" in out
+    assert "PLAYER" in out
+
+
+def test_build_system_prompt_notes_absent_when_none() -> None:
+    """None notes_context → no extra section appended (backward compat)."""
+    from valocoach.cli.commands.coach import _build_system_prompt
+
+    out = _build_system_prompt("BASE", None, None, None)
+    assert out == "BASE"

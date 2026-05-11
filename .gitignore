@@ -25,3 +25,6 @@ build/
 # Local docs and review logs
 docs/reviews/
 validate_api_output.txt
+
+# Leaked MagicMock file artifacts from asyncio.run() in unit tests
+"<MagicMock*"

@@ -102,6 +102,36 @@ class SessionInfo:
 # ---------------------------------------------------------------------------
 
 
+# Maximum open notes injected per coaching turn.  Notes arrive priority-DESC
+# then age-ASC from the repo, so the most urgent items always surface first.
+# Injecting more than five rarely adds value and eats into the token budget.
+_NOTES_INJECTION_LIMIT: int = 5
+
+
+def format_open_notes_context(notes: list[NoteInfo]) -> str | None:
+    """Format *notes* as a compact 'COACHING FOCUS' block for the system prompt.
+
+    Returns ``None`` when the list is empty so callers can guard with
+    ``if context:``.
+
+    Example output::
+
+        COACHING FOCUS (3 open notes — address these when relevant):
+        • [aim] Stop peeking wide on A ramp — use util first.
+        • [positioning] Activate Jett's updraft before duelling.
+        • [economy] Don't full-buy after losing pistol into eco.
+    """
+    if not notes:
+        return None
+    capped = notes[:_NOTES_INJECTION_LIMIT]
+    n = len(capped)
+    plural = "notes" if n != 1 else "note"
+    lines = [f"COACHING FOCUS ({n} open {plural} — address these when relevant):"]
+    for note in capped:
+        lines.append(f"• [{note.category}] {note.body}")
+    return "\n".join(lines)
+
+
 def format_last_match_context(info: LastMatchInfo) -> str:
     """Format *info* as a compact one-liner for injection into the coaching prompt.
 
@@ -488,6 +518,7 @@ __all__ = [
     "add_coaching_note",
     "close_coaching_session",
     "format_last_match_context",
+    "format_open_notes_context",
     "get_last_match",
     "get_mmr_trend",
     "get_or_open_coaching_session",

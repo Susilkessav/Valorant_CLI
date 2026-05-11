@@ -16,6 +16,7 @@ from valocoach.coach.session_manager import (
     add_coaching_note,
     close_coaching_session,
     format_last_match_context,
+    format_open_notes_context,
     get_last_match,
     get_mmr_trend,
     get_or_open_coaching_session,
@@ -1052,3 +1053,82 @@ class TestGetLastMatch:
         settings = _fake_settings(riot_name="", riot_tag="1234")
         result = get_last_match(settings)
         assert result is None
+
+
+# ---------------------------------------------------------------------------
+# format_open_notes_context
+# ---------------------------------------------------------------------------
+
+
+def _note(
+    *,
+    note_id: int = 1,
+    body: str = "Work on crossfires",
+    category: str = "aim",
+    priority: int = 2,
+    created_at: str = "2026-05-06",
+) -> NoteInfo:
+    return NoteInfo(id=note_id, body=body, category=category, priority=priority, created_at=created_at)
+
+
+class TestFormatOpenNotesContext:
+    def test_returns_none_when_empty(self):
+        assert format_open_notes_context([]) is None
+
+    def test_returns_string_when_notes_present(self):
+        result = format_open_notes_context([_note()])
+        assert result is not None
+        assert isinstance(result, str)
+
+    def test_single_note_singular_label(self):
+        result = format_open_notes_context([_note()])
+        assert "1 open note" in result
+        assert "notes" not in result.split("COACHING FOCUS")[1].split("—")[0]
+
+    def test_multiple_notes_plural_label(self):
+        notes = [_note(note_id=1), _note(note_id=2, body="Eco discipline")]
+        result = format_open_notes_context(notes)
+        assert "2 open notes" in result
+
+    def test_header_instructs_llm(self):
+        result = format_open_notes_context([_note()])
+        assert "address these when relevant" in result
+
+    def test_body_text_included(self):
+        result = format_open_notes_context([_note(body="Stop peeking wide")])
+        assert "Stop peeking wide" in result
+
+    def test_category_included_in_bullet(self):
+        result = format_open_notes_context([_note(category="economy")])
+        assert "[economy]" in result
+
+    def test_multiple_notes_all_present(self):
+        notes = [
+            _note(note_id=1, body="Aim note", category="aim"),
+            _note(note_id=2, body="Eco note", category="economy"),
+            _note(note_id=3, body="Pos note", category="positioning"),
+        ]
+        result = format_open_notes_context(notes)
+        assert "Aim note" in result
+        assert "Eco note" in result
+        assert "Pos note" in result
+
+    def test_caps_at_injection_limit(self):
+        """More than 5 notes → only 5 are shown (injection limit)."""
+        notes = [_note(note_id=i, body=f"Note {i}") for i in range(10)]
+        result = format_open_notes_context(notes)
+        assert result is not None
+        # Count bullet lines
+        bullets = [line for line in result.splitlines() if line.startswith("•")]
+        assert len(bullets) == 5
+
+    def test_compact_output(self):
+        """Five notes must still be under 600 chars — keeps token cost minimal."""
+        notes = [_note(note_id=i, body="Crossfire timing on A ramp", category="aim") for i in range(5)]
+        result = format_open_notes_context(notes)
+        assert result is not None
+        assert len(result) < 600, f"too long ({len(result)} chars):\n{result}"
+
+    def test_coaching_focus_header_present(self):
+        result = format_open_notes_context([_note()])
+        assert "COACHING FOCUS" in result
