@@ -15,9 +15,13 @@ from io import StringIO
 
 from rich.console import Console
 
-from valocoach.cli.formatter import _PRIORITY_ICON, render_coaching_sessions, render_open_notes, render_rank_trend
+from valocoach.cli.formatter import (
+    _PRIORITY_ICON,
+    render_coaching_sessions,
+    render_open_notes,
+    render_rank_trend,
+)
 from valocoach.coach.session_manager import MMRHistoryInfo, NoteInfo, SessionInfo
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -50,7 +54,7 @@ def _mmr(
 
 def _session(
     *,
-    id: int = 1,
+    session_id: int = 1,
     title: str | None = "2026-05-06",
     started_at: str = "2026-05-06T10:00:00",
     ended_at: str | None = None,
@@ -58,7 +62,7 @@ def _session(
     focus_map: str | None = None,
 ) -> SessionInfo:
     return SessionInfo(
-        id=id,
+        id=session_id,
         title=title,
         started_at=started_at,
         ended_at=ended_at,
@@ -69,7 +73,7 @@ def _session(
 
 def _note(
     *,
-    id: int = 1,
+    note_id: int = 1,
     body: str = "Work on crossfire at A long",
     category: str = "tactical",
     priority: int = 2,
@@ -77,7 +81,7 @@ def _note(
     match_id: str | None = None,
 ) -> NoteInfo:
     return NoteInfo(
-        id=id,
+        id=note_id,
         body=body,
         category=category,
         priority=priority,
@@ -99,7 +103,7 @@ class TestRenderCoachingSessions:
 
     def test_single_session_shows_id(self):
         con, buf = _console()
-        render_coaching_sessions(con, [_session(id=7)])
+        render_coaching_sessions(con, [_session(session_id=7)])
         out = buf.getvalue()
         assert "7" in out
 
@@ -145,13 +149,13 @@ class TestRenderCoachingSessions:
 
     def test_count_in_table_title(self):
         con, buf = _console()
-        sessions = [_session(id=i) for i in range(3)]
+        sessions = [_session(session_id=i) for i in range(3)]
         render_coaching_sessions(con, sessions)
         assert "3" in buf.getvalue()
 
     def test_multiple_sessions_all_ids_present(self):
         con, buf = _console()
-        sessions = [_session(id=1), _session(id=2), _session(id=3)]
+        sessions = [_session(session_id=1), _session(session_id=2), _session(session_id=3)]
         render_coaching_sessions(con, sessions)
         out = buf.getvalue()
         for i in (1, 2, 3):
@@ -195,7 +199,7 @@ class TestRenderOpenNotes:
 
     def test_note_id_rendered(self):
         con, buf = _console()
-        render_open_notes(con, [_note(id=12)])
+        render_open_notes(con, [_note(note_id=12)])
         assert "12" in buf.getvalue()
 
     def test_body_rendered(self):
@@ -210,13 +214,13 @@ class TestRenderOpenNotes:
 
     def test_count_in_table_title(self):
         con, buf = _console()
-        notes = [_note(id=i) for i in range(4)]
+        notes = [_note(note_id=i) for i in range(4)]
         render_open_notes(con, notes)
         assert "4" in buf.getvalue()
 
     def test_multiple_notes_all_ids_present(self):
         con, buf = _console()
-        notes = [_note(id=1), _note(id=2), _note(id=3)]
+        notes = [_note(note_id=1), _note(note_id=2), _note(note_id=3)]
         render_open_notes(con, notes)
         out = buf.getvalue()
         for i in (1, 2, 3):

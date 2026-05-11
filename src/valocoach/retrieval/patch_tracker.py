@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -78,10 +79,10 @@ async def get_current_patch() -> str | None:
 
 
 async def run_patch_watcher(
-    settings: "Settings",
+    settings: Settings,
     *,
     check_interval_hours: int = 24,
-    on_new_patch: "Callable[[str], None] | None" = None,
+    on_new_patch: Callable[[str], None] | None = None,
 ) -> None:
     """Run a continuous async loop that checks for a new patch periodically.
 
@@ -99,7 +100,6 @@ async def run_patch_watcher(
     The loop runs forever and should be cancelled externally (e.g. via
     ``asyncio.Task.cancel()`` or Ctrl-C in watch mode).
     """
-    from collections.abc import Callable
 
     interval_secs = check_interval_hours * 3_600
 

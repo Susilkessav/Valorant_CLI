@@ -38,7 +38,7 @@ def _fake_settings():
 
 def _session(
     *,
-    id: int = 1,
+    session_id: int = 1,
     title: str | None = "2026-05-06",
     started_at: str = "2026-05-06T10:00:00",
     ended_at: str | None = None,
@@ -46,7 +46,7 @@ def _session(
     focus_map: str | None = None,
 ) -> SessionInfo:
     return SessionInfo(
-        id=id,
+        id=session_id,
         title=title,
         started_at=started_at,
         ended_at=ended_at,
@@ -91,7 +91,7 @@ class TestRunSessionsList:
         assert any("valocoach interactive" in line for line in output_lines)
 
     def test_renders_sessions_table_when_sessions_present(self):
-        sessions = [_session(id=3, title="Post-plant drill")]
+        sessions = [_session(session_id=3, title="Post-plant drill")]
 
         with (
             patch(_LOAD, return_value=_fake_settings()),
@@ -119,7 +119,7 @@ class TestRunSessionsList:
 
     def test_open_session_reminder_shown(self):
         """When open sessions exist, a reminder to close them is printed."""
-        sessions = [_session(id=1, ended_at=None)]  # open
+        sessions = [_session(session_id=1, ended_at=None)]  # open
         console_lines: list[str] = []
 
         with (
@@ -140,7 +140,7 @@ class TestRunSessionsList:
 
     def test_no_open_session_reminder_when_all_closed(self):
         """When all sessions are closed, no reminder line is printed."""
-        sessions = [_session(id=1, ended_at="2026-05-06T12:00:00")]  # closed
+        sessions = [_session(session_id=1, ended_at="2026-05-06T12:00:00")]  # closed
         console_lines: list[str] = []
 
         with (
@@ -216,7 +216,7 @@ class TestSessionsCLIWiring:
         """``valocoach sessions`` (no subcommand) calls run_sessions_list."""
         with patch(
             "valocoach.cli.commands.sessions.run_sessions_list"
-        ) as mock_list:
+        ):
             result = runner.invoke(app, ["sessions"])
         # Either the mock was called (success path) or we get exit 1 (no player)
         # — either way the command didn't error out with a routing mistake.

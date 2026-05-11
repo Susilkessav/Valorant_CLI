@@ -338,7 +338,7 @@ def test_kill_in_unknown_round_is_skipped(match_details) -> None:
 
 
 def test_round_player_count(match_details):
-    """Two rounds × two players each → 4 RoundPlayer rows total."""
+    """Two rounds x two players each -> 4 RoundPlayer rows total."""
     m = match_from_details(match_details)
     total = sum(len(r.round_players) for r in m.rounds)
     assert total == 4
@@ -436,28 +436,22 @@ def test_round_player_was_afk_and_spawn(match_details):
 
 def test_round_player_empty_puuid_skipped():
     """A round.stats entry with blank puuid must be silently skipped."""
-    from valocoach.data.api_models import (
-        MatchDetailsRoundPlayerStats,
-        _PlayerRef,
-        _RoundPlayerInnerStats,
-    )
-
     # Build a minimal MatchDetails with one round having a blank-puuid entry.
-    from tests.conftest import MATCH_ID, PUUID, ENEMY_PUUID
+    from tests.conftest import MATCH_ID, PUUID
     from valocoach.data.api_models import (
         MatchDetails,
-        MatchDetailsKill,
         MatchDetailsMetadata,
         MatchDetailsPlayer,
         MatchDetailsPlayerBehavior,
         MatchDetailsPlayerStats,
         MatchDetailsRound,
+        MatchDetailsRoundPlayerStats,
         MatchDetailsTeam,
-        _Ref,
+        _PlayerRef,
+        _RoundPlayerInnerStats,
         _V4PlayerDamage,
         _V4Queue,
         _V4TeamRounds,
-        _V4BombEvent,
     )
 
     md = MatchDetails(

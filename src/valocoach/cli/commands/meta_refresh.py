@@ -181,11 +181,11 @@ def _run_watch_loop(
     """
     import time
 
-    CHECK_INTERVAL_HOURS = 24
-    CHECK_INTERVAL_SECS = CHECK_INTERVAL_HOURS * 3_600
+    check_interval_hours = 24
+    check_interval_secs = check_interval_hours * 3_600
 
     display.info(
-        f"Watch mode: checking for new patches every {CHECK_INTERVAL_HOURS}h. "
+        f"Watch mode: checking for new patches every {check_interval_hours}h. "
         "Press [bold]Ctrl-C[/bold] to stop."
     )
 
@@ -201,11 +201,11 @@ def _run_watch_loop(
         force = False
 
         display.console.print(
-            f"\n[dim]Next check in {CHECK_INTERVAL_HOURS} hours …  "
+            f"\n[dim]Next check in {check_interval_hours} hours …  "
             "(Ctrl-C to exit)[/dim]"
         )
         try:
-            time.sleep(CHECK_INTERVAL_SECS)
+            time.sleep(check_interval_secs)
         except KeyboardInterrupt:
             display.info("Watch mode stopped.")
             return
@@ -251,7 +251,7 @@ def _install_cron() -> None:
     if _CRON_MARKER in existing:
         display.info("Crontab entry already exists — nothing changed.")
         display.console.print(
-            f"  [dim]{[l for l in existing.splitlines() if _CRON_MARKER in l][0]}[/dim]"
+            f"  [dim]{next(line for line in existing.splitlines() if _CRON_MARKER in line)}[/dim]"
         )
         return
 

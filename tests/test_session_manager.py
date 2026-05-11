@@ -1,23 +1,8 @@
-"""Tests for valocoach.coach.session_manager.
-
-All DB calls are mocked so these tests run fully in-process with no
-SQLite or filesystem I/O.
-
-Coverage targets
-----------------
-- REPLCoachState.active property (True / False branches)
-- SessionInfo.is_open property (True / False branches)
-- get_player_puuid: success, None result, exception
-- open_coaching_session: success, exception
-- close_coaching_session: success, exception (silent)
-- add_coaching_note: success, exception
-- list_open_notes: success, empty, exception
-- resolve_coaching_note: success (True), not-found (False), exception
-- list_coaching_sessions: success, empty, exception
-"""
+"""Tests for valocoach.coach.session_manager."""
 
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -187,7 +172,7 @@ class TestGetPlayerPuuid:
 
     def test_returns_none_when_player_not_found(self):
         settings = _fake_settings()
-        ctx, db = _mock_db_ctx()
+        ctx, _db = _mock_db_ctx()
 
         with (
             patch("valocoach.data.database.ensure_db", new_callable=AsyncMock),
@@ -226,7 +211,7 @@ class TestOpenCoachingSession:
         fake_cs = MagicMock()
         fake_cs.id = 42
 
-        ctx, db = _mock_db_ctx()
+        ctx, _db = _mock_db_ctx()
 
         with (
             patch("valocoach.data.database.ensure_db", new_callable=AsyncMock),
@@ -245,7 +230,7 @@ class TestOpenCoachingSession:
         settings = _fake_settings()
         fake_cs = MagicMock()
         fake_cs.id = 1
-        ctx, db = _mock_db_ctx()
+        ctx, _db = _mock_db_ctx()
 
         with (
             patch("valocoach.data.database.ensure_db", new_callable=AsyncMock),
@@ -288,7 +273,7 @@ class TestOpenCoachingSession:
 class TestCloseCoachingSession:
     def test_calls_end_coaching_session(self):
         settings = _fake_settings()
-        ctx, db = _mock_db_ctx()
+        ctx, _db = _mock_db_ctx()
 
         with (
             patch("valocoach.data.database.ensure_db", new_callable=AsyncMock),
@@ -323,7 +308,7 @@ class TestAddCoachingNote:
         settings = _fake_settings()
         fake_note = MagicMock()
         fake_note.id = 99
-        ctx, db = _mock_db_ctx()
+        ctx, _db = _mock_db_ctx()
 
         with (
             patch("valocoach.data.database.ensure_db", new_callable=AsyncMock),
@@ -342,7 +327,7 @@ class TestAddCoachingNote:
         settings = _fake_settings()
         fake_note = MagicMock()
         fake_note.id = 5
-        ctx, db = _mock_db_ctx()
+        ctx, _db = _mock_db_ctx()
 
         with (
             patch("valocoach.data.database.ensure_db", new_callable=AsyncMock),
@@ -376,9 +361,9 @@ class TestAddCoachingNote:
 
 
 class TestListOpenNotes:
-    def _fake_note(self, *, id=1, body="tip", category="general", priority=2, created_at="2026-05-06"):
+    def _fake_note(self, *, note_id=1, body="tip", category="general", priority=2, created_at="2026-05-06"):
         n = MagicMock()
-        n.id = id
+        n.id = note_id
         n.body = body
         n.category = category
         n.priority = priority
@@ -388,8 +373,8 @@ class TestListOpenNotes:
 
     def test_returns_note_info_list(self):
         settings = _fake_settings()
-        raw = [self._fake_note(id=1, body="A long crossfire"), self._fake_note(id=2, body="Eco tips")]
-        ctx, db = _mock_db_ctx()
+        raw = [self._fake_note(note_id=1, body="A long crossfire"), self._fake_note(note_id=2, body="Eco tips")]
+        ctx, _db = _mock_db_ctx()
 
         with (
             patch("valocoach.data.database.ensure_db", new_callable=AsyncMock),
@@ -410,7 +395,7 @@ class TestListOpenNotes:
 
     def test_returns_empty_list_when_no_notes(self):
         settings = _fake_settings()
-        ctx, db = _mock_db_ctx()
+        ctx, _db = _mock_db_ctx()
 
         with (
             patch("valocoach.data.database.ensure_db", new_callable=AsyncMock),
@@ -437,9 +422,9 @@ class TestListOpenNotes:
 
     def test_note_info_fields_mapped_correctly(self):
         settings = _fake_settings()
-        raw = [self._fake_note(id=7, body="body text", category="tactical", priority=1, created_at="2026-01-01")]
+        raw = [self._fake_note(note_id=7, body="body text", category="tactical", priority=1, created_at="2026-01-01")]
         raw[0].match_id = "match-abc"
-        ctx, db = _mock_db_ctx()
+        ctx, _db = _mock_db_ctx()
 
         with (
             patch("valocoach.data.database.ensure_db", new_callable=AsyncMock),
@@ -469,7 +454,7 @@ class TestListOpenNotes:
 class TestResolveCoachingNote:
     def test_returns_true_when_note_found(self):
         settings = _fake_settings()
-        ctx, db = _mock_db_ctx()
+        ctx, _db = _mock_db_ctx()
 
         with (
             patch("valocoach.data.database.ensure_db", new_callable=AsyncMock),
@@ -486,7 +471,7 @@ class TestResolveCoachingNote:
 
     def test_returns_false_when_note_not_found(self):
         settings = _fake_settings()
-        ctx, db = _mock_db_ctx()
+        ctx, _db = _mock_db_ctx()
 
         with (
             patch("valocoach.data.database.ensure_db", new_callable=AsyncMock),
@@ -518,9 +503,9 @@ class TestResolveCoachingNote:
 
 
 class TestListCoachingSessions:
-    def _fake_session(self, *, id=1, title="2026-05-06", started_at="2026-05-06T10:00:00", ended_at=None, agent=None, map_=None):
+    def _fake_session(self, *, session_id=1, title="2026-05-06", started_at="2026-05-06T10:00:00", ended_at=None, agent=None, map_=None):
         s = MagicMock()
-        s.id = id
+        s.id = session_id
         s.session_title = title
         s.started_at = started_at
         s.ended_at = ended_at
@@ -531,10 +516,10 @@ class TestListCoachingSessions:
     def test_returns_session_info_list(self):
         settings = _fake_settings()
         raw = [
-            self._fake_session(id=3, title="Post-plant drill", ended_at="2026-05-06T12:00:00"),
-            self._fake_session(id=2, title="2026-05-05", agent="Jett"),
+            self._fake_session(session_id=3, title="Post-plant drill", ended_at="2026-05-06T12:00:00"),
+            self._fake_session(session_id=2, title="2026-05-05", agent="Jett"),
         ]
-        ctx, db = _mock_db_ctx()
+        ctx, _db = _mock_db_ctx()
 
         with (
             patch("valocoach.data.database.ensure_db", new_callable=AsyncMock),
@@ -558,7 +543,7 @@ class TestListCoachingSessions:
 
     def test_returns_empty_on_no_sessions(self):
         settings = _fake_settings()
-        ctx, db = _mock_db_ctx()
+        ctx, _db = _mock_db_ctx()
 
         with (
             patch("valocoach.data.database.ensure_db", new_callable=AsyncMock),
@@ -585,8 +570,8 @@ class TestListCoachingSessions:
 
     def test_session_info_fields_mapped(self):
         settings = _fake_settings()
-        raw = [self._fake_session(id=9, title="T", started_at="2026-01-01T08:00:00", agent="Viper", map_="Icebox")]
-        ctx, db = _mock_db_ctx()
+        raw = [self._fake_session(session_id=9, title="T", started_at="2026-01-01T08:00:00", agent="Viper", map_="Icebox")]
+        ctx, _db = _mock_db_ctx()
 
         with (
             patch("valocoach.data.database.ensure_db", new_callable=AsyncMock),
@@ -674,7 +659,7 @@ class TestGetMmrTrend:
             self._fake_row(tier_patched="Plat I", elo=1400, rr=20),
             self._fake_row(tier_patched="Gold II", elo=1245, rr=45),
         ]
-        ctx, db = _mock_db_ctx()
+        ctx, _db = _mock_db_ctx()
 
         with (
             patch("valocoach.data.database.ensure_db", new_callable=AsyncMock),
@@ -696,7 +681,7 @@ class TestGetMmrTrend:
     def test_fields_mapped_correctly(self):
         settings = _fake_settings()
         raw = [self._fake_row(tier_patched="Silver III", rr=72, elo=1072, mmr_change=-20, recorded_at="2026-04-01")]
-        ctx, db = _mock_db_ctx()
+        ctx, _db = _mock_db_ctx()
 
         with (
             patch("valocoach.data.database.ensure_db", new_callable=AsyncMock),
@@ -718,7 +703,7 @@ class TestGetMmrTrend:
 
     def test_returns_empty_list_when_no_history(self):
         settings = _fake_settings()
-        ctx, db = _mock_db_ctx()
+        ctx, _db = _mock_db_ctx()
 
         with (
             patch("valocoach.data.database.ensure_db", new_callable=AsyncMock),
@@ -745,7 +730,7 @@ class TestGetMmrTrend:
 
     def test_passes_limit_to_repo(self):
         settings = _fake_settings()
-        ctx, db = _mock_db_ctx()
+        ctx, _db = _mock_db_ctx()
 
         with (
             patch("valocoach.data.database.ensure_db", new_callable=AsyncMock),
@@ -772,7 +757,7 @@ class TestGetOrOpenCoachingSession:
         settings = _fake_settings()
         existing = MagicMock()
         existing.id = 7
-        ctx, db = _mock_db_ctx()
+        ctx, _db = _mock_db_ctx()
 
         with (
             patch("valocoach.data.database.ensure_db", new_callable=AsyncMock),
@@ -796,7 +781,7 @@ class TestGetOrOpenCoachingSession:
         settings = _fake_settings()
         new_cs = MagicMock()
         new_cs.id = 99
-        ctx, db = _mock_db_ctx()
+        ctx, _db = _mock_db_ctx()
 
         with (
             patch("valocoach.data.database.ensure_db", new_callable=AsyncMock),
@@ -883,7 +868,7 @@ class TestLastMatchInfo:
 
     def test_frozen(self):
         lm = _last_match()
-        with pytest.raises(Exception):
+        with pytest.raises(FrozenInstanceError):
             lm.kills = 99  # type: ignore[misc]
 
     def test_format_win(self):

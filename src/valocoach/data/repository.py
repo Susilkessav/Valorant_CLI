@@ -47,9 +47,9 @@ from valocoach.data.models import AccountData, MatchData, MMRData
 from valocoach.data.orm_models import (
     CoachingNote,
     CoachingSession,
-    MMRHistory,
     Match,
     MatchPlayer,
+    MMRHistory,
     Player,
     Round,
     SyncLog,

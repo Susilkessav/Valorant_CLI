@@ -64,7 +64,7 @@ class LastMatchInfo:
     deaths: int
     assists: int
     acs: int         # average combat score per round
-    hs_pct: float    # headshot percentage (0.0–100.0)
+    hs_pct: float    # headshot percentage (0.0-100.0)
     adr: float       # average damage per round
     started_at: str  # ISO8601 UTC
 
@@ -483,17 +483,17 @@ __all__ = [
     "LastMatchInfo",
     "MMRHistoryInfo",
     "NoteInfo",
-    "SessionInfo",
     "REPLCoachState",
+    "SessionInfo",
+    "add_coaching_note",
+    "close_coaching_session",
     "format_last_match_context",
     "get_last_match",
     "get_mmr_trend",
     "get_or_open_coaching_session",
     "get_player_puuid",
-    "open_coaching_session",
-    "close_coaching_session",
-    "add_coaching_note",
-    "list_open_notes",
-    "resolve_coaching_note",
     "list_coaching_sessions",
+    "list_open_notes",
+    "open_coaching_session",
+    "resolve_coaching_note",
 ]

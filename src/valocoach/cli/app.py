@@ -288,7 +288,7 @@ def meta_refresh(
         "--install-cron",
         help="Add a daily crontab entry that runs meta-refresh automatically.",
     ),
-    youtube: list[str] = typer.Option(
+    youtube: list[str] = typer.Option(  # noqa: B008
         [],
         "--youtube",
         "-y",
