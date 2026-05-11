@@ -299,3 +299,171 @@ class TestFetchTranscript:
 
         assert result is not None
         assert "dQw4w9WgXcQ" in result.title
+
+
+# ---------------------------------------------------------------------------
+# meta_stats — fetch_ranked_stats / fetch_pro_stats / fetch_all_stats
+# ---------------------------------------------------------------------------
+
+_SCRAPE_URL = "valocoach.retrieval.scrapers.meta_stats.scrape_url"
+
+
+class TestMetaStats:
+    """Tests for meta_stats scrapers — scrape_url is mocked throughout."""
+
+    _LONG_TEXT = "Agent pick-rate data from tracker.gg. " * 10
+
+    def _scraped(self, text: str | None = None):
+        from valocoach.retrieval.scrapers import ScrapedContent
+
+        if text is None:
+            text = self._LONG_TEXT
+        sc = MagicMock(spec=ScrapedContent)
+        sc.text = text
+        return sc
+
+    def test_fetch_ranked_stats_returns_text_on_success(self):
+        from valocoach.retrieval.scrapers.meta_stats import fetch_ranked_stats
+
+        with patch(_SCRAPE_URL, return_value=self._scraped()):
+            result = fetch_ranked_stats()
+
+        assert result == self._LONG_TEXT
+
+    def test_fetch_ranked_stats_returns_empty_string_on_failure(self):
+        from valocoach.retrieval.scrapers.meta_stats import fetch_ranked_stats
+
+        with patch(_SCRAPE_URL, return_value=None):
+            result = fetch_ranked_stats()
+
+        assert result == ""
+
+    def test_fetch_pro_stats_returns_text_on_success(self):
+        from valocoach.retrieval.scrapers.meta_stats import fetch_pro_stats
+
+        with patch(_SCRAPE_URL, return_value=self._scraped()):
+            result = fetch_pro_stats()
+
+        assert result == self._LONG_TEXT
+
+    def test_fetch_pro_stats_returns_empty_string_on_failure(self):
+        from valocoach.retrieval.scrapers.meta_stats import fetch_pro_stats
+
+        with patch(_SCRAPE_URL, return_value=None):
+            result = fetch_pro_stats()
+
+        assert result == ""
+
+    def test_fetch_all_stats_combines_both(self):
+        from valocoach.retrieval.scrapers.meta_stats import fetch_all_stats
+
+        ranked_text = "ranked stats data " * 10
+        pro_text = "pro stats data " * 10
+        side_effects = [self._scraped(ranked_text), self._scraped(pro_text)]
+
+        with patch(_SCRAPE_URL, side_effect=side_effects):
+            result = fetch_all_stats()
+
+        assert result.ranked_text == ranked_text
+        assert result.pro_text == pro_text
+        assert result.ok is True
+
+    def test_fetch_all_stats_ok_when_one_source_fails(self):
+        from valocoach.retrieval.scrapers.meta_stats import fetch_all_stats
+
+        side_effects = [None, self._scraped("pro data " * 10)]
+        with patch(_SCRAPE_URL, side_effect=side_effects):
+            result = fetch_all_stats()
+
+        assert result.ranked_text == ""
+        assert result.ok is True  # still ok — pro source succeeded
+
+    def test_fetch_all_stats_not_ok_when_both_fail(self):
+        from valocoach.retrieval.scrapers.meta_stats import fetch_all_stats
+
+        with patch(_SCRAPE_URL, return_value=None):
+            result = fetch_all_stats()
+
+        assert result.ok is False
+
+    def test_meta_stats_result_combined_includes_headers(self):
+        from valocoach.retrieval.scrapers.meta_stats import MetaStatsResult
+
+        r = MetaStatsResult(ranked_text="ranked", pro_text="pro")
+        combined = r.combined
+        assert "tracker.gg" in combined
+        assert "vlr.gg" in combined
+        assert "ranked" in combined
+        assert "pro" in combined
+
+    def test_meta_stats_result_combined_empty_when_both_empty(self):
+        from valocoach.retrieval.scrapers.meta_stats import MetaStatsResult
+
+        r = MetaStatsResult(ranked_text="", pro_text="")
+        assert r.combined == ""
+        assert r.ok is False
+
+
+# ---------------------------------------------------------------------------
+# patch_notes — parse_version / build_patch_notes_url / fetch_patch_notes
+# ---------------------------------------------------------------------------
+
+_PATCH_SCRAPE_URL = "valocoach.retrieval.scrapers.patch_notes.scrape_url"
+
+
+class TestPatchNotes:
+    """Tests for the patch_notes scraper module."""
+
+    def test_parse_version_release_string(self):
+        from valocoach.retrieval.scrapers.patch_notes import parse_version
+
+        assert parse_version("release-10.08-shipping-32-1234567") == ("10", "08")
+
+    def test_parse_version_clean_string(self):
+        from valocoach.retrieval.scrapers.patch_notes import parse_version
+
+        assert parse_version("10.09") == ("10", "09")
+
+    def test_parse_version_returns_none_on_garbage(self):
+        from valocoach.retrieval.scrapers.patch_notes import parse_version
+
+        assert parse_version("garbage") is None
+
+    def test_build_patch_notes_url_success(self):
+        from valocoach.retrieval.scrapers.patch_notes import build_patch_notes_url
+
+        url = build_patch_notes_url("10.08")
+        assert url is not None
+        assert "10-08" in url
+        assert "playvalorant.com" in url
+
+    def test_build_patch_notes_url_returns_none_for_bad_version(self):
+        from valocoach.retrieval.scrapers.patch_notes import build_patch_notes_url
+
+        assert build_patch_notes_url("garbage") is None
+
+    def test_fetch_patch_notes_returns_content_on_success(self):
+        from valocoach.retrieval.scrapers import ScrapedContent
+        from valocoach.retrieval.scrapers.patch_notes import fetch_patch_notes
+
+        fake = MagicMock(spec=ScrapedContent)
+        fake.text = "Patch 10.09 notes..."
+        with patch(_PATCH_SCRAPE_URL, return_value=fake):
+            result = fetch_patch_notes("10.09")
+
+        assert result is fake
+
+    def test_fetch_patch_notes_returns_none_when_scrape_fails(self):
+        from valocoach.retrieval.scrapers.patch_notes import fetch_patch_notes
+
+        with patch(_PATCH_SCRAPE_URL, return_value=None):
+            result = fetch_patch_notes("10.09")
+
+        assert result is None
+
+    def test_fetch_patch_notes_returns_none_for_unparseable_version(self):
+        from valocoach.retrieval.scrapers.patch_notes import fetch_patch_notes
+
+        # No mock needed — build_patch_notes_url returns None → early return
+        result = fetch_patch_notes("garbage-version")
+        assert result is None

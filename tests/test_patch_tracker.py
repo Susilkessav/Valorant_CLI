@@ -271,3 +271,190 @@ class TestGetPatchStalenessDays:
             result = get_patch_staleness_days(Path("/tmp/fake"))
 
         assert isinstance(result, float)
+
+    def test_handles_naive_datetime_without_tzinfo(self):
+        """ISO timestamp with no timezone info is treated as UTC (line 184 branch)."""
+        from pathlib import Path
+
+        from valocoach.retrieval.patch_tracker import get_patch_staleness_days
+
+        # Bare ISO string — no 'Z', no '+00:00' — fromisoformat returns naive datetime
+        naive_ts = "2026-01-01T12:00:00"
+        with (
+            patch(self._ENSURE_DB, new_callable=AsyncMock),
+            patch(_SESSION_SCOPE, self._fake_session_scope(naive_ts)),
+        ):
+            result = get_patch_staleness_days(Path("/tmp/fake"))
+
+        # 2026-01-01 is before 2026-05-11 — result should be > 100 days
+        assert result is not None
+        assert result > 100
+
+
+# ---------------------------------------------------------------------------
+# get_current_patch
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestGetCurrentPatch:
+    """Tests for the async get_current_patch helper."""
+
+    async def test_returns_version_when_row_exists(self):
+        from valocoach.retrieval.patch_tracker import get_current_patch
+
+        pv = _make_patch_version("10.09")
+        scope = _make_session_scope(pv)
+        with patch(_SESSION_SCOPE, scope):
+            result = await get_current_patch()
+
+        assert result == "10.09"
+
+    async def test_returns_none_when_no_row(self):
+        from valocoach.retrieval.patch_tracker import get_current_patch
+
+        scope = _make_session_scope(None)
+        with patch(_SESSION_SCOPE, scope):
+            result = await get_current_patch()
+
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# run_patch_watcher
+# ---------------------------------------------------------------------------
+
+_CHECK_PATCH = "valocoach.retrieval.patch_tracker.check_patch_update"
+_ASYNCIO_SLEEP = "valocoach.retrieval.patch_tracker.asyncio.sleep"
+
+
+@pytest.mark.asyncio
+class TestRunPatchWatcher:
+    """Tests for the continuous watcher loop."""
+
+    async def _run_one_iteration(
+        self,
+        *,
+        version: str = "10.09",
+        is_new: bool = True,
+        on_new_patch=None,
+        meta_sync_mock=None,
+    ):
+        """Run the watcher for exactly one iteration then exit.
+
+        The first check_patch_update call returns (version, is_new).
+        asyncio.sleep is a no-op.
+        The second check_patch_update call raises CancelledError — this is
+        caught inside the watcher's try block and causes a clean return.
+        """
+        import asyncio
+        from contextlib import ExitStack
+
+        settings = MagicMock()
+        # First call: real result. Second call: CancelledError (caught by watcher).
+        check_mock = AsyncMock(
+            side_effect=[(version, is_new), asyncio.CancelledError()]
+        )
+        sleep_mock = AsyncMock()  # no-op — CancelledError comes from check, not sleep
+
+        from valocoach.retrieval.patch_tracker import run_patch_watcher
+
+        with ExitStack() as stack:
+            stack.enter_context(patch(_CHECK_PATCH, check_mock))
+            stack.enter_context(patch(_ASYNCIO_SLEEP, sleep_mock))
+            # Patch run_meta_sync at the source module so the lazy 'from ... import' picks it up.
+            if meta_sync_mock is not None:
+                stack.enter_context(
+                    patch("valocoach.retrieval.meta_sync.run_meta_sync", meta_sync_mock)
+                )
+            await run_patch_watcher(
+                settings,
+                check_interval_hours=1,
+                on_new_patch=on_new_patch,
+            )
+
+        return check_mock
+
+    async def test_calls_check_patch_update(self):
+        """Watcher calls check_patch_update at least once."""
+        check_mock = await self._run_one_iteration(is_new=False)
+        check_mock.assert_awaited()
+
+    async def test_no_patch_skips_on_new_patch_callback(self):
+        """When is_new=False, on_new_patch is never called."""
+        callback = MagicMock()
+        await self._run_one_iteration(is_new=False, on_new_patch=callback)
+        callback.assert_not_called()
+
+    async def test_calls_sync_on_new_patch(self):
+        """When is_new=True and on_new_patch is sync, it is called with the version."""
+        callback = MagicMock()
+        await self._run_one_iteration(version="10.10", is_new=True, on_new_patch=callback)
+        callback.assert_called_once_with("10.10")
+
+    async def test_calls_async_on_new_patch(self):
+        """When is_new=True and on_new_patch is async, it is awaited with the version."""
+        callback = AsyncMock()
+        await self._run_one_iteration(version="10.10", is_new=True, on_new_patch=callback)
+        callback.assert_awaited_once_with("10.10")
+
+    async def test_default_callback_runs_meta_sync_on_new_patch(self):
+        """When is_new=True and no callback given, run_meta_sync is called."""
+        meta_result = MagicMock()
+        meta_result.ok = True
+        meta_result.meta_written = True
+        meta_result.meta_ingested = True
+        meta_mock = AsyncMock(return_value=meta_result)
+
+        await self._run_one_iteration(version="10.10", is_new=True, meta_sync_mock=meta_mock)
+
+        # run_meta_sync should have been called with force=True
+        meta_mock.assert_awaited_once()
+        _, kwargs = meta_mock.call_args
+        assert kwargs.get("force") is True
+
+    async def test_exception_does_not_crash_watcher(self):
+        """Non-CancelledError exceptions are logged and the loop retries."""
+        import asyncio
+
+        settings = MagicMock()
+        # First call raises RuntimeError, second call raises CancelledError to exit
+        check_mock = AsyncMock(
+            side_effect=[RuntimeError("network error"), asyncio.CancelledError()]
+        )
+        sleep_mock = AsyncMock()
+
+        from valocoach.retrieval.patch_tracker import run_patch_watcher
+
+        with (
+            patch(_CHECK_PATCH, check_mock),
+            patch(_ASYNCIO_SLEEP, sleep_mock),
+        ):
+            # Should not raise — exception is caught, loop retries, then CancelledError exits
+            await run_patch_watcher(settings, check_interval_hours=1)
+
+        assert check_mock.await_count == 2
+
+    async def test_cancelled_error_exits_cleanly(self):
+        """CancelledError raised inside check_patch_update exits the loop without re-raising."""
+        import asyncio
+
+        settings = MagicMock()
+        check_mock = AsyncMock(side_effect=asyncio.CancelledError())
+
+        from valocoach.retrieval.patch_tracker import run_patch_watcher
+
+        with patch(_CHECK_PATCH, check_mock):
+            # Should return normally (not propagate CancelledError)
+            await run_patch_watcher(settings, check_interval_hours=1)
+
+    async def test_meta_sync_errors_logged_not_raised(self):
+        """When run_meta_sync returns result.ok=False, errors are logged but not raised."""
+        meta_result = MagicMock()
+        meta_result.ok = False
+        meta_result.errors = ["something went wrong"]
+        meta_mock = AsyncMock(return_value=meta_result)
+
+        # Should complete without raising even when meta sync reports errors
+        await self._run_one_iteration(version="10.10", is_new=True, meta_sync_mock=meta_mock)
+        meta_mock.assert_awaited_once()

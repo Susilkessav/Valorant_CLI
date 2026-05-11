@@ -174,8 +174,21 @@ class REPLCoachState:
 
 
 def _db_path(settings):
-    """Return the SQLite DB path from settings."""
-    return settings.data_dir / "valocoach.db"
+    """Return the SQLite DB path from settings.
+
+    Raises ``TypeError`` early when ``settings.data_dir`` is not a real
+    :class:`~pathlib.Path` or string — this prevents aiosqlite from creating
+    files whose names are MagicMock repr strings when tests pass bare
+    ``MagicMock()`` objects for settings without setting ``data_dir``.
+    The TypeError propagates up to each sync wrapper's ``except Exception``
+    guard and causes it to return ``None`` / ``[]`` safely.
+    """
+    from pathlib import Path
+
+    d = settings.data_dir
+    if not isinstance(d, (Path, str)):
+        raise TypeError(f"settings.data_dir must be a Path or str, got {type(d).__name__!r}")
+    return Path(d) / "valocoach.db"
 
 
 # ---------------------------------------------------------------------------
