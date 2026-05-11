@@ -191,6 +191,8 @@ Keep response under 280 words.  Pull all costs and cooldowns from GROUNDED CONTE
 
 The player is asking about the current Valorant meta.
 Base your answer on GROUNDED CONTEXT (patch notes, tier data) when available.
+When PLAYER CONTEXT is provided it shows the player's actual agent pool and top
+maps — use them to make the practical takeaway personally relevant.
 
 Respond with **exactly these sections**:
 
@@ -202,8 +204,10 @@ reason each (e.g. "Vyse — wall + flash makes A-site executes near-unpunishable
 🗺️ **Map influence** — Which maps currently favour which archetypes
 (controller-heavy, duelist-heavy, etc.).
 
-💡 **Practical takeaway** — One actionable recommendation for the player's
-rank / playstyle based on their question.
+💡 **Practical takeaway** — One actionable recommendation tailored to the
+player's actual agent pool and top maps from PLAYER CONTEXT (if available).
+Name the specific agents from their pool.  If PLAYER CONTEXT is absent, base
+the takeaway on rank / playstyle from the question.
 
 Keep response under 280 words.  Cite patch changes from GROUNDED CONTEXT if available.""".strip(),
 

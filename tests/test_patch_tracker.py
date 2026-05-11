@@ -146,3 +146,122 @@ class TestCheckPatchUpdate:
         invalidate_mock = AsyncMock(return_value=0)
         await self._call("10.09", existing_row=existing, invalidate_mock=invalidate_mock)
         invalidate_mock.assert_not_awaited()
+
+
+# ---------------------------------------------------------------------------
+# get_patch_staleness_days  (sync wrapper)
+# ---------------------------------------------------------------------------
+
+
+class TestGetPatchStalenessDays:
+    """Tests for the sync staleness-days helper.
+
+    The function calls asyncio.run() internally, so we mock the two async
+    dependencies (ensure_db + session_scope) at source level.
+    """
+
+    _ENSURE_DB = "valocoach.data.database.ensure_db"
+
+    def _fake_session_scope(self, detected_at: str | None):
+        """Build a session_scope mock that returns a PatchVersion with detected_at."""
+        from contextlib import asynccontextmanager
+
+        if detected_at is None:
+            mock_pv = None
+        else:
+            mock_pv = MagicMock()
+            mock_pv.detected_at = detected_at
+
+        mock_session = AsyncMock()
+        mock_session.scalar = AsyncMock(return_value=mock_pv)
+
+        @asynccontextmanager
+        async def _scope():
+            yield mock_session
+
+        return _scope
+
+    def test_returns_none_when_no_patch_recorded(self):
+        from pathlib import Path
+        from valocoach.retrieval.patch_tracker import get_patch_staleness_days
+
+        with (
+            patch(self._ENSURE_DB, new_callable=AsyncMock),
+            patch(_SESSION_SCOPE, self._fake_session_scope(None)),
+        ):
+            result = get_patch_staleness_days(Path("/tmp/fake"))
+
+        assert result is None
+
+    def test_returns_zero_for_fresh_patch(self):
+        """detected_at = now → staleness ≈ 0.0."""
+        from datetime import UTC, datetime
+        from pathlib import Path
+        from valocoach.retrieval.patch_tracker import get_patch_staleness_days
+
+        now_iso = datetime.now(UTC).isoformat()
+        with (
+            patch(self._ENSURE_DB, new_callable=AsyncMock),
+            patch(_SESSION_SCOPE, self._fake_session_scope(now_iso)),
+        ):
+            result = get_patch_staleness_days(Path("/tmp/fake"))
+
+        assert result is not None
+        assert result < 1.0  # fresh check should be < 1 day old
+
+    def test_returns_correct_days_for_old_patch(self):
+        """detected_at = 30 days ago → result ≈ 30."""
+        from datetime import UTC, datetime, timedelta
+        from pathlib import Path
+        from valocoach.retrieval.patch_tracker import get_patch_staleness_days
+
+        thirty_days_ago = (datetime.now(UTC) - timedelta(days=30)).isoformat()
+        with (
+            patch(self._ENSURE_DB, new_callable=AsyncMock),
+            patch(_SESSION_SCOPE, self._fake_session_scope(thirty_days_ago)),
+        ):
+            result = get_patch_staleness_days(Path("/tmp/fake"))
+
+        assert result is not None
+        assert 29.9 < result < 30.1
+
+    def test_returns_none_on_exception(self):
+        """DB errors return None — never crash the coaching turn."""
+        from pathlib import Path
+        from valocoach.retrieval.patch_tracker import get_patch_staleness_days
+
+        with patch(self._ENSURE_DB, new_callable=AsyncMock, side_effect=RuntimeError("no db")):
+            result = get_patch_staleness_days(Path("/tmp/fake"))
+
+        assert result is None
+
+    def test_handles_utc_z_suffix(self):
+        """ISO timestamps with a trailing 'Z' are parsed correctly."""
+        from pathlib import Path
+        from valocoach.retrieval.patch_tracker import get_patch_staleness_days
+
+        # Z-suffix ISO string (common from some storage paths)
+        z_timestamp = "2026-04-01T10:00:00Z"
+        with (
+            patch(self._ENSURE_DB, new_callable=AsyncMock),
+            patch(_SESSION_SCOPE, self._fake_session_scope(z_timestamp)),
+        ):
+            result = get_patch_staleness_days(Path("/tmp/fake"))
+
+        assert result is not None
+        assert result > 0  # 2026-04-01 is before today (2026-05-06)
+
+    def test_returns_float(self):
+        """Return type is always float when a row exists."""
+        from datetime import UTC, datetime, timedelta
+        from pathlib import Path
+        from valocoach.retrieval.patch_tracker import get_patch_staleness_days
+
+        ts = (datetime.now(UTC) - timedelta(days=5)).isoformat()
+        with (
+            patch(self._ENSURE_DB, new_callable=AsyncMock),
+            patch(_SESSION_SCOPE, self._fake_session_scope(ts)),
+        ):
+            result = get_patch_staleness_days(Path("/tmp/fake"))
+
+        assert isinstance(result, float)

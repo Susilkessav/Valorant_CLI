@@ -32,12 +32,17 @@ from valocoach.cli.formatter import (
     render_coaching_sessions,
     render_identity_panel,
     render_open_notes,
+    render_rank_trend,
     render_round_stats,
     render_summary_card,
     render_trend,
     render_warn_legend,
 )
-from valocoach.coach.session_manager import list_coaching_sessions, list_open_notes
+from valocoach.coach.session_manager import (
+    get_mmr_trend,
+    list_coaching_sessions,
+    list_open_notes,
+)
 from valocoach.core.config import load_settings
 from valocoach.data.loader import load_player_data_async
 from valocoach.stats import compute_per_agent
@@ -140,6 +145,12 @@ def run_profile(
 
     # ── Identity panel ─────────────────────────────────────────────────────
     render_identity_panel(con, player)
+
+    # ── Rank trend (ELO progression from mmr_history snapshots) ────────────
+    # Non-fatal: silently absent when the player has just one sync or no data.
+    mmr_history = get_mmr_trend(settings, player.puuid, limit=20)
+    if mmr_history:
+        render_rank_trend(con, mmr_history)
 
     # ── Compact summary (last N matches) ───────────────────────────────────
     any_warn = render_summary_card(con, rows, limit=limit)

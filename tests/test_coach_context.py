@@ -922,6 +922,138 @@ def test_build_stats_context_returns_none_when_rows_empty() -> None:
     assert result is None
 
 
+# ---------------------------------------------------------------------------
+# Patch-staleness warning in run_coach  (Phase F)
+# ---------------------------------------------------------------------------
+
+
+_STALENESS_FN = "valocoach.retrieval.patch_tracker.get_patch_staleness_days"
+
+
+def _run_coach_meta(situation: str = "what is the current meta tier list?", **kwargs):
+    """Run coach with a meta-intent query and all deps mocked.
+
+    Returns (console_prints, response) where console_prints is the list of
+    strings passed to display.console.print after the stream.
+    """
+    from valocoach.cli.commands.coach import run_coach
+
+    console_prints: list[str] = []
+
+    with (
+        patch("valocoach.cli.commands.coach.load_settings", return_value=_settings()),
+        patch("valocoach.cli.commands.coach.build_stats_context", return_value=None),
+        patch(
+            "valocoach.cli.commands.coach.stream_completion",
+            return_value=_stream(["ok"]),
+        ),
+        patch(
+            "valocoach.cli.commands.coach.display.stream_to_panel",
+            return_value="ok",
+        ),
+        patch(
+            "valocoach.cli.commands.coach.display.console"
+        ) as mock_con,
+    ):
+        mock_con.print = lambda msg, **_kw: console_prints.append(str(msg))
+        response = run_coach(situation, with_stats=False, **kwargs)
+
+    return console_prints, response
+
+
+def test_staleness_warning_shown_when_meta_and_stale() -> None:
+    """meta intent + stale data (> 21 days) → warning printed after stream."""
+    with patch(_STALENESS_FN, return_value=30.0):
+        prints, _ = _run_coach_meta("what's the current meta on Ascent?")
+
+    combined = " ".join(prints)
+    assert "outdated" in combined.lower() or "stale" in combined.lower() or "patch" in combined.lower()
+    assert "valocoach patch --check" in combined
+
+
+def test_staleness_warning_shown_when_meta_and_never_checked() -> None:
+    """meta intent + None (never checked) → warning fires with 'never checked'."""
+    with patch(_STALENESS_FN, return_value=None):
+        prints, _ = _run_coach_meta("what is the current meta tier list?")
+
+    combined = " ".join(prints)
+    assert "never checked" in combined
+    assert "valocoach patch --check" in combined
+
+
+def test_staleness_warning_shown_for_agent_info_intent() -> None:
+    """agent_info intent is also meta-sensitive → staleness warning fires."""
+    with patch(_STALENESS_FN, return_value=25.0):
+        prints, _ = _run_coach_meta("tell me about Jett's abilities")
+
+    combined = " ".join(prints)
+    # agent_info intent should also trigger the warning when stale
+    assert "patch" in combined.lower() or len(prints) > 0
+
+
+def test_staleness_warning_not_shown_when_fresh() -> None:
+    """meta intent + fresh data (< 21 days) → no staleness warning."""
+    with patch(_STALENESS_FN, return_value=5.0):
+        prints, _ = _run_coach_meta("best duelist this patch?")
+
+    combined = " ".join(prints)
+    assert "valocoach patch --check" not in combined
+
+
+def test_staleness_warning_not_shown_for_tactical_intent() -> None:
+    """Non-meta intent (tactical) → no staleness check at all."""
+    from valocoach.cli.commands.coach import run_coach
+
+    staleness_calls: list = []
+
+    with (
+        patch("valocoach.cli.commands.coach.load_settings", return_value=_settings()),
+        patch("valocoach.cli.commands.coach.build_stats_context", return_value=None),
+        patch(
+            "valocoach.cli.commands.coach.stream_completion",
+            return_value=_stream(["ok"]),
+        ),
+        patch("valocoach.cli.commands.coach.display.stream_to_panel", return_value="ok"),
+        patch("valocoach.cli.commands.coach.display.console"),
+        patch(_STALENESS_FN, side_effect=lambda *a, **k: staleness_calls.append(1) or 30.0),
+    ):
+        run_coach("how do I take B site on Ascent?", with_stats=False)
+
+    # Tactical intent should NOT trigger the staleness check
+    assert staleness_calls == []
+
+
+def test_staleness_warning_non_fatal_on_exception() -> None:
+    """If get_patch_staleness_days raises, the coaching turn still completes."""
+    from valocoach.cli.commands.coach import run_coach
+
+    with (
+        patch("valocoach.cli.commands.coach.load_settings", return_value=_settings()),
+        patch("valocoach.cli.commands.coach.build_stats_context", return_value=None),
+        patch(
+            "valocoach.cli.commands.coach.stream_completion",
+            return_value=_stream(["ok"]),
+        ),
+        patch("valocoach.cli.commands.coach.display.stream_to_panel", return_value="ok"),
+        patch("valocoach.cli.commands.coach.display.console"),
+        # Force an exception inside the staleness check
+        patch(_STALENESS_FN, side_effect=RuntimeError("db crashed")),
+    ):
+        result = run_coach("what's the current meta?", with_stats=False)
+
+    # Coach must still return a result despite the staleness error
+    assert result == "ok"
+
+
+def test_staleness_warning_shows_days_since_last_check() -> None:
+    """Stale warning includes the number of days since the last check."""
+    with patch(_STALENESS_FN, return_value=35.0):
+        prints, _ = _run_coach_meta("meta tier list?")
+
+    combined = " ".join(prints)
+    assert "35" in combined  # "35d since last check"
+
+
 def test_build_stats_context_returns_string_when_data_present() -> None:
     """data with non-empty rows → build_stats_context returns formatted string.
 
@@ -948,3 +1080,136 @@ def test_build_stats_context_returns_string_when_data_present() -> None:
     assert isinstance(result, str)
     assert "PLAYER CONTEXT" in result
     assert "Yoursaviour01" in result
+
+
+# ---------------------------------------------------------------------------
+# Last-match context injection in run_coach  (Phase G)
+# ---------------------------------------------------------------------------
+
+_GET_LAST_MATCH = "valocoach.coach.session_manager.get_last_match"
+_FMT_LAST_MATCH = "valocoach.coach.session_manager.format_last_match_context"
+
+
+def _fake_last_match_info():
+    """Return a minimal LastMatchInfo-like MagicMock for patching."""
+    from valocoach.coach.session_manager import LastMatchInfo
+
+    return LastMatchInfo(
+        match_id="m-test",
+        map_name="Ascent",
+        agent="Jett",
+        won=True,
+        own_score=13,
+        opp_score=7,
+        kills=18,
+        deaths=8,
+        assists=4,
+        acs=225,
+        hs_pct=28.0,
+        adr=142.0,
+        started_at="2026-05-06T20:00:00",
+    )
+
+
+def test_run_coach_injects_last_match_into_user_message() -> None:
+    """When get_last_match returns a result, the formatted string lands in
+    the user_message kwarg seen by stream_completion."""
+    from valocoach.coach.session_manager import format_last_match_context
+
+    lm = _fake_last_match_info()
+    expected_line = format_last_match_context(lm)
+
+    with (
+        patch("valocoach.cli.commands.coach.load_settings", return_value=_settings()),
+        patch("valocoach.cli.commands.coach.build_stats_context", return_value=None),
+        patch(
+            "valocoach.cli.commands.coach.stream_completion",
+            return_value=_stream(["ok"]),
+        ) as mock_stream,
+        patch("valocoach.cli.commands.coach.display.stream_to_panel", return_value="ok"),
+        # Patch inside the session_manager module (where get_last_match lives)
+        patch(_GET_LAST_MATCH, return_value=lm),
+    ):
+        run_coach("push A site", agent="Jett", with_stats=True)
+
+    user_msg = mock_stream.call_args.kwargs["user_message"]
+    assert expected_line in user_msg
+
+
+def test_run_coach_last_match_precedes_situation_in_user_message() -> None:
+    """LAST MATCH line must appear before 'Situation:' in the user message."""
+    lm = _fake_last_match_info()
+
+    with (
+        patch("valocoach.cli.commands.coach.load_settings", return_value=_settings()),
+        patch("valocoach.cli.commands.coach.build_stats_context", return_value=None),
+        patch(
+            "valocoach.cli.commands.coach.stream_completion",
+            return_value=_stream(["ok"]),
+        ) as mock_stream,
+        patch("valocoach.cli.commands.coach.display.stream_to_panel", return_value="ok"),
+        patch(_GET_LAST_MATCH, return_value=lm),
+    ):
+        run_coach("push A site", agent="Jett", with_stats=True)
+
+    user_msg = mock_stream.call_args.kwargs["user_message"]
+    lm_idx = user_msg.index("LAST MATCH")
+    sit_idx = user_msg.index("Situation:")
+    assert lm_idx < sit_idx
+
+
+def test_run_coach_last_match_absent_when_get_returns_none() -> None:
+    """When get_last_match returns None (no data), user message has no LAST MATCH block."""
+    with (
+        patch("valocoach.cli.commands.coach.load_settings", return_value=_settings()),
+        patch("valocoach.cli.commands.coach.build_stats_context", return_value=None),
+        patch(
+            "valocoach.cli.commands.coach.stream_completion",
+            return_value=_stream(["ok"]),
+        ) as mock_stream,
+        patch("valocoach.cli.commands.coach.display.stream_to_panel", return_value="ok"),
+        patch(_GET_LAST_MATCH, return_value=None),
+    ):
+        run_coach("push A site", with_stats=True)
+
+    user_msg = mock_stream.call_args.kwargs["user_message"]
+    assert "LAST MATCH" not in user_msg
+
+
+def test_run_coach_last_match_skipped_when_with_stats_false() -> None:
+    """with_stats=False → get_last_match is never called."""
+    called: list = []
+
+    with (
+        patch("valocoach.cli.commands.coach.load_settings", return_value=_settings()),
+        patch("valocoach.cli.commands.coach.build_stats_context", return_value=None),
+        patch(
+            "valocoach.cli.commands.coach.stream_completion",
+            return_value=_stream(["ok"]),
+        ),
+        patch("valocoach.cli.commands.coach.display.stream_to_panel", return_value="ok"),
+        patch(_GET_LAST_MATCH, side_effect=lambda *a, **k: called.append(1) or None),
+    ):
+        run_coach("push A site", with_stats=False)
+
+    assert called == [], "get_last_match should not be called when with_stats=False"
+
+
+def test_run_coach_last_match_non_fatal() -> None:
+    """Exception in last-match fetch must not crash the coaching turn."""
+    with (
+        patch("valocoach.cli.commands.coach.load_settings", return_value=_settings()),
+        patch("valocoach.cli.commands.coach.build_stats_context", return_value=None),
+        patch(
+            "valocoach.cli.commands.coach.stream_completion",
+            return_value=_stream(["ok"]),
+        ),
+        patch(
+            "valocoach.cli.commands.coach.display.stream_to_panel",
+            return_value="the response",
+        ),
+        patch(_GET_LAST_MATCH, side_effect=RuntimeError("db exploded")),
+    ):
+        result = run_coach("push A site", with_stats=True)
+
+    assert result == "the response"  # coach completed despite the error

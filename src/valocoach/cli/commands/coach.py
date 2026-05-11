@@ -10,6 +10,13 @@ from valocoach.core.parser import Situation, parse_situation
 from valocoach.llm.provider import stream_completion
 from valocoach.retrieval import format_agent_context, format_map_context
 
+# Intents that rely on current patch meta data — show a staleness warning
+# when these are used and the last patch check is older than the threshold.
+_META_SENSITIVE_INTENTS: frozenset[str] = frozenset({"meta", "agent_info"})
+
+# Days after which patch meta data is considered potentially stale.
+_PATCH_STALE_THRESHOLD_DAYS: int = 21
+
 
 def _build_system_prompt(
     base_prompt: str,
@@ -142,9 +149,25 @@ def run_coach(
     if stats_context is not None:
         display.info("Personalised with your recent stats.")
 
-    # User message: structured metadata block (when any field was extracted)
-    # followed by the player's verbatim situation text.  The LLM gets both
-    # the parser's signal and the original wording.
+    # Fetch last-match context — a compact one-liner injected into the user
+    # message so the LLM can reference the player's most recent game without
+    # needing to ask.  Non-fatal: any error silently skips this block.
+    last_match_context: str | None = None
+    if with_stats:
+        try:
+            from valocoach.coach.session_manager import (
+                format_last_match_context,
+                get_last_match,
+            )
+
+            lm = get_last_match(settings)
+            if lm is not None:
+                last_match_context = format_last_match_context(lm)
+        except Exception:
+            pass  # last-match context is advisory — never crash the coaching turn
+
+    # User message: structured metadata block (when any field was extracted),
+    # followed by last-match context (when available), then the verbatim situation.
     #
     # Build the metadata block from resolved fields — CLI flags (agent, map_,
     # side) take precedence over the parser, so if the user passed --agent Jett
@@ -164,6 +187,8 @@ def run_coach(
     metadata_block = resolved_display.to_metadata_block()
     if metadata_block:
         user_msg_parts.append(metadata_block)
+    if last_match_context:
+        user_msg_parts.append(last_match_context)
     user_msg_parts.append(f"Situation: {situation}")
     user_msg = "\n\n".join(user_msg_parts)
 
@@ -193,5 +218,27 @@ def run_coach(
         display.error(f"LLM call failed: {e}")
         display.warn("Check Ollama is running: `ollama list`")
         raise
+
+    # ── Patch-staleness warning ─────────────────────────────────────────────
+    # Only shown for intents that specifically draw on current patch meta data.
+    # Non-fatal: any error inside get_patch_staleness_days returns None, which
+    # is treated as "never checked" → warning fires to encourage a refresh.
+    if intent in _META_SENSITIVE_INTENTS:
+        try:
+            from valocoach.retrieval.patch_tracker import get_patch_staleness_days
+
+            stale_days = get_patch_staleness_days(settings.data_dir)
+            if stale_days is None or stale_days > _PATCH_STALE_THRESHOLD_DAYS:
+                age_str = (
+                    "never checked"
+                    if stale_days is None
+                    else f"{stale_days:.0f}d since last check"
+                )
+                display.console.print(
+                    f"[dim]⚠ Meta info may be outdated ({age_str}) — "
+                    "run [cyan]valocoach patch --check[/cyan] to refresh.[/dim]"
+                )
+        except Exception:
+            pass  # staleness check is advisory — never crash the coaching turn
 
     return response_text or None

@@ -15,8 +15,8 @@ from io import StringIO
 
 from rich.console import Console
 
-from valocoach.cli.formatter import _PRIORITY_ICON, render_coaching_sessions, render_open_notes
-from valocoach.coach.session_manager import NoteInfo, SessionInfo
+from valocoach.cli.formatter import _PRIORITY_ICON, render_coaching_sessions, render_open_notes, render_rank_trend
+from valocoach.coach.session_manager import MMRHistoryInfo, NoteInfo, SessionInfo
 
 
 # ---------------------------------------------------------------------------
@@ -29,6 +29,23 @@ def _console() -> tuple[Console, StringIO]:
     buf = StringIO()
     con = Console(file=buf, highlight=False, no_color=True, width=120)
     return con, buf
+
+
+def _mmr(
+    *,
+    tier_patched: str = "Gold II",
+    rr: int = 45,
+    elo: int = 1245,
+    mmr_change: int | None = 25,
+    recorded_at: str = "2026-05-06T10:00:00",
+) -> MMRHistoryInfo:
+    return MMRHistoryInfo(
+        tier_patched=tier_patched,
+        rr=rr,
+        elo=elo,
+        mmr_change=mmr_change,
+        recorded_at=recorded_at,
+    )
 
 
 def _session(
@@ -255,3 +272,132 @@ class TestPriorityIcon:
     def test_icons_are_distinct(self):
         values = list(_PRIORITY_ICON.values())
         assert len(values) == len(set(values)), "Priority icons should all be distinct"
+
+
+# ===========================================================================
+# render_rank_trend
+# ===========================================================================
+
+
+class TestRenderRankTrend:
+    def test_empty_list_produces_no_output(self):
+        con, buf = _console()
+        render_rank_trend(con, [])
+        assert buf.getvalue() == ""
+
+    def test_single_snapshot_produces_no_output(self):
+        """Need at least 2 snapshots for a trend."""
+        con, buf = _console()
+        render_rank_trend(con, [_mmr()])
+        assert buf.getvalue() == ""
+
+    def test_two_snapshots_produces_output(self):
+        con, buf = _console()
+        render_rank_trend(con, [_mmr(elo=1300, tier_patched="Plat I"), _mmr(elo=1200, tier_patched="Gold II")])
+        assert buf.getvalue() != ""
+
+    def test_shows_tier_range_when_different(self):
+        """oldest → newest tier range is rendered."""
+        con, buf = _console()
+        render_rank_trend(
+            con,
+            [
+                _mmr(tier_patched="Plat I", elo=1400),   # newest
+                _mmr(tier_patched="Gold II", elo=1200),  # oldest
+            ],
+        )
+        out = buf.getvalue()
+        assert "Gold II" in out
+        assert "Plat I" in out
+
+    def test_shows_same_tier_once_when_no_change(self):
+        """When oldest and newest tiers are identical, no arrow between them."""
+        con, buf = _console()
+        render_rank_trend(
+            con,
+            [
+                _mmr(tier_patched="Gold II", elo=1260),
+                _mmr(tier_patched="Gold II", elo=1245),
+            ],
+        )
+        out = buf.getvalue()
+        assert "Gold II" in out
+        # Should not show "Gold II → Gold II" (i.e. tier name appears once)
+        assert out.count("Gold II") == 1
+
+    def test_positive_elo_delta_shown(self):
+        con, buf = _console()
+        render_rank_trend(
+            con,
+            [
+                _mmr(elo=1300),  # newest
+                _mmr(elo=1200),  # oldest
+            ],
+        )
+        out = buf.getvalue()
+        assert "+100" in out
+
+    def test_negative_elo_delta_shown(self):
+        con, buf = _console()
+        render_rank_trend(
+            con,
+            [
+                _mmr(elo=1100),  # newest
+                _mmr(elo=1300),  # oldest
+            ],
+        )
+        out = buf.getvalue()
+        assert "-200" in out
+
+    def test_snapshot_count_shown(self):
+        con, buf = _console()
+        history = [_mmr(elo=1200 + i * 10) for i in range(5)]
+        render_rank_trend(con, history)
+        assert "5" in buf.getvalue()
+
+    def test_sparkline_contains_up_arrow_for_gain(self):
+        """Positive mmr_change should produce a ▲ in the sparkline."""
+        con, buf = _console()
+        render_rank_trend(
+            con,
+            [
+                _mmr(elo=1300, mmr_change=20),  # newest
+                _mmr(elo=1200, mmr_change=15),  # oldest
+            ],
+        )
+        assert "▲" in buf.getvalue()
+
+    def test_sparkline_contains_down_arrow_for_loss(self):
+        """Negative mmr_change should produce a ▼ in the sparkline."""
+        con, buf = _console()
+        render_rank_trend(
+            con,
+            [
+                _mmr(elo=1100, mmr_change=-25),  # newest
+                _mmr(elo=1200, mmr_change=-15),  # oldest
+            ],
+        )
+        assert "▼" in buf.getvalue()
+
+    def test_sparkline_handles_none_mmr_change(self):
+        """None mmr_change should not raise — renders as dot."""
+        con, buf = _console()
+        render_rank_trend(
+            con,
+            [
+                _mmr(elo=1300, mmr_change=None),
+                _mmr(elo=1200, mmr_change=None),
+            ],
+        )
+        out = buf.getvalue()
+        assert "·" in out  # dot placeholder
+
+    def test_zero_elo_delta_shown(self):
+        """Same ELO in both snapshots shows zero delta."""
+        con, buf = _console()
+        render_rank_trend(
+            con,
+            [_mmr(elo=1200), _mmr(elo=1200)],
+        )
+        out = buf.getvalue()
+        assert "0" in out

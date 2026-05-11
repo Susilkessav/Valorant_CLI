@@ -693,3 +693,109 @@ def test_run_profile_invalid_limit_raises(tmp_path) -> None:
         pytest.raises(typer.BadParameter),
     ):
         run_profile(limit=0)
+
+
+# ---------------------------------------------------------------------------
+# Rank-trend section (Phase C wiring)
+# ---------------------------------------------------------------------------
+
+
+def test_run_profile_rank_trend_rendered_when_history_present(tmp_path) -> None:
+    """When get_mmr_trend returns 2+ snapshots, render_rank_trend fires."""
+    from valocoach.coach.session_manager import MMRHistoryInfo
+
+    fake_settings = _fake_settings(tmp_path)
+    rows = [_mp(match_id=f"m-{i}") for i in range(5)]
+    data = PlayerData(player=_player(), rows=rows, full_matches=[])
+
+    history = [
+        MMRHistoryInfo(tier_patched="Plat I", rr=20, elo=1420, mmr_change=20, recorded_at="2026-05-06"),
+        MMRHistoryInfo(tier_patched="Gold II", rr=60, elo=1260, mmr_change=-10, recorded_at="2026-05-01"),
+    ]
+
+    con = _capture_console()
+    with (
+        patch("valocoach.cli.commands.profile.load_settings", return_value=fake_settings),
+        patch("valocoach.cli.commands.profile.load_player_data_async", new=AsyncMock(return_value=data)),
+        patch("valocoach.cli.commands.profile.get_mmr_trend", return_value=history),
+        patch("valocoach.cli.commands.profile.list_coaching_sessions", return_value=[]),
+        patch("valocoach.cli.commands.profile.list_open_notes", return_value=[]),
+    ):
+        run_profile(name="Tester", tag="NA1", console=con)
+
+    out = con.file.getvalue()
+    # render_rank_trend writes "Rank trend" and the tier names
+    assert "Rank trend" in out
+    assert "Plat I" in out or "Gold II" in out
+
+
+def test_run_profile_rank_trend_skipped_when_no_history(tmp_path) -> None:
+    """When get_mmr_trend returns [], the rank trend block is absent."""
+    fake_settings = _fake_settings(tmp_path)
+    rows = [_mp(match_id=f"m-{i}") for i in range(5)]
+    data = PlayerData(player=_player(), rows=rows, full_matches=[])
+
+    con = _capture_console()
+    with (
+        patch("valocoach.cli.commands.profile.load_settings", return_value=fake_settings),
+        patch("valocoach.cli.commands.profile.load_player_data_async", new=AsyncMock(return_value=data)),
+        patch("valocoach.cli.commands.profile.get_mmr_trend", return_value=[]),
+        patch("valocoach.cli.commands.profile.list_coaching_sessions", return_value=[]),
+        patch("valocoach.cli.commands.profile.list_open_notes", return_value=[]),
+    ):
+        run_profile(name="Tester", tag="NA1", console=con)
+
+    assert "Rank trend" not in con.file.getvalue()
+
+
+def test_run_profile_rank_trend_skipped_with_single_snapshot(tmp_path) -> None:
+    """A single MMR snapshot produces no trend output (needs 2+ to compare)."""
+    from valocoach.coach.session_manager import MMRHistoryInfo
+
+    fake_settings = _fake_settings(tmp_path)
+    rows = [_mp(match_id=f"m-{i}") for i in range(5)]
+    data = PlayerData(player=_player(), rows=rows, full_matches=[])
+
+    history = [
+        MMRHistoryInfo(tier_patched="Gold II", rr=55, elo=1255, mmr_change=None, recorded_at="2026-05-06"),
+    ]
+
+    con = _capture_console()
+    with (
+        patch("valocoach.cli.commands.profile.load_settings", return_value=fake_settings),
+        patch("valocoach.cli.commands.profile.load_player_data_async", new=AsyncMock(return_value=data)),
+        patch("valocoach.cli.commands.profile.get_mmr_trend", return_value=history),
+        patch("valocoach.cli.commands.profile.list_coaching_sessions", return_value=[]),
+        patch("valocoach.cli.commands.profile.list_open_notes", return_value=[]),
+    ):
+        run_profile(name="Tester", tag="NA1", console=con)
+
+    assert "Rank trend" not in con.file.getvalue()
+
+
+def test_run_profile_rank_trend_elo_delta_shown(tmp_path) -> None:
+    """ELO delta is visible in the rank trend line."""
+    from valocoach.coach.session_manager import MMRHistoryInfo
+
+    fake_settings = _fake_settings(tmp_path)
+    rows = [_mp(match_id=f"m-{i}") for i in range(5)]
+    data = PlayerData(player=_player(), rows=rows, full_matches=[])
+
+    history = [
+        MMRHistoryInfo(tier_patched="Plat I", rr=10, elo=1410, mmr_change=50, recorded_at="2026-05-06"),
+        MMRHistoryInfo(tier_patched="Gold III", rr=80, elo=1280, mmr_change=30, recorded_at="2026-04-20"),
+    ]
+
+    con = _capture_console()
+    with (
+        patch("valocoach.cli.commands.profile.load_settings", return_value=fake_settings),
+        patch("valocoach.cli.commands.profile.load_player_data_async", new=AsyncMock(return_value=data)),
+        patch("valocoach.cli.commands.profile.get_mmr_trend", return_value=history),
+        patch("valocoach.cli.commands.profile.list_coaching_sessions", return_value=[]),
+        patch("valocoach.cli.commands.profile.list_open_notes", return_value=[]),
+    ):
+        run_profile(name="Tester", tag="NA1", console=con)
+
+    out = con.file.getvalue()
+    # delta = 1410 - 1280 = +130
+    assert "+130" in out

@@ -36,6 +36,7 @@ Rich renderers
 - ``render_round_stats``       — KAST / clutch / trade / side split  (stats command)
 - ``render_identity_panel``    — player identity panel  (profile command)
 - ``render_summary_card``      — compact "last N matches" table  (profile command)
+- ``render_rank_trend``         — ELO/rank progression line  (profile command)
 - ``render_coaching_sessions`` — recent coaching sessions table  (profile command)
 - ``render_open_notes``        — open coaching notes table  (profile command)
 """
@@ -554,6 +555,70 @@ def render_summary_card(
     )
     console.print(table)
     return any_warn
+
+
+# ---------------------------------------------------------------------------
+# Rank trend renderer  (profile command)
+# ---------------------------------------------------------------------------
+
+
+def render_rank_trend(
+    console: Console,
+    history: list,  # list[MMRHistoryInfo] — newest first
+) -> None:
+    """Render a compact ELO / rank progression line.
+
+    Silently skipped when fewer than 2 snapshots are available — a single
+    snapshot gives no trend information worth showing.
+
+    Args:
+        console: Rich Console to write to.
+        history: Newest-first list of
+                 :class:`~valocoach.coach.session_manager.MMRHistoryInfo`
+                 objects, as returned by ``get_mmr_trend``.
+    """
+    if len(history) < 2:
+        return
+
+    newest = history[0]   # most recent snapshot
+    oldest = history[-1]  # oldest in the window
+
+    elo_delta = newest.elo - oldest.elo
+    delta_str = (f"+{elo_delta}" if elo_delta >= 0 else str(elo_delta)) + " elo"
+    if elo_delta > 0:
+        delta_markup = f"[green]{delta_str}[/green]"
+        arrow = "[green]↑[/green]"
+    elif elo_delta < 0:
+        delta_markup = f"[red]{delta_str}[/red]"
+        arrow = "[red]↓[/red]"
+    else:
+        delta_markup = f"[dim]{delta_str}[/dim]"
+        arrow = "[dim]→[/dim]"
+
+    # Text sparkline from mmr_change values (oldest → newest, capped at 15 chars).
+    spark_chars: list[str] = []
+    for h in reversed(history):  # reversed: oldest → newest
+        if h.mmr_change is None:
+            spark_chars.append("·")
+        elif h.mmr_change > 0:
+            spark_chars.append("▲")
+        elif h.mmr_change < 0:
+            spark_chars.append("▼")
+        else:
+            spark_chars.append("─")
+    sparkline = "".join(spark_chars[-15:])
+
+    n = len(history)
+    rank_range = (
+        f"{oldest.tier_patched}"
+        if oldest.tier_patched == newest.tier_patched
+        else f"{oldest.tier_patched} → {newest.tier_patched}"
+    )
+
+    console.print(
+        f"[bold]Rank trend[/bold] [dim]({n} snapshot(s))[/dim]  "
+        f"{rank_range}  {delta_markup}  {arrow}  [dim]{sparkline}[/dim]"
+    )
 
 
 # ---------------------------------------------------------------------------

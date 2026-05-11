@@ -118,7 +118,7 @@ def sync(
 
     settings = load_settings()
 
-    async def _run() -> None:
+    async def _run():
         await ensure_db(settings.data_dir / "valocoach.db")
 
         try:
@@ -141,7 +141,28 @@ def sync(
         if not result.ok:
             display.warn(f"Sync finished with errors: {result.error}")
 
-    asyncio.run(_run())
+        return result
+
+    result = asyncio.run(_run())
+
+    # ── Rank delta (shown when new matches were stored and MMR history exists) ──
+    # Non-fatal: silently skipped when the player has no MMR history or the
+    # DB is empty — just a nice bonus, never blocks the happy path.
+    if result is not None and result.matches_new > 0:
+        try:
+            from valocoach.coach.session_manager import get_mmr_trend
+
+            history = get_mmr_trend(settings, result.puuid, limit=2)
+            if len(history) >= 2:
+                elo_delta = history[0].elo - history[1].elo
+                delta_str = f"+{elo_delta}" if elo_delta >= 0 else str(elo_delta)
+                arrow = "↑" if elo_delta > 0 else ("↓" if elo_delta < 0 else "→")
+                display.info(
+                    f"Rank snapshot: {history[0].tier_patched} ({history[0].rr} RR)  "
+                    f"[dim]{arrow} {delta_str} elo since last sync[/dim]"
+                )
+        except Exception:
+            pass
 
 
 @app.command()
@@ -243,12 +264,153 @@ def patch(
     run_patch(check=check)
 
 
+@app.command("meta-refresh")
+def meta_refresh(
+    force: bool = typer.Option(
+        False,
+        "--force",
+        "-f",
+        help="Run the full sync even when no new patch is detected.",
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Simulate all steps but do not write meta.json or re-ingest.",
+    ),
+    watch: bool = typer.Option(
+        False,
+        "--watch",
+        "-w",
+        help="Run continuously, checking for a new patch every 24 hours.",
+    ),
+    install_cron: bool = typer.Option(
+        False,
+        "--install-cron",
+        help="Add a daily crontab entry that runs meta-refresh automatically.",
+    ),
+    youtube: list[str] = typer.Option(
+        [],
+        "--youtube",
+        "-y",
+        help="YouTube video ID or URL to ingest as supplemental meta context. Repeatable.",
+    ),
+) -> None:
+    """Auto-update meta.json when a new patch drops.
+
+    Detects the current patch via the HenrikDev API, scrapes official patch
+    notes + Diamond+/pro pick-rate stats, regenerates the tier list with the
+    LLM, writes meta.json, and re-embeds everything into the vector store.
+
+    \b
+    Examples:
+      valocoach meta-refresh               # run once (only fires on new patch)
+      valocoach meta-refresh --force       # force update regardless of patch
+      valocoach meta-refresh --dry-run     # preview without writing anything
+      valocoach meta-refresh --watch       # run every 24 h in the foreground
+      valocoach meta-refresh --install-cron  # register daily OS-level cron job
+    """
+    from valocoach.cli.commands.meta_refresh import run_meta_refresh
+
+    run_meta_refresh(
+        force=force,
+        dry_run=dry_run,
+        watch=watch,
+        install_cron=install_cron,
+        youtube=list(youtube) or None,
+    )
+
+
 @app.command()
 def interactive() -> None:
     """Start an interactive multi-turn coaching session (REPL)."""
     from valocoach.cli.commands.interactive import run_interactive
 
     run_interactive()
+
+
+notes_app = typer.Typer(help="Manage coaching notes (list, add, resolve).")
+app.add_typer(notes_app, name="notes")
+
+
+@notes_app.callback(invoke_without_command=True)
+def notes_default(ctx: typer.Context) -> None:
+    """Show open coaching notes (default when no sub-command is given)."""
+    if ctx.invoked_subcommand is None:
+        from valocoach.cli.commands.notes import run_notes_list
+
+        run_notes_list()
+
+
+@notes_app.command("list")
+def notes_list() -> None:
+    """List all open (unresolved) coaching notes."""
+    from valocoach.cli.commands.notes import run_notes_list
+
+    run_notes_list()
+
+
+@notes_app.command("add")
+def notes_add(
+    text: str = typer.Argument(..., help="Note text, e.g. 'work on crossfire at A long'."),
+    priority: int = typer.Option(
+        2,
+        "--priority",
+        "-p",
+        help="Note priority: 1 (high), 2 (medium, default), 3 (low).",
+    ),
+) -> None:
+    """Add a coaching note.  Category is auto-inferred from the note text."""
+    from valocoach.cli.commands.notes import run_notes_add
+
+    run_notes_add(text, priority=priority)
+
+
+@notes_app.command("resolve")
+def notes_resolve(
+    note_id: int = typer.Argument(..., help="ID of the note to resolve."),
+) -> None:
+    """Mark a coaching note as resolved."""
+    from valocoach.cli.commands.notes import run_notes_resolve
+
+    run_notes_resolve(note_id)
+
+
+sessions_app = typer.Typer(help="Manage coaching sessions (list, close).")
+app.add_typer(sessions_app, name="sessions")
+
+
+@sessions_app.callback(invoke_without_command=True)
+def sessions_default(ctx: typer.Context) -> None:
+    """Show recent coaching sessions (default when no sub-command is given)."""
+    if ctx.invoked_subcommand is None:
+        from valocoach.cli.commands.sessions import run_sessions_list
+
+        run_sessions_list()
+
+
+@sessions_app.command("list")
+def sessions_list(
+    limit: int = typer.Option(
+        20,
+        "--limit",
+        "-l",
+        help="Number of recent sessions to show (newest first).",
+    ),
+) -> None:
+    """List recent coaching sessions."""
+    from valocoach.cli.commands.sessions import run_sessions_list
+
+    run_sessions_list(limit=limit)
+
+
+@sessions_app.command("close")
+def sessions_close(
+    session_id: int = typer.Argument(..., help="ID of the session to close."),
+) -> None:
+    """Close (end) an open coaching session."""
+    from valocoach.cli.commands.sessions import run_sessions_close
+
+    run_sessions_close(session_id)
 
 
 config_app = typer.Typer(help="Manage configuration")
