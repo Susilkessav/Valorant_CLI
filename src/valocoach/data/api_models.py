@@ -169,11 +169,11 @@ class PlayerBehavior(_Base):
     populate_by_name=True is inherited from _Base, so no override needed.
     """
 
-    afk_rounds: int = Field(
+    afk_rounds: float = Field(
         default=0,
         validation_alias=AliasChoices("afk_rounds", "afkRounds"),
     )
-    rounds_in_spawn: int = Field(
+    rounds_in_spawn: float = Field(
         default=0,
         validation_alias=AliasChoices(
             "rounds_in_spawn",
@@ -239,9 +239,18 @@ class MatchTeams(_Base):
 class KillAssistant(_Base):
     """One assistant credit within a kill event."""
 
-    puuid: str
-    team: str | None = None
-    display_name: str | None = None
+    puuid: str = Field(
+        default="",
+        validation_alias=AliasChoices("puuid", "assistant_puuid"),
+    )
+    team: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("team", "assistant_team"),
+    )
+    display_name: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("display_name", "assistant_display_name"),
+    )
 
 
 class KillEvent(_Base):
@@ -273,7 +282,10 @@ class BombEvent(_Base):
 class RoundPlayerStats(_Base):
     """Per-player breakdown for a single round."""
 
-    puuid: str
+    puuid: str = Field(
+        default="",
+        validation_alias=AliasChoices("puuid", "player_puuid"),
+    )
     kills: int = 0
     damage: int = 0
     score: int = 0

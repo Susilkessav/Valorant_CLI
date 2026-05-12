@@ -1,6 +1,17 @@
-"""`valocoach profile` — player identity + compact recent-performance card."""
+"""`valocoach profile` — player identity + compact recent-performance card.
+
+Supports two modes:
+  1. **Local profile** (default) — renders from DB-synced match history.
+     Full stats, round analysis, coaching notes.
+  2. **Live lookup** — when ``--name``/``--tag`` targets a player not in the
+     local DB, fetches account + MMR + last 10 matches from the HenrikDev
+     API and renders an ephemeral card.  Nothing is stored; data lives only
+     in memory for the duration of the command.
+"""
 
 from __future__ import annotations
+
+import asyncio
 
 import typer
 from rich.console import Console
@@ -10,6 +21,8 @@ from valocoach.cli.formatter import (
     render_breakdown,
     render_coaching_sessions,
     render_identity_panel,
+    render_lookup_identity_panel,
+    render_lookup_summary,
     render_open_notes,
     render_rank_trend,
     render_round_stats,
@@ -83,6 +96,14 @@ def run_profile(
     )
 
     if data is None:
+        if name is not None and tag is not None:
+            run_lookup(
+                name=resolved_name,
+                tag=resolved_tag,
+                region=settings.riot_region,
+                console=con,
+            )
+            return
         display.error_with_hint(
             f"No local data for {resolved_name}#{resolved_tag}.",
             "Run: valocoach sync",
@@ -146,3 +167,102 @@ def run_profile(
             if notes:
                 con.print()
                 render_open_notes(con, notes)
+
+
+# ---------------------------------------------------------------------------
+# Live lookup — ephemeral, no DB persistence
+# ---------------------------------------------------------------------------
+
+
+def run_lookup(
+    *,
+    name: str,
+    tag: str,
+    region: str = "na",
+    console: Console | None = None,
+) -> None:
+    """Fetch a player's profile from the HenrikDev API and render it ephemerally."""
+    from valocoach.core.exceptions import APIError, ConfigError
+    from valocoach.data.api_client import HenrikClient
+    from valocoach.stats.calculator import (
+        compute_per_agent_from_api,
+        compute_stats_from_api,
+    )
+
+    con = console or display.console
+    settings = load_settings()
+
+    async def _fetch():
+        async with HenrikClient(settings) as client:
+            snapshot = await client.fetch_player_snapshot(region, name, tag)
+            try:
+                mmr_history = await client.get_mmr_history(region, name, tag)
+            except Exception:
+                mmr_history = []
+            return (*snapshot, mmr_history)
+
+    display.info(f"Looking up [heading]{name}#{tag}[/heading] via API…")
+
+    try:
+        account, mmr, matches, mmr_history = asyncio.run(_fetch())
+    except ConfigError as exc:
+        display.error(str(exc))
+        raise typer.Exit(1) from exc
+    except APIError as exc:
+        display.error_with_hint(
+            f"API lookup failed for {name}#{tag}: {exc}",
+            "Check the name/tag spelling and your API key.",
+        )
+        raise typer.Exit(1) from exc
+
+    stats = compute_stats_from_api(matches, name, tag)
+    per_agent = compute_per_agent_from_api(matches, name, tag)
+
+    # Normalize API MMRHistoryEntry → shape render_rank_trend expects
+    from valocoach.coach.session_manager import MMRHistoryInfo
+
+    rank_history = [
+        MMRHistoryInfo(
+            tier_patched=h.currenttierpatched,
+            rr=h.ranking_in_tier,
+            elo=h.elo,
+            mmr_change=h.mmr_change_to_last_game or None,
+            recorded_at=h.date or "",
+        )
+        for h in mmr_history
+    ]
+
+    with display.command_frame("Player Lookup", subtitle=f"{name}#{tag}", con=con):
+        # Identity panel
+        render_lookup_identity_panel(con, account, mmr)
+
+        # Rank trend
+        if rank_history:
+            display.render_section(con, "Rank Progression")
+            render_rank_trend(con, rank_history)
+
+        # Summary card
+        display.render_section(con, f"Last {stats.matches} Matches")
+        any_warn = render_lookup_summary(con, stats)
+
+        # Top agents
+        if len(per_agent) >= 2:
+            display.render_section(con, "Top Agents")
+            any_warn |= render_breakdown(
+                con,
+                title="Top Agents",
+                group_col="Agent",
+                rows=per_agent,
+                top_n=TOP_AGENTS,
+            )
+
+        if any_warn:
+            con.print()
+            render_warn_legend(con)
+
+        # Footer
+        con.print()
+        con.print(
+            "[muted]Live lookup — data is ephemeral and not stored locally. "
+            "Free-tier API limits results to 10 matches.[/muted]"
+        )

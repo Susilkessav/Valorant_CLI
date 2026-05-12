@@ -800,3 +800,327 @@ def test_run_profile_rank_trend_elo_delta_shown(tmp_path) -> None:
     out = con.file.getvalue()
     # delta = 1410 - 1280 = +130
     assert "+130" in out
+
+
+# ---------------------------------------------------------------------------
+# Phase D — live lookup (ephemeral, no DB)
+# ---------------------------------------------------------------------------
+
+
+def _api_match(
+    *,
+    name: str = "TargetPlayer",
+    tag: str = "TG99",
+    team: str = "Blue",
+    won: bool = True,
+    rounds_played: int = 20,
+    score: int = 5000,
+    kills: int = 20,
+    deaths: int = 10,
+    assists: int = 5,
+    headshots: int = 8,
+    bodyshots: int = 50,
+    legshots: int = 2,
+    damage_dealt: int = 3000,
+):
+    """Build a minimal api_models.MatchData for testing."""
+    from valocoach.data.api_models import (
+        MatchData,
+        MatchMetadata,
+        MatchPlayer as ApiMatchPlayer,
+        MatchPlayers,
+        MatchTeams,
+        PlayerStats as ApiPlayerStats,
+        TeamResult,
+    )
+
+    player = ApiMatchPlayer(
+        puuid="p-target",
+        name=name,
+        tag=tag,
+        team=team,
+        character="Jett",
+        stats=ApiPlayerStats(
+            score=score,
+            kills=kills,
+            deaths=deaths,
+            assists=assists,
+            headshots=headshots,
+            bodyshots=bodyshots,
+            legshots=legshots,
+            damage_dealt=damage_dealt,
+        ),
+    )
+
+    red_won = team == "Red" and won
+    blue_won = team == "Blue" and won
+
+    return MatchData(
+        metadata=MatchMetadata(
+            match_id="m-api-1",
+            map_name="Ascent",
+            queue_id="competitive",
+            rounds_played=rounds_played,
+        ),
+        players=MatchPlayers(all_players=[player]),
+        teams=MatchTeams(
+            red=TeamResult(has_won=red_won),
+            blue=TeamResult(has_won=blue_won),
+        ),
+    )
+
+
+# ---------------------------------------------------------------------------
+# compute_stats_from_api
+# ---------------------------------------------------------------------------
+
+
+def test_compute_stats_from_api_basic() -> None:
+    from valocoach.stats.calculator import compute_stats_from_api
+
+    matches = [_api_match(), _api_match(won=False)]
+    stats = compute_stats_from_api(matches, "TargetPlayer", "TG99")
+
+    assert stats.matches == 2
+    assert stats.wins == 1
+    assert stats.losses == 1
+    assert stats.kills == 40
+    assert stats.deaths == 20
+    assert stats.kd == 2.0
+    assert stats.rounds == 40
+    assert stats.acs == 250.0  # 10000 / 40
+
+
+def test_compute_stats_from_api_case_insensitive() -> None:
+    from valocoach.stats.calculator import compute_stats_from_api
+
+    matches = [_api_match(name="TargetPlayer", tag="TG99")]
+    stats = compute_stats_from_api(matches, "targetplayer", "tg99")
+    assert stats.matches == 1
+
+
+def test_compute_stats_from_api_empty() -> None:
+    from valocoach.stats.calculator import compute_stats_from_api
+
+    stats = compute_stats_from_api([], "Nobody", "XX")
+    assert stats.matches == 0
+    assert stats.acs == 0.0
+
+
+def test_compute_stats_from_api_player_not_in_match() -> None:
+    from valocoach.stats.calculator import compute_stats_from_api
+
+    matches = [_api_match(name="OtherPlayer", tag="OP01")]
+    stats = compute_stats_from_api(matches, "TargetPlayer", "TG99")
+    assert stats.matches == 0
+
+
+def test_compute_stats_from_api_damage_from_rounds() -> None:
+    """When player-level damage_dealt is 0, damage is summed from round data."""
+    from valocoach.data.api_models import RoundData, RoundPlayerStats
+    from valocoach.stats.calculator import compute_stats_from_api
+
+    match = _api_match(damage_dealt=0, rounds_played=2)
+    match.rounds = [
+        RoundData(
+            winning_team="Blue",
+            end_type="Elimination",
+            player_stats=[RoundPlayerStats(puuid="p-target", damage=150)],
+        ),
+        RoundData(
+            winning_team="Red",
+            end_type="Elimination",
+            player_stats=[RoundPlayerStats(puuid="p-target", damage=120)],
+        ),
+    ]
+
+    stats = compute_stats_from_api([match], "TargetPlayer", "TG99")
+    assert stats.adr == 135.0  # (150 + 120) / 2 rounds
+
+
+# ---------------------------------------------------------------------------
+# render_lookup_identity_panel
+# ---------------------------------------------------------------------------
+
+
+def test_render_lookup_identity_panel_shows_rank_and_region() -> None:
+    from valocoach.cli.formatter import render_lookup_identity_panel
+    from valocoach.data.api_models import (
+        AccountResponse,
+        CurrentRankData,
+        HighestRank,
+        MMRData as ApiMMR,
+    )
+
+    account = AccountResponse(
+        puuid="p-1", region="na", account_level=150, name="Lookup", tag="LU01",
+    )
+    mmr = ApiMMR(
+        name="Lookup",
+        tag="LU01",
+        current_data=CurrentRankData(
+            currenttierpatched="Platinum 2",
+            ranking_in_tier=45,
+            elo=1545,
+            mmr_change_to_last_game=22,
+        ),
+        highest_rank=HighestRank(patched_tier="Diamond 1", season="e8a3"),
+    )
+
+    con = _capture_console()
+    render_lookup_identity_panel(con, account, mmr)
+    out = con.file.getvalue()
+
+    assert "Lookup" in out
+    assert "LU01" in out
+    assert "Platinum 2" in out
+    assert "45 RR" in out
+    assert "Diamond 1" in out
+    assert "NA" in out
+    assert "150" in out
+    assert "+22" in out
+
+
+# ---------------------------------------------------------------------------
+# render_lookup_summary
+# ---------------------------------------------------------------------------
+
+
+def test_render_lookup_summary_shows_stats() -> None:
+    from valocoach.cli.formatter import render_lookup_summary
+    from valocoach.stats.calculator import compute_stats_from_api
+
+    matches = [_api_match() for _ in range(3)]
+    stats = compute_stats_from_api(matches, "TargetPlayer", "TG99")
+
+    con = _capture_console()
+    render_lookup_summary(con, stats)
+    out = con.file.getvalue()
+
+    assert "3 Match" in out
+    assert "250" in out  # ACS
+    assert "2.00" in out  # K/D
+
+
+def test_render_lookup_summary_returns_warn_flag() -> None:
+    from valocoach.cli.formatter import render_lookup_summary
+    from valocoach.stats.calculator import compute_stats_from_api
+
+    matches = [_api_match() for _ in range(3)]
+    stats = compute_stats_from_api(matches, "TargetPlayer", "TG99")
+
+    con = _capture_console()
+    any_warn = render_lookup_summary(con, stats)
+    assert isinstance(any_warn, bool)
+
+
+def test_render_lookup_summary_empty() -> None:
+    from valocoach.cli.formatter import render_lookup_summary
+    from valocoach.stats.calculator import _zero_stats
+
+    con = _capture_console()
+    result = render_lookup_summary(con, _zero_stats())
+    out = con.file.getvalue()
+    assert "No recent competitive matches" in out
+    assert result is False
+
+
+# ---------------------------------------------------------------------------
+# run_profile fallback to run_lookup
+# ---------------------------------------------------------------------------
+
+
+def test_compute_per_agent_from_api() -> None:
+    from valocoach.stats.calculator import compute_per_agent_from_api
+
+    matches = [
+        _api_match(name="P", tag="T"),
+        _api_match(name="P", tag="T"),
+    ]
+    # Both are Jett (default) → single agent
+    agents = compute_per_agent_from_api(matches, "P", "T")
+    assert len(agents) == 1
+    assert agents[0].agent == "Jett"
+    assert agents[0].stats.matches == 2
+
+
+def test_compute_per_agent_from_api_multiple_agents() -> None:
+    from valocoach.data.api_models import (
+        MatchData,
+        MatchMetadata,
+        MatchPlayer as ApiMatchPlayer,
+        MatchPlayers,
+        MatchTeams,
+        PlayerStats as ApiPlayerStats,
+        TeamResult,
+    )
+    from valocoach.stats.calculator import compute_per_agent_from_api
+
+    def _make(agent: str):
+        player = ApiMatchPlayer(
+            puuid="p-1", name="P", tag="T", team="Blue", character=agent,
+            stats=ApiPlayerStats(score=3000, kills=15, deaths=10, assists=3,
+                                 headshots=5, bodyshots=30, legshots=2, damage_dealt=2000),
+        )
+        return MatchData(
+            metadata=MatchMetadata(match_id="m-1", map_name="Ascent",
+                                   queue_id="competitive", rounds_played=20),
+            players=MatchPlayers(all_players=[player]),
+            teams=MatchTeams(blue=TeamResult(has_won=True)),
+        )
+
+    matches = [_make("Jett"), _make("Jett"), _make("Reyna")]
+    agents = compute_per_agent_from_api(matches, "P", "T")
+    assert len(agents) == 2
+    assert agents[0].agent == "Jett"  # sorted by matches desc
+    assert agents[0].stats.matches == 2
+    assert agents[1].agent == "Reyna"
+
+
+def test_run_profile_falls_back_to_lookup_on_db_miss(tmp_path) -> None:
+    """When --name/--tag given but no local data, profile falls back to live lookup."""
+    from valocoach.cli.commands.profile import run_profile
+    from valocoach.data.api_models import (
+        AccountResponse,
+        CurrentRankData,
+        HighestRank,
+        MMRData as ApiMMR,
+    )
+
+    fake_settings = _fake_settings(tmp_path)
+    account = AccountResponse(
+        puuid="p-ext", region="na", account_level=100, name="External", tag="EX01",
+    )
+    mmr = ApiMMR(
+        name="External",
+        tag="EX01",
+        current_data=CurrentRankData(currenttierpatched="Silver 3", ranking_in_tier=30, elo=830),
+        highest_rank=HighestRank(patched_tier="Gold 1"),
+    )
+    api_matches = [_api_match(name="External", tag="EX01")]
+
+    con = _capture_console()
+    with (
+        patch("valocoach.cli.commands.profile.load_settings", return_value=fake_settings),
+        patch("valocoach.cli.commands.profile.load_player_data", new=MagicMock(return_value=None)),
+        patch("valocoach.cli.commands.profile.asyncio") as mock_asyncio,
+    ):
+        mock_asyncio.run = MagicMock(return_value=(account, mmr, api_matches, []))
+        run_profile(name="External", tag="EX01", console=con)
+
+    out = con.file.getvalue()
+    assert "External" in out
+    assert "Silver 3" in out
+    assert "Player Lookup" in out
+
+
+def test_run_profile_no_fallback_without_explicit_name_tag(tmp_path) -> None:
+    """When no --name/--tag and DB returns None, error as before (no fallback)."""
+    fake_settings = _fake_settings(tmp_path)
+
+    with (
+        patch("valocoach.cli.commands.profile.load_settings", return_value=fake_settings),
+        patch("valocoach.cli.commands.profile.load_player_data", new=MagicMock(return_value=None)),
+        pytest.raises(click.exceptions.Exit),
+    ):
+        run_profile()  # no name/tag — uses settings identity, DB miss → error

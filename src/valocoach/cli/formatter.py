@@ -405,6 +405,109 @@ def render_identity_panel(console: Console, player: Player) -> None:
     console.print(Panel(body, title=title, border_style="border", padding=(1, 2)))
 
 
+def render_lookup_identity_panel(
+    console: Console,
+    account: object,
+    mmr: object,
+) -> None:
+    """Render identity panel from live API data — mirrors render_identity_panel."""
+    from valocoach.data.api_models import AccountResponse, MMRData as ApiMMR
+
+    if not isinstance(account, AccountResponse) or not isinstance(mmr, ApiMMR):
+        return
+
+    cd = mmr.current_data
+    hr = mmr.highest_rank
+    rank_style = _rank_style(cd.currenttierpatched)
+    peak_style = _rank_style(hr.patched_tier)
+
+    body = Table(show_header=False, box=None, pad_edge=False, padding=(0, 2))
+    body.add_column("Label", style="stat.label", width=12)
+    body.add_column("Value", style="stat.value")
+
+    rr_delta = cd.mmr_change_to_last_game
+    delta_markup = ""
+    if rr_delta and rr_delta > 0:
+        delta_markup = f"  [rank.up]{rr_delta:+d} last game[/rank.up]"
+    elif rr_delta and rr_delta < 0:
+        delta_markup = f"  [rank.down]{rr_delta:+d} last game[/rank.down]"
+
+    body.add_row(
+        "Rank",
+        f"[{rank_style}]{cd.currenttierpatched}[/{rank_style}]"
+        f"  [muted]({cd.ranking_in_tier} RR · elo {cd.elo})[/muted]{delta_markup}",
+    )
+    peak_label = hr.patched_tier
+    if hr.season:
+        peak_label += f"  [muted]({hr.season})[/muted]"
+    body.add_row("Peak", f"[{peak_style}]{peak_label}[/{peak_style}]")
+    body.add_row(
+        "Region",
+        f"{account.region.upper()}  [muted]· level {account.account_level}[/muted]",
+    )
+    if cd.old:
+        body.add_row("Status", "[warning]Rank decayed[/warning]")
+
+    title = f"[heading]{account.name}#{account.tag}[/heading]"
+    console.print(Panel(body, title=title, border_style="border", padding=(1, 2)))
+
+
+def render_lookup_summary(
+    console: Console,
+    stats: object,
+) -> bool:
+    """Render compact summary card — mirrors render_summary_card layout."""
+    from valocoach.stats.calculator import PlayerStats as CalcStats
+
+    if not isinstance(stats, CalcStats) or stats.matches == 0:
+        console.print("[muted]No recent competitive matches found.[/muted]")
+        return False
+
+    flags = reliability_flags(stats)
+    any_warn = not all(flags.values())
+
+    table = Table(
+        title=f"[heading]Last {stats.matches} Match(es)[/heading]",
+        show_header=False,
+        box=box.SIMPLE,
+        pad_edge=True,
+    )
+    table.add_column("Label", style="stat.label")
+    table.add_column("Value", justify="right", style="stat.value")
+    table.add_column("Label", style="stat.label")
+    table.add_column("Value", justify="right", style="stat.value")
+
+    table.add_row(
+        "Record",
+        warn_cell(
+            f"{stats.wins}-{stats.losses}  ({fmt_pct(stats.win_rate)})",
+            flags["win_rate"],
+        ),
+        "ACS",
+        warn_cell(f"{stats.acs:.0f}", flags["acs"]),
+    )
+    table.add_row(
+        "K/D",
+        warn_cell(f"{stats.kd:.2f}", flags["kd"]),
+        "KDA",
+        warn_cell(f"{stats.kda:.2f}", flags["kda"]),
+    )
+    table.add_row(
+        "HS%",
+        warn_cell(fmt_pct(stats.hs_pct), flags["hs_pct"]),
+        "ADR",
+        warn_cell(f"{stats.adr:.0f}", flags["adr"]),
+    )
+    table.add_row(
+        "K / D / A",
+        f"{stats.kills} / {stats.deaths} / {stats.assists}",
+        "Rounds",
+        str(stats.rounds),
+    )
+    console.print(table)
+    return any_warn
+
+
 def render_summary_card(
     console: Console,
     rows: list[MatchPlayer],

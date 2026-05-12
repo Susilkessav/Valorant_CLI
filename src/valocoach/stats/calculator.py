@@ -372,6 +372,163 @@ def compute_player_stats(match_players: Iterable[MatchPlayer]) -> PlayerStats:
 # ---------------------------------------------------------------------------
 
 
+@dataclass(frozen=True, slots=True)
+class _ApiMatchEntry:
+    """Intermediate per-match row extracted from an API MatchData object."""
+
+    agent: str
+    map_name: str
+    rounds_played: int
+    won: bool
+    score: int
+    kills: int
+    deaths: int
+    assists: int
+    headshots: int
+    bodyshots: int
+    legshots: int
+    damage_dealt: int
+
+
+def _extract_api_entries(
+    matches: list,
+    name: str,
+    tag: str,
+) -> list[_ApiMatchEntry]:
+    """Pull per-match rows for a player out of API MatchData objects."""
+    from valocoach.data.api_models import MatchData
+
+    name_lower = name.lower()
+    tag_lower = tag.lower()
+    entries: list[_ApiMatchEntry] = []
+
+    for match in matches:
+        if not isinstance(match, MatchData):
+            continue
+        player = next(
+            (p for p in match.players.all_players
+             if p.name.lower() == name_lower and p.tag.lower() == tag_lower),
+            None,
+        )
+        if player is None:
+            continue
+
+        team = player.team
+        won = (
+            (team == "Red" and match.teams.red.has_won)
+            or (team == "Blue" and match.teams.blue.has_won)
+        )
+
+        s = player.stats
+
+        # v3 player-level stats don't include damage_dealt — sum from rounds
+        damage = s.damage_dealt
+        if damage == 0 and match.rounds:
+            damage = sum(
+                rs.damage
+                for rd in match.rounds
+                for rs in rd.player_stats
+                if rs.puuid == player.puuid
+            )
+
+        entries.append(_ApiMatchEntry(
+            agent=player.character,
+            map_name=match.metadata.map_name,
+            rounds_played=match.metadata.rounds_played or 1,
+            won=won,
+            score=s.score,
+            kills=s.kills,
+            deaths=s.deaths,
+            assists=s.assists,
+            headshots=s.headshots,
+            bodyshots=s.bodyshots,
+            legshots=s.legshots,
+            damage_dealt=damage,
+        ))
+    return entries
+
+
+def _aggregate_api_entries(entries: list[_ApiMatchEntry]) -> PlayerStats:
+    """Aggregate a list of _ApiMatchEntry into a single PlayerStats."""
+    if not entries:
+        return _zero_stats()
+
+    match_count = len(entries)
+    rounds = sum(e.rounds_played for e in entries)
+    wins = sum(1 for e in entries if e.won)
+    score = sum(e.score for e in entries)
+    damage = sum(e.damage_dealt for e in entries)
+    kills = sum(e.kills for e in entries)
+    deaths = sum(e.deaths for e in entries)
+    assists = sum(e.assists for e in entries)
+    hs = sum(e.headshots for e in entries)
+    bs = sum(e.bodyshots for e in entries)
+    ls = sum(e.legshots for e in entries)
+    total_shots = hs + bs + ls
+
+    return PlayerStats(
+        matches=match_count,
+        rounds=rounds,
+        wins=wins,
+        losses=match_count - wins,
+        win_rate=_safe_div(wins, match_count),
+        acs=_safe_div(score, rounds),
+        adr=_safe_div(damage, rounds),
+        kills=kills,
+        deaths=deaths,
+        assists=assists,
+        kd=_safe_div(kills, deaths),
+        kda=_safe_div(kills + assists, deaths),
+        headshots=hs,
+        bodyshots=bs,
+        legshots=ls,
+        hs_pct=_safe_div(hs, total_shots),
+        first_bloods=0,
+        first_deaths=0,
+        fb_rate=0.0,
+        fd_rate=0.0,
+        fb_diff=0,
+        plants=0,
+        defuses=0,
+        econ_rating=None,
+    )
+
+
+def compute_stats_from_api(
+    matches: list,
+    name: str,
+    tag: str,
+) -> PlayerStats:
+    """Compute PlayerStats from API MatchData objects (no DB required).
+
+    Used by the ephemeral player-lookup flow: fetch v3 matches from the
+    HenrikDev API and compute stats in memory without persisting anything.
+
+    The v3 endpoint doesn't expose first_bloods, first_deaths, plants, or
+    defuses at the player level, so those are zeroed out.
+    """
+    return _aggregate_api_entries(_extract_api_entries(matches, name, tag))
+
+
+def compute_per_agent_from_api(
+    matches: list,
+    name: str,
+    tag: str,
+) -> list[AgentStats]:
+    """Per-agent breakdown from API MatchData (no DB required)."""
+    entries = _extract_api_entries(matches, name, tag)
+    buckets: dict[str, list[_ApiMatchEntry]] = defaultdict(list)
+    for e in entries:
+        buckets[e.agent].append(e)
+
+    results = [
+        AgentStats(agent=agent, stats=_aggregate_api_entries(rows))
+        for agent, rows in buckets.items()
+    ]
+    results.sort(key=lambda a: (-a.stats.matches, a.agent))
+    return results
+
+
 def compute_per_agent(match_players: Iterable[MatchPlayer]) -> list[AgentStats]:
     """Per-agent breakdown, sorted by matches played (descending).
 
