@@ -7,6 +7,10 @@ import pytest
 
 from valocoach.core.config import Settings
 from valocoach.data.api_models import (
+    AccountData,
+    CurrentRankData,
+    HighestRank,
+    MatchData,
     MatchDetails,
     MatchDetailsKill,
     MatchDetailsMetadata,
@@ -16,6 +20,14 @@ from valocoach.data.api_models import (
     MatchDetailsRound,
     MatchDetailsRoundPlayerStats,
     MatchDetailsTeam,
+    MatchMetadata,
+    MatchPlayer,
+    MatchPlayers,
+    MatchTeams,
+    MMRData,
+    PlayerBehavior,
+    PlayerStats,
+    TeamResult,
     _PlayerRef,
     _Ref,
     _RoundPlayerInnerStats,
@@ -25,20 +37,6 @@ from valocoach.data.api_models import (
     _V4TeamRounds,
 )
 from valocoach.data.database import Base, init_engine
-from valocoach.data.models import (
-    AccountData,
-    CurrentRankData,
-    HighestRank,
-    MatchData,
-    MatchMetadata,
-    MatchPlayer,
-    MatchPlayers,
-    MatchTeams,
-    MMRData,
-    PlayerBehavior,
-    PlayerStats,
-    TeamResult,
-)
 
 # ---------------------------------------------------------------------------
 # --live flag: opt-in gate for tests that require a running Ollama instance.
@@ -340,18 +338,42 @@ def match_details() -> MatchDetails:
                 stats=[
                     MatchDetailsRoundPlayerStats(
                         player=_PlayerRef(puuid=PUUID, team="Blue"),
-                        stats=_RoundPlayerInnerStats(score=100, kills=0, headshots=2, bodyshots=4, legshots=0),
-                        damage_events=[{"player": {"puuid": ENEMY_PUUID}, "damage": 80, "headshots": 0, "bodyshots": 1, "legshots": 0}],
+                        stats=_RoundPlayerInnerStats(
+                            score=100, kills=0, headshots=2, bodyshots=4, legshots=0
+                        ),
+                        damage_events=[
+                            {
+                                "player": {"puuid": ENEMY_PUUID},
+                                "damage": 80,
+                                "headshots": 0,
+                                "bodyshots": 1,
+                                "legshots": 0,
+                            }
+                        ],
                         economy={"loadout_value": 900, "remaining": 0},
                         was_afk=False,
                         stayed_in_spawn=False,
                     ),
                     MatchDetailsRoundPlayerStats(
                         player=_PlayerRef(puuid=ENEMY_PUUID, team="Red"),
-                        stats=_RoundPlayerInnerStats(score=350, kills=2, headshots=1, bodyshots=5, legshots=0),
+                        stats=_RoundPlayerInnerStats(
+                            score=350, kills=2, headshots=1, bodyshots=5, legshots=0
+                        ),
                         damage_events=[
-                            {"player": {"puuid": PUUID}, "damage": 150, "headshots": 1, "bodyshots": 1, "legshots": 0},
-                            {"player": {"puuid": "other-puuid"}, "damage": 100, "headshots": 0, "bodyshots": 2, "legshots": 0},
+                            {
+                                "player": {"puuid": PUUID},
+                                "damage": 150,
+                                "headshots": 1,
+                                "bodyshots": 1,
+                                "legshots": 0,
+                            },
+                            {
+                                "player": {"puuid": "other-puuid"},
+                                "damage": 100,
+                                "headshots": 0,
+                                "bodyshots": 2,
+                                "legshots": 0,
+                            },
                         ],
                         economy={"loadout_value": 3900, "remaining": 1200},
                         was_afk=False,
@@ -372,15 +394,27 @@ def match_details() -> MatchDetails:
                 stats=[
                     MatchDetailsRoundPlayerStats(
                         player=_PlayerRef(puuid=PUUID, team="Blue"),
-                        stats=_RoundPlayerInnerStats(score=250, kills=1, headshots=1, bodyshots=3, legshots=0),
-                        damage_events=[{"player": {"puuid": ENEMY_PUUID}, "damage": 125, "headshots": 1, "bodyshots": 1, "legshots": 0}],
+                        stats=_RoundPlayerInnerStats(
+                            score=250, kills=1, headshots=1, bodyshots=3, legshots=0
+                        ),
+                        damage_events=[
+                            {
+                                "player": {"puuid": ENEMY_PUUID},
+                                "damage": 125,
+                                "headshots": 1,
+                                "bodyshots": 1,
+                                "legshots": 0,
+                            }
+                        ],
                         economy={"loadout_value": 4650, "remaining": 2450},
                         was_afk=False,
                         stayed_in_spawn=False,
                     ),
                     MatchDetailsRoundPlayerStats(
                         player=_PlayerRef(puuid=ENEMY_PUUID, team="Red"),
-                        stats=_RoundPlayerInnerStats(score=80, kills=0, headshots=0, bodyshots=2, legshots=0),
+                        stats=_RoundPlayerInnerStats(
+                            score=80, kills=0, headshots=0, bodyshots=2, legshots=0
+                        ),
                         damage_events=[],
                         economy={"loadout_value": 1800, "remaining": 0},
                         was_afk=False,

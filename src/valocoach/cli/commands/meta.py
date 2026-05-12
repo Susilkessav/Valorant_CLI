@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
@@ -14,6 +16,8 @@ from valocoach.retrieval import (
     get_meta,
     list_map_names,
 )
+
+log = logging.getLogger(__name__)
 
 
 def _tier_table() -> Table:
@@ -58,7 +62,8 @@ def _try_get_live_patch(settings) -> str | None:
 
         init_engine(settings.data_dir / "valocoach.db")
         return asyncio.run(get_current_patch())
-    except Exception:
+    except Exception as exc:
+        log.warning("Could not read live patch from local DB: %s", exc)
         return None
 
 

@@ -143,8 +143,8 @@ async def purge_expired(data_dir: Path | None = None) -> int:
         for entry in entries:
             await s.delete(entry)
     if data_dir is not None:
-        # Chroma ``$lt`` requires a numeric operand; we stamp ``expires_at_unix``
-        # as int seconds at ingest time (see retriever._fetch_live_meta).
+        # Chroma ``$lt`` requires a numeric operand; live ingest stamps
+        # ``expires_at_unix`` as int seconds.
         now_unix = int(datetime.now(UTC).timestamp())
         _delete_from_live_collection(data_dir, {"expires_at_unix": {"$lt": now_unix}})
     log.info("Purged %d expired cache entries.", count)

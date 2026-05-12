@@ -42,13 +42,9 @@ class MetaStatsResult:
         """Both sources concatenated with labelled headers for LLM context."""
         parts: list[str] = []
         if self.ranked_text:
-            parts.append(
-                "=== DIAMOND+ RANKED STATS (tracker.gg) ===\n" + self.ranked_text
-            )
+            parts.append("=== DIAMOND+ RANKED STATS (tracker.gg) ===\n" + self.ranked_text)
         if self.pro_text:
-            parts.append(
-                "=== PRO / VCT STATS (vlr.gg) ===\n" + self.pro_text
-            )
+            parts.append("=== PRO / VCT STATS (vlr.gg) ===\n" + self.pro_text)
         return "\n\n".join(parts)
 
     @property

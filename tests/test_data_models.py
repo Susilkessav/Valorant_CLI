@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from valocoach.data.models import (
+from valocoach.data.api_models import (
     AccountData,
     HenrikResponse,
     MatchPlayer,
@@ -72,7 +72,7 @@ def test_mmr_highest_rank(mmr_data):
 
 
 def test_mmr_defaults_to_unranked():
-    from valocoach.data.models import CurrentRankData
+    from valocoach.data.api_models import CurrentRankData
 
     rank = CurrentRankData()
     assert rank.currenttierpatched == "Unranked"

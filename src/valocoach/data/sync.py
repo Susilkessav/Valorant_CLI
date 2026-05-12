@@ -46,8 +46,8 @@ if TYPE_CHECKING:
 from valocoach.core.config import Settings
 from valocoach.core.exceptions import APIError, MapperError, SyncError
 from valocoach.data.api_client import HenrikClient
+from valocoach.data.api_models import AccountData, MMRData
 from valocoach.data.database import session_scope
-from valocoach.data.models import AccountData, MMRData
 from valocoach.data.orm_models import SyncLog
 from valocoach.data.repository import (
     close_stale_syncs,

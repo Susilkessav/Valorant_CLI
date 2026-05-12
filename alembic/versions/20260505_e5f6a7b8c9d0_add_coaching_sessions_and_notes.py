@@ -64,9 +64,7 @@ def upgrade() -> None:
         sa.Column("match_id", sa.Text(), nullable=True),
         sa.Column("created_at", sa.Text(), nullable=False),
         sa.Column("resolved_at", sa.Text(), nullable=True),
-        sa.ForeignKeyConstraint(
-            ["session_id"], ["coaching_sessions.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["session_id"], ["coaching_sessions.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("idx_cn_session", "coaching_notes", ["session_id"])

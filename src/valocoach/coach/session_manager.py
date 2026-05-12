@@ -58,14 +58,14 @@ class LastMatchInfo:
     map_name: str
     agent: str
     won: bool
-    own_score: int   # rounds won by player's team
-    opp_score: int   # rounds won by opponent's team
+    own_score: int  # rounds won by player's team
+    opp_score: int  # rounds won by opponent's team
     kills: int
     deaths: int
     assists: int
-    acs: int         # average combat score per round
-    hs_pct: float    # headshot percentage (0.0-100.0)
-    adr: float       # average damage per round
+    acs: int  # average combat score per round
+    hs_pct: float  # headshot percentage (0.0-100.0)
+    adr: float  # average damage per round
     started_at: str  # ISO8601 UTC
 
 

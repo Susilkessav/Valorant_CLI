@@ -37,8 +37,13 @@ from collections import defaultdict
 from dataclasses import dataclass
 
 from valocoach.core.exceptions import MapperError
-from valocoach.data.api_models import MatchDetails, MatchDetailsKill, MatchDetailsPlayer
-from valocoach.data.models import AccountData, MMRData
+from valocoach.data.api_models import (
+    AccountData,
+    MatchDetails,
+    MatchDetailsKill,
+    MatchDetailsPlayer,
+    MMRData,
+)
 from valocoach.data.orm_models import Kill, Match, OrmMatchPlayer, Player, Round, RoundPlayer
 
 log = logging.getLogger(__name__)
@@ -210,9 +215,7 @@ def _build_round_tree(details: MatchDetails, match_id: str) -> list[Round]:
                 continue  # malformed row — skip
             econ = ps.economy if isinstance(ps.economy, dict) else {}
             damage_dealt = sum(
-                int(ev.get("damage", 0))
-                for ev in ps.damage_events
-                if isinstance(ev, dict)
+                int(ev.get("damage", 0)) for ev in ps.damage_events if isinstance(ev, dict)
             )
             orm_round.round_players.append(
                 RoundPlayer(

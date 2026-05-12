@@ -35,6 +35,7 @@ _META_FILE = Path(__file__).parent / "data" / "meta.json"
 # Result dataclass
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class SyncResult:
     """Outcome of a single :func:`run_meta_sync` call."""
@@ -78,6 +79,7 @@ class SyncResult:
 # ---------------------------------------------------------------------------
 # Pipeline
 # ---------------------------------------------------------------------------
+
 
 async def run_meta_sync(
     settings: Settings,
@@ -148,8 +150,7 @@ async def run_meta_sync(
         else:
             _step("patch_notes", "no content returned")
             result.errors.append(
-                f"Could not scrape patch notes for {patch_version} — "
-                "the page may not be live yet."
+                f"Could not scrape patch notes for {patch_version} — the page may not be live yet."
             )
     except Exception as exc:
         result.errors.append(f"Patch notes scrape error: {exc}")
@@ -282,6 +283,7 @@ async def run_meta_sync(
             # Invalidate the module-level cache so the next call to
             # get_meta() / format_meta_context() reads the fresh file.
             import valocoach.retrieval.meta as _meta_mod
+
             _meta_mod._cache = None
 
             result.meta_written = True

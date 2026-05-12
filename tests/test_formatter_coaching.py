@@ -181,7 +181,9 @@ class TestRenderCoachingSessions:
 
     def test_empty_started_at_shows_dash(self):
         """Handles sessions with empty started_at (defensive)."""
-        s = SessionInfo(id=1, title="t", started_at="", ended_at=None, focus_agent=None, focus_map=None)
+        s = SessionInfo(
+            id=1, title="t", started_at="", ended_at=None, focus_agent=None, focus_map=None
+        )
         con, buf = _console()
         render_coaching_sessions(con, [s])
         assert "—" in buf.getvalue()
@@ -298,7 +300,9 @@ class TestRenderRankTrend:
 
     def test_two_snapshots_produces_output(self):
         con, buf = _console()
-        render_rank_trend(con, [_mmr(elo=1300, tier_patched="Plat I"), _mmr(elo=1200, tier_patched="Gold II")])
+        render_rank_trend(
+            con, [_mmr(elo=1300, tier_patched="Plat I"), _mmr(elo=1200, tier_patched="Gold II")]
+        )
         assert buf.getvalue() != ""
 
     def test_shows_tier_range_when_different(self):
@@ -307,7 +311,7 @@ class TestRenderRankTrend:
         render_rank_trend(
             con,
             [
-                _mmr(tier_patched="Plat I", elo=1400),   # newest
+                _mmr(tier_patched="Plat I", elo=1400),  # newest
                 _mmr(tier_patched="Gold II", elo=1200),  # oldest
             ],
         )

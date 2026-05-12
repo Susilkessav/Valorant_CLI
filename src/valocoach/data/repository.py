@@ -41,9 +41,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from valocoach.data.api_models import MatchDetails
+from valocoach.data.api_models import AccountData, MatchData, MatchDetails, MMRData
 from valocoach.data.mapper import match_from_details, player_from_account_mmr
-from valocoach.data.models import AccountData, MatchData, MMRData
 from valocoach.data.orm_models import (
     CoachingNote,
     CoachingSession,

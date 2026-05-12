@@ -17,7 +17,7 @@ Fetching and storing data:
 
 Name note:
     MatchPlayer here refers to the ORM table class (valocoach.data.orm_models).
-    The Pydantic API shape is valocoach.data.models.MatchPlayer — import it
+    The Pydantic API shape is valocoach.data.api_models.MatchPlayer — import it
     directly from that module to avoid ambiguity.
 """
 
@@ -25,6 +25,10 @@ from __future__ import annotations
 
 # HTTP client (Settings-based; raises APIError/RateLimitError/ServerError from core.exceptions)
 from valocoach.data.api_client import HenrikClient
+
+# Pydantic API models (MatchPlayer intentionally NOT re-exported here
+# to avoid collision with the ORM MatchPlayer — import from .api_models directly)
+from valocoach.data.api_models import AccountData, MatchData, MMRData, MMRHistoryEntry
 
 # Database setup
 from valocoach.data.database import Base, ensure_db, get_engine, init_engine, session_scope
@@ -39,10 +43,6 @@ from valocoach.data.loader import (
 
 # Mapper functions (API shape → ORM shape — update mapper.py when schema changes)
 from valocoach.data.mapper import match_from_details, player_from_account_mmr
-
-# Pydantic API models (MatchPlayer intentionally NOT re-exported here
-# to avoid collision with the ORM MatchPlayer — import from .models directly)
-from valocoach.data.models import AccountData, MatchData, MMRData, MMRHistoryEntry
 
 # ORM models
 from valocoach.data.orm_models import Kill, Match, MatchPlayer, Player, Round, SyncLog

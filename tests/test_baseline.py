@@ -566,7 +566,7 @@ class TestFormatBaselineLines:
 
         lines = _format_baseline_lines(self._comparison_with_acs_drop())
         body = [ln for ln in lines if ln.startswith("-")]
-        assert any("(!!)" in ln for ln in body)
+        assert any("[CRIT]" in ln for ln in body)
 
     def test_header_contains_match_counts(self) -> None:
         from valocoach.coach.context import _format_baseline_lines

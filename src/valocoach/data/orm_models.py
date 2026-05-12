@@ -137,7 +137,7 @@ class OrmMatchPlayer(Base):
     """One row per player per match — core stats table.
 
     Named OrmMatchPlayer to avoid collision with the Pydantic MatchPlayer
-    in valocoach.data.models. Re-exported as MatchPlayer from this module.
+    in valocoach.data.api_models. Re-exported as MatchPlayer from this module.
     """
 
     __tablename__ = "match_players"
@@ -405,9 +405,7 @@ class MMRHistory(Base):
     """
 
     __tablename__ = "mmr_history"
-    __table_args__ = (
-        Index("idx_mmr_history_puuid", "puuid", "recorded_at"),
-    )
+    __table_args__ = (Index("idx_mmr_history_puuid", "puuid", "recorded_at"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     puuid: Mapped[str] = mapped_column(
@@ -482,9 +480,7 @@ class CoachingSession(Base):
     """
 
     __tablename__ = "coaching_sessions"
-    __table_args__ = (
-        Index("idx_cs_puuid", "puuid", "started_at"),
-    )
+    __table_args__ = (Index("idx_cs_puuid", "puuid", "started_at"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     puuid: Mapped[str] = mapped_column(
@@ -561,10 +557,7 @@ class CoachingNote(Base):
     def __repr__(self) -> str:
         state = "✓" if self.resolved else "○"
         prio = {1: "low", 2: "med", 3: "high"}.get(self.priority, "?")
-        return (
-            f"<CoachingNote {state} [{prio}] [{self.category}] "
-            f"{self.body[:40]!r}>"
-        )
+        return f"<CoachingNote {state} [{prio}] [{self.category}] {self.body[:40]!r}>"
 
 
 # ---------------------------------------------------------------------------

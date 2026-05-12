@@ -109,7 +109,8 @@ def _format_baseline_lines(comparison: BaselineComparison) -> list[str]:
     an empty list otherwise. The caller drops the block when empty.
 
     Format: one header line + one bullet per anomaly. Significant anomalies
-    are annotated with '(!!)' so the LLM can triage severity quickly.
+    are annotated with ``[CRIT]`` and notable anomalies with ``[WATCH]`` so
+    the LLM can triage severity quickly using the same labels as the CLI.
     """
     if not comparison.has_anomalies:
         return []
@@ -118,7 +119,7 @@ def _format_baseline_lines(comparison: BaselineComparison) -> list[str]:
         f"Form trend (last {comparison.form_matches}g vs {comparison.baseline_matches}g baseline):"
     ]
     for a in comparison.anomalies:
-        sev_tag = " (!)" if a.severity == "notable" else " (!!)"
+        sev_tag = " [WATCH]" if a.severity == "notable" else " [CRIT]"
         lines.append(f"- {a.one_liner()}{sev_tag}")
     return lines
 

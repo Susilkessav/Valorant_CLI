@@ -126,9 +126,7 @@ class TestRunSessionsList:
             patch(_LOAD, return_value=_fake_settings()),
             patch(_PUUID, return_value="puuid-abc"),
             patch(_LIST, return_value=sessions),
-            patch(
-                "valocoach.cli.commands.sessions.render_coaching_sessions"
-            ),
+            patch("valocoach.cli.commands.sessions.render_coaching_sessions"),
             patch("valocoach.cli.commands.sessions.display") as mock_display,
         ):
             mock_display.console = MagicMock()
@@ -214,9 +212,7 @@ class TestSessionsCLIWiring:
 
     def test_sessions_default_routes_to_list(self):
         """``valocoach sessions`` (no subcommand) calls run_sessions_list."""
-        with patch(
-            "valocoach.cli.commands.sessions.run_sessions_list"
-        ):
+        with patch("valocoach.cli.commands.sessions.run_sessions_list"):
             result = runner.invoke(app, ["sessions"])
         # Either the mock was called (success path) or we get exit 1 (no player)
         # — either way the command didn't error out with a routing mistake.

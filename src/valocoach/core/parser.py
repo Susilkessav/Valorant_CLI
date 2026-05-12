@@ -81,6 +81,35 @@ _PHASE_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("default", ("default", "passive setup", "slow default")),
 )
 
+# Common shorthand users type in match review prompts. Keep this intentionally
+# small and unambiguous; fuzzy aliases here can poison retrieval routing.
+_AGENT_ALIASES: dict[str, tuple[str, ...]] = {
+    "Killjoy": ("KJ",),
+    "KAY/O": ("Kayo", "KAYO"),
+}
+
+_ENEMY_AGENT_MARKERS = re.compile(
+    r"(?<!\w)("
+    r"enemy|enemies|opponent|opponents|opp|"
+    r"against|versus|vs\.?|counter|"
+    r"their|they\s+(?:have|run|play|are\s+running)|"
+    r"defenders?|attackers?"
+    r")(?!\w)",
+    re.IGNORECASE,
+)
+_SELF_AGENT_MARKERS = re.compile(
+    r"(?<!\w)("
+    r"i(?:'| a)?m|im|i\s+(?:am|play|main|run|use)|"
+    r"my|me|as|playing|"
+    r"our|we\s+(?:have|run|play|are\s+running)|with"
+    r")(?!\w)",
+    re.IGNORECASE,
+)
+_ENEMY_AFTER_AGENT_MARKERS = re.compile(
+    r"^\s*(?:is|are)?\s*(?:on|from)?\s*(?:the\s+)?enemy\s+(?:team|side)",
+    re.IGNORECASE,
+)
+
 
 # ---------------------------------------------------------------------------
 # Vocabulary loading — cached because list_*_names hits disk-backed JSON.
@@ -98,7 +127,12 @@ def _agent_patterns() -> list[tuple[str, re.Pattern[str]]]:
     from valocoach.retrieval import list_agent_names
 
     names = sorted(list_agent_names(), key=len, reverse=True)
-    return [(n, re.compile(rf"(?<!\w){re.escape(n)}(?!\w)", re.IGNORECASE)) for n in names]
+    patterns: list[tuple[str, re.Pattern[str]]] = []
+    for name in names:
+        names_and_aliases = (name, *_AGENT_ALIASES.get(name, ()))
+        escaped = sorted((re.escape(alias) for alias in names_and_aliases), key=len, reverse=True)
+        patterns.append((name, re.compile(rf"(?<!\w)(?:{'|'.join(escaped)})(?!\w)", re.IGNORECASE)))
+    return patterns
 
 
 @lru_cache(maxsize=1)
@@ -123,6 +157,7 @@ class Situation(BaseModel):
 
     raw: str
     agents: list[str] = Field(default_factory=list)
+    enemy_agents: list[str] = Field(default_factory=list)
     map: str | None = None
     side: str | None = None  # "attack" | "defense"
     site: str | None = None  # "A" | "B" | "C"
@@ -149,6 +184,8 @@ class Situation(BaseModel):
             lines.append(f"Side: {self.side}")
         if self.agents:
             lines.append(f"Agent(s): {', '.join(self.agents)}")
+        if self.enemy_agents:
+            lines.append(f"Enemy agent(s): {', '.join(self.enemy_agents)}")
         if self.site:
             lines.append(f"Site: {self.site}")
         if self.score:
@@ -165,6 +202,33 @@ class Situation(BaseModel):
 # ---------------------------------------------------------------------------
 # Parser
 # ---------------------------------------------------------------------------
+
+
+def _last_marker_start(pattern: re.Pattern[str], text: str) -> int | None:
+    last: int | None = None
+    for match in pattern.finditer(text):
+        last = match.start()
+    return last
+
+
+def _is_enemy_agent_mention(text: str, start: int, end: int) -> bool:
+    """Return True when the nearby clause frames an agent as an opponent.
+
+    The LLM prompt treats ``agents`` as the player's kit. That makes false
+    positives expensive: "enemy has Cypher" must never route retrieval as
+    though the player selected Cypher. This heuristic is deliberately local to
+    the current clause so "I'm Jett, enemy has Cypher" classifies both names
+    correctly.
+    """
+    clause_start = max(text.rfind(sep, 0, start) for sep in (".", "!", "?", ";", "\n"))
+    prefix = text[max(clause_start + 1, start - 120) : start]
+    enemy_pos = _last_marker_start(_ENEMY_AGENT_MARKERS, prefix)
+    self_pos = _last_marker_start(_SELF_AGENT_MARKERS, prefix)
+    if enemy_pos is not None and (self_pos is None or enemy_pos >= self_pos):
+        return True
+
+    suffix = text[end : min(len(text), end + 48)]
+    return bool(_ENEMY_AFTER_AGENT_MARKERS.search(suffix))
 
 
 def parse_situation(text: str) -> Situation:
@@ -192,13 +256,27 @@ def parse_situation(text: str) -> Situation:
             map_name = name
             break
 
-    # --- Agents (collect all unique matches, preserve canonical-name order)
+    # --- Agents (collect all unique matches in text order). Enemy mentions are
+    # separated so "enemy has Cypher and KJ" does not make Cypher the user's
+    # selected agent.
     agents: list[str] = []
-    seen: set[str] = set()
+    enemy_agents: list[str] = []
+    mentions: list[tuple[int, int, str]] = []
     for name, pat in _agent_patterns():
-        if name not in seen and pat.search(text):
+        for match in pat.finditer(text):
+            mentions.append((match.start(), match.end(), name))
+
+    seen_agents: set[str] = set()
+    seen_enemy_agents: set[str] = set()
+    for start, end, name in sorted(mentions, key=lambda m: (m[0], m[1])):
+        if _is_enemy_agent_mention(text, start, end):
+            if name not in seen_enemy_agents:
+                enemy_agents.append(name)
+                seen_enemy_agents.add(name)
+            continue
+        if name not in seen_agents:
             agents.append(name)
-            seen.add(name)
+            seen_agents.add(name)
 
     # --- Side
     side: str | None = None
@@ -248,6 +326,7 @@ def parse_situation(text: str) -> Situation:
     return Situation(
         raw=text,
         agents=agents,
+        enemy_agents=enemy_agents,
         map=map_name,
         side=side,
         site=site,

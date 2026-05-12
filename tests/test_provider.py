@@ -28,6 +28,7 @@ def test_stream_completion_adds_ollama_prefix():
         mock_call.return_value = iter([])
         list(stream_completion(settings, "sys", "user"))
         assert mock_call.call_args.kwargs["model"] == "ollama/qwen3:8b"
+        assert mock_call.call_args.kwargs["api_base"] == settings.ollama_host
 
 
 def test_stream_completion_inserts_conversation_history_between_system_and_user():
@@ -96,6 +97,7 @@ def test_stream_completion_keeps_anthropic_prefix_unchanged():
 
     passed_model = mock_call.call_args.kwargs["model"]
     assert passed_model == "anthropic/claude-3-5-sonnet-20241022"
+    assert "api_base" not in mock_call.call_args.kwargs
     assert not passed_model.startswith("ollama/ollama/")
     assert not passed_model.startswith("ollama/anthropic/")
 
@@ -110,3 +112,4 @@ def test_stream_completion_keeps_openai_prefix_unchanged():
         list(stream_completion(settings, "sys", "user"))
 
     assert mock_call.call_args.kwargs["model"] == "openai/gpt-4o"
+    assert "api_base" not in mock_call.call_args.kwargs

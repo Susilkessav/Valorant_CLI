@@ -29,7 +29,7 @@ Omen to cancel his teleport.
 
 ## Playstyle
 
-Most versatile controller. Dark Cover smokes ANY angle through walls. Paranoia through walls is a hard-to-block flash. From the Shadows flanks are map-defining.
+Most versatile controller. Dark Cover smokes ANY angle through walls. Paranoia is a long-range through-wall nearsight, not a flash. From the Shadows flanks are map-defining.
 
 ## Economy Note
 

@@ -81,6 +81,24 @@ class TestGetAgent:
         result = get_agent("ZZZCompletelyUnknown")
         assert result is None
 
+    def test_cypher_ability_slots_match_current_kit(self):
+        from valocoach.retrieval.agents import get_agent
+
+        cypher = get_agent("Cypher")
+        assert cypher is not None
+        assert cypher["abilities"]["C"]["name"] == "Trapwire"
+        assert cypher["abilities"]["Q"]["name"] == "Cyber Cage"
+        assert cypher["abilities"]["E"]["name"] == "Spycam"
+
+    def test_killjoy_ability_slots_match_current_kit(self):
+        from valocoach.retrieval.agents import get_agent
+
+        killjoy = get_agent("Killjoy")
+        assert killjoy is not None
+        assert killjoy["abilities"]["C"]["name"] == "Nanoswarm"
+        assert killjoy["abilities"]["Q"]["name"] == "Alarmbot"
+        assert killjoy["abilities"]["E"]["name"] == "Turret"
+
 
 # ===========================================================================
 # list_agent_names

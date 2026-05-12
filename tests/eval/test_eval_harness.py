@@ -299,7 +299,9 @@ class TestRunScenario:
                     "valocoach.cli.commands.coach": MagicMock(
                         run_coach=MagicMock(return_value="Use Tailwind to dash into A Long.")
                     ),
-                    "valocoach.core.config": MagicMock(load_settings=MagicMock(return_value=fake_settings)),
+                    "valocoach.core.config": MagicMock(
+                        load_settings=MagicMock(return_value=fake_settings)
+                    ),
                 },
             ),
         ):
@@ -321,7 +323,9 @@ class TestRunScenario:
                     "valocoach.cli.commands.coach": MagicMock(
                         run_coach=MagicMock(return_value="Use Tailwind and also Paranoia here.")
                     ),
-                    "valocoach.core.config": MagicMock(load_settings=MagicMock(return_value=fake_settings)),
+                    "valocoach.core.config": MagicMock(
+                        load_settings=MagicMock(return_value=fake_settings)
+                    ),
                 },
             ),
         ):
@@ -340,7 +344,9 @@ class TestRunScenario:
                 "valocoach.cli.commands.coach": MagicMock(
                     run_coach=MagicMock(side_effect=RuntimeError("ollama down"))
                 ),
-                "valocoach.core.config": MagicMock(load_settings=MagicMock(return_value=MagicMock())),
+                "valocoach.core.config": MagicMock(
+                    load_settings=MagicMock(return_value=MagicMock())
+                ),
             },
         ):
             result = run_scenario(scenario, model=None)
@@ -360,7 +366,9 @@ class TestRunScenario:
                 "valocoach.cli.commands.coach": MagicMock(
                     run_coach=MagicMock(return_value="Tailwind dash into A Long.")
                 ),
-                "valocoach.core.config": MagicMock(load_settings=MagicMock(return_value=fake_settings)),
+                "valocoach.core.config": MagicMock(
+                    load_settings=MagicMock(return_value=fake_settings)
+                ),
             },
         ):
             run_scenario(scenario, model="qwen3:14b")
@@ -376,7 +384,9 @@ class TestRunScenario:
             "sys.modules",
             {
                 "valocoach.cli.commands.coach": MagicMock(run_coach=MagicMock(return_value=None)),
-                "valocoach.core.config": MagicMock(load_settings=MagicMock(return_value=MagicMock())),
+                "valocoach.core.config": MagicMock(
+                    load_settings=MagicMock(return_value=MagicMock())
+                ),
             },
         ):
             result = run_scenario(scenario, model=None)
@@ -434,9 +444,7 @@ class TestPrintResult:
 class TestPrintSummary:
     def _result(self, passed: bool) -> ScenarioResult:
         s = Scenario(id="x", description="y", situation="z")
-        return ScenarioResult(
-            scenario=s, passed=passed, response="", violations=[], elapsed_s=0.0
-        )
+        return ScenarioResult(scenario=s, passed=passed, response="", violations=[], elapsed_s=0.0)
 
     def test_all_pass_shows_passed_fraction(self, capsys):
         results = [self._result(True), self._result(True), self._result(True)]
@@ -480,10 +488,7 @@ class TestMain:
 
         scenarios_file = tmp_path / "s.yaml"
         scenarios_file.write_text(
-            "scenarios:\n"
-            "  - id: ok\n"
-            "    description: test\n"
-            "    situation: Use Jett\n"
+            "scenarios:\n  - id: ok\n    description: test\n    situation: Use Jett\n"
         )
 
         passing_result = ScenarioResult(

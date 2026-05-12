@@ -32,23 +32,28 @@ def stream_completion(
                                multi-turn context.
     """
     model = settings.ollama_model
+    is_ollama_model = model.startswith("ollama/")
     if not model.startswith(("ollama/", "anthropic/", "openai/")):
         # Default Ollama models need the prefix for LiteLLM
         model = f"ollama/{model}"
+        is_ollama_model = True
 
     messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
     if conversation_history:
         messages.extend(conversation_history)
     messages.append({"role": "user", "content": user_message})
 
-    response = litellm.completion(
-        model=model,
-        messages=messages,
-        api_base=settings.ollama_host,
-        temperature=settings.llm_temperature,
-        max_tokens=settings.llm_max_tokens,
-        stream=True,
-    )
+    completion_kwargs = {
+        "model": model,
+        "messages": messages,
+        "temperature": settings.llm_temperature,
+        "max_tokens": settings.llm_max_tokens,
+        "stream": True,
+    }
+    if is_ollama_model:
+        completion_kwargs["api_base"] = settings.ollama_host
+
+    response = litellm.completion(**completion_kwargs)
 
     for chunk in response:
         delta = chunk.choices[0].delta

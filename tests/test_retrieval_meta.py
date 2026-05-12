@@ -197,3 +197,27 @@ class TestFormatMetaContext:
 
         assert "Ascent meta" in result
         assert "Jett meta" in result
+
+    def test_agent_lookup_preserves_punctuation_sensitive_names(self):
+        """KAY/O must resolve from lowercase input without becoming Kay/O."""
+        from valocoach.retrieval.meta import format_meta_context
+
+        meta = {
+            **_BASE_META,
+            "agent_meta": {
+                **_BASE_META["agent_meta"],
+                "KAY/O": {
+                    "tier": "B",
+                    "pick_rate": "14%",
+                    "win_rate": "49%",
+                    "reason": "Suppression anchors utility-heavy rounds.",
+                },
+            },
+        }
+
+        with patch(_PATCH_LOAD, return_value=meta):
+            result = format_meta_context(agent="kay/o")
+
+        assert "KAY/O meta" in result
+        assert "Kay/O meta" not in result
+        assert "Suppression anchors" in result

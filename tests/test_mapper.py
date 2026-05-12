@@ -412,7 +412,7 @@ def test_round_player_enemy_survived_inverted(match_details):
     r1 = next(r for r in m.rounds if r.round_number == 1)
     enemy_r0 = next(rp for rp in r0.round_players if rp.puuid == ENEMY_PUUID)
     enemy_r1 = next(rp for rp in r1.round_players if rp.puuid == ENEMY_PUUID)
-    assert enemy_r0.survived is True   # not killed in round 0
+    assert enemy_r0.survived is True  # not killed in round 0
     assert enemy_r1.survived is False  # PUUID kills ENEMY_PUUID in round 1
 
 
@@ -462,7 +462,8 @@ def test_round_player_empty_puuid_skipped():
         ),
         players=[
             MatchDetailsPlayer(
-                puuid=PUUID, team_id="Blue",
+                puuid=PUUID,
+                team_id="Blue",
                 stats=MatchDetailsPlayerStats(damage=_V4PlayerDamage()),
                 behavior=MatchDetailsPlayerBehavior(),
             ),

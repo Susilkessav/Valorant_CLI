@@ -36,7 +36,16 @@ _GROUNDING_RULES = """\
 Grounding rules (always enforce):
 - Reference SPECIFIC map callouts (e.g. "A Long", "CT spawn", "Elbow", "Cubby").
 - Name EXACT abilities with costs from GROUNDED CONTEXT — never invent names or costs.
-- Give CONCRETE timings (e.g. "smoke A Long at 1:25", "wait 2 s after flash").
+- Do not state ability durations, cooldowns, or timers unless they appear in GROUNDED CONTEXT.
+- If an agent is selected, that agent may ONLY use abilities listed in the AGENT block.
+- If no player agent is selected, do not infer the player's agent from the situation;
+  give team/role plans instead of telling the player to buy or use a specific kit.
+- Treat "Enemy agent(s)" metadata and "OPPONENT AGENT" blocks as opponent context only:
+  counter those abilities, never recommend that the player buy or use them.
+- Do not use generic owned-utility labels such as "Flash", "Molly", "Grenade", or "Wall";
+  write the exact ability name from GROUNDED CONTEXT or say the player needs a teammate.
+- For Omen specifically, write "Paranoia" or "nearsight"; never write "Flash" as his action.
+- Give CONCRETE timings (e.g. "Dark Cover A Link at 1:25", "Paranoia through A Art at 0:50").
 - When PLAYER CONTEXT is provided, tailor advice to the player's actual recent form; \
 do NOT dump their stats back at them."""
 
@@ -65,7 +74,6 @@ time left? enemy positions known?)
 ⏱️ **Time check** — Spike timer pressure if relevant; when to stop stalling.
 
 Keep total response under 200 words.  Be direct — no filler sentences.""".strip(),
-
     # ------------------------------------------------------------------
     "post_plant": f"""{_IDENTITY}
 
@@ -78,8 +86,8 @@ Respond with **exactly these sections**:
 📍 **Hold positions** — Best defensive spots for the planting team, with exact
 callouts (e.g. "one on Generator, one in Default, one watching CT").
 
-🔮 **Utility lineup** — Which abilities to hold for post-plant, specific wall /
-smoke / molly lineups by callout.  Include cast timing relative to spike timer.
+🔮 **Utility hold** — Which exact abilities to hold for post-plant by callout.
+Include cast timing relative to spike timer.
 
 🛡️ **Defuse pressure** — When to contest a defuse attempt vs. letting the
 clock run.  Give a timer threshold (e.g. "if defuse starts before 10 s,
@@ -88,7 +96,6 @@ challenge; after 10 s, let it go and trade").
 🔄 **If they retake** — One re-peek or crossfire setup.
 
 Keep total response under 220 words.""".strip(),
-
     # ------------------------------------------------------------------
     "retake": f"""{_IDENTITY}
 
@@ -112,7 +119,6 @@ Be specific: agent, ability name, callout.
 ⚡ **Spike timer rule** — At what timer to abandon the retake and just defuse.
 
 Keep total response under 250 words.""".strip(),
-
     # ------------------------------------------------------------------
     "economy": f"""{_IDENTITY}
 
@@ -137,7 +143,6 @@ full round.  Include the "bank" threshold.
 spend vs. hold credits for next round.
 
 Keep response under 200 words.  No generic advice about communication.""".strip(),
-
     # ------------------------------------------------------------------
     "stat_analysis": f"""{_IDENTITY}
 
@@ -162,7 +167,6 @@ Present them as comparisons (vs. rank average, vs. their own recent trend).
 targets the identified weakness.
 
 Keep response under 250 words.  Do not reprint raw stat tables back at the player.""".strip(),
-
     # ------------------------------------------------------------------
     "agent_info": f"""{_IDENTITY}
 
@@ -183,7 +187,6 @@ credit cost or cooldown, and primary use case.
 🤝 **Synergies** — One or two agents that pair especially well, and why.
 
 Keep response under 280 words.  Pull all costs and cooldowns from GROUNDED CONTEXT.""".strip(),
-
     # ------------------------------------------------------------------
     "meta": f"""{_IDENTITY}
 
@@ -197,7 +200,7 @@ maps — use them to make the practical takeaway personally relevant.
 Respond with **exactly these sections**:
 
 🏆 **Current strong picks** — 3–5 agents dominating this patch with a one-line
-reason each (e.g. "Vyse — wall + flash makes A-site executes near-unpunishable").
+reason each using their exact ability names from GROUNDED CONTEXT.
 
 📉 **Falling off** — 1–2 agents that lost value this patch and why.
 
@@ -210,7 +213,6 @@ Name the specific agents from their pool.  If PLAYER CONTEXT is absent, base
 the takeaway on rank / playstyle from the question.
 
 Keep response under 280 words.  Cite patch changes from GROUNDED CONTEXT if available.""".strip(),
-
     # ------------------------------------------------------------------
     "tactical": f"""{_IDENTITY}
 
@@ -234,7 +236,6 @@ the barrier drops.
 💡 **Key detail** — One non-obvious tip that separates ranked players from pros.
 
 Keep response under 350 words.  Prioritise specificity over completeness.""".strip(),
-
     # ------------------------------------------------------------------
     "general": f"""{_IDENTITY}
 

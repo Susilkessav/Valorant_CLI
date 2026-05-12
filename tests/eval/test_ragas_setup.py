@@ -390,9 +390,7 @@ class TestCollectPipelineOutputs:
                 run_coach=MagicMock(return_value=coach_response)
             ),
             "valocoach.core.config": MagicMock(load_settings=MagicMock(return_value=MagicMock())),
-            "valocoach.retrieval.retriever": MagicMock(
-                retrieve=MagicMock(return_value=contexts)
-            ),
+            "valocoach.retrieval.retriever": MagicMock(retrieve=MagicMock(return_value=contexts)),
         }
 
     def test_returns_one_result_per_sample(self):
@@ -618,8 +616,20 @@ class TestMainRagasEval:
     def test_main_single_sample_filter(self):
         """--sample filters to exactly one sample."""
         fake_samples = [
-            {"id": "s1", "question": "q1", "ground_truth": "g1", "response": "r1", "retrieved_contexts": []},
-            {"id": "s2", "question": "q2", "ground_truth": "g2", "response": "r2", "retrieved_contexts": []},
+            {
+                "id": "s1",
+                "question": "q1",
+                "ground_truth": "g1",
+                "response": "r1",
+                "retrieved_contexts": [],
+            },
+            {
+                "id": "s2",
+                "question": "q2",
+                "ground_truth": "g2",
+                "response": "r2",
+                "retrieved_contexts": [],
+            },
         ]
         fake_ds = MagicMock()
         mock_collect = MagicMock(return_value=fake_samples[:1])

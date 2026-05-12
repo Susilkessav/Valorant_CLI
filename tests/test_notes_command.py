@@ -33,6 +33,7 @@ def _fake_settings():
     s.riot_name = "Player"
     s.riot_tag = "1234"
     from pathlib import Path
+
     s.data_dir = Path("/tmp/valocoach_test_notes")
     return s
 
@@ -44,8 +45,17 @@ def _fake_settings():
 
 class TestIntentToCategoryMap:
     def test_all_nine_intents_covered(self):
-        intents = {"clutch", "post_plant", "retake", "tactical", "economy",
-                   "agent_info", "meta", "stat_analysis", "general"}
+        intents = {
+            "clutch",
+            "post_plant",
+            "retake",
+            "tactical",
+            "economy",
+            "agent_info",
+            "meta",
+            "stat_analysis",
+            "general",
+        }
         assert intents == set(_INTENT_TO_CATEGORY.keys())
 
     def test_tactical_intents_map_to_tactical(self):
@@ -151,8 +161,20 @@ class TestRunNotesList:
         from valocoach.coach.session_manager import NoteInfo
 
         fake_notes = [
-            NoteInfo(id=1, body="work on crossfire", category="tactical", priority=2, created_at="2026-05-06T10:00:00"),
-            NoteInfo(id=2, body="save on eco rounds", category="economy", priority=1, created_at="2026-05-06T11:00:00"),
+            NoteInfo(
+                id=1,
+                body="work on crossfire",
+                category="tactical",
+                priority=2,
+                created_at="2026-05-06T10:00:00",
+            ),
+            NoteInfo(
+                id=2,
+                body="save on eco rounds",
+                category="economy",
+                priority=1,
+                created_at="2026-05-06T11:00:00",
+            ),
         ]
         with (
             patch("valocoach.cli.commands.notes.load_settings", return_value=_fake_settings()),

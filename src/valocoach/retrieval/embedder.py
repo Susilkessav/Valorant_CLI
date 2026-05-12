@@ -28,5 +28,6 @@ def is_available() -> bool:
     try:
         embed_one("ping")
         return True
-    except Exception:
+    except Exception as exc:
+        log.warning("Embedding model is unavailable: %s", exc)
         return False

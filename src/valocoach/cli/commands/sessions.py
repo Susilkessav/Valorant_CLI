@@ -29,9 +29,7 @@ def run_sessions_list(*, limit: int = _DEFAULT_LIMIT) -> None:
 
     sessions = list_coaching_sessions(settings, puuid, limit=limit)
     if not sessions:
-        display.info(
-            "No coaching sessions found.  Start one with:  valocoach interactive"
-        )
+        display.info("No coaching sessions found.  Start one with:  valocoach interactive")
         return
 
     with display.command_frame("Coaching Sessions"):

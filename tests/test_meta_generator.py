@@ -24,13 +24,13 @@ class TestStripFences:
     def test_strips_json_fence(self):
         from valocoach.retrieval.meta_generator import _strip_fences
 
-        text = "```json\n{\"key\": \"value\"}\n```"
+        text = '```json\n{"key": "value"}\n```'
         assert _strip_fences(text) == '{"key": "value"}'
 
     def test_strips_plain_fence(self):
         from valocoach.retrieval.meta_generator import _strip_fences
 
-        text = "```\n{\"key\": \"value\"}\n```"
+        text = '```\n{"key": "value"}\n```'
         assert _strip_fences(text) == '{"key": "value"}'
 
     def test_no_fence_unchanged(self):
@@ -42,7 +42,7 @@ class TestStripFences:
     def test_strips_whitespace(self):
         from valocoach.retrieval.meta_generator import _strip_fences
 
-        text = "  \n{\"key\": \"value\"}\n  "
+        text = '  \n{"key": "value"}\n  '
         assert _strip_fences(text) == '{"key": "value"}'
 
 
@@ -141,9 +141,7 @@ _VALID_META_JSON = {
     "agent_meta": {
         "Jett": {"tier": "S", "pick_rate": "~30%", "win_rate": "~52%", "reason": "Fast lurk"}
     },
-    "map_meta": {
-        "Ascent": {"top_agents": ["Jett", "Sage"], "notes": "Mid control matters."}
-    },
+    "map_meta": {"Ascent": {"top_agents": ["Jett", "Sage"], "notes": "Mid control matters."}},
 }
 
 

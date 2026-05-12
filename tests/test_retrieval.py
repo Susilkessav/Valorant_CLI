@@ -1120,9 +1120,7 @@ class TestDeleteFromLiveCollectionExceptionPath:
     """
 
     @pytest.mark.asyncio
-    async def test_delete_by_metadata_exception_is_swallowed(
-        self, tmp_path, cache_db
-    ) -> None:
+    async def test_delete_by_metadata_exception_is_swallowed(self, tmp_path, cache_db) -> None:
         """_delete_from_live_collection catches and logs any exception from delete_by_metadata,
         then continues without re-raising."""
         from unittest.mock import patch

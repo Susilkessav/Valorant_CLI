@@ -74,6 +74,7 @@ preamble.
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _strip_fences(text: str) -> str:
     """Remove markdown code fences that some models add despite instructions."""
     text = re.sub(r"^```(?:json)?\s*", "", text.strip(), flags=re.MULTILINE)
@@ -117,9 +118,7 @@ def _validate(data: dict, existing: dict) -> dict:
     # Ensure all four tiers exist even if the LLM omitted one.
     for tier in ("S", "A", "B", "C"):
         if tier not in validated["tier_list"]:
-            validated["tier_list"][tier] = (
-                existing.get("tier_list", {}).get(tier, [])
-            )
+            validated["tier_list"][tier] = existing.get("tier_list", {}).get(tier, [])
 
     return validated
 
@@ -127,6 +126,7 @@ def _validate(data: dict, existing: dict) -> dict:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def generate_meta_update(
     settings: Settings,

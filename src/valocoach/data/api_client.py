@@ -46,8 +46,14 @@ from tenacity import (
 
 from valocoach.core.config import Settings
 from valocoach.core.exceptions import APIError, ConfigError, RateLimitError, ServerError
-from valocoach.data.api_models import AccountResponse, MatchDetails, StoredMatch
-from valocoach.data.models import MatchData, MMRData, MMRHistoryEntry
+from valocoach.data.api_models import (
+    AccountResponse,
+    MatchData,
+    MatchDetails,
+    MMRData,
+    MMRHistoryEntry,
+    StoredMatch,
+)
 
 log = logging.getLogger(__name__)
 

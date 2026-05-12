@@ -892,8 +892,16 @@ class TestHandleSlashNotes:
         mem = _memory()
         state = _active_state()
         fake_notes = [
-            NoteInfo(id=1, body="Work on crossfire", category="tactical", priority=2, created_at="2026-05-06"),
-            NoteInfo(id=2, body="Eco round tips", category="economy", priority=1, created_at="2026-05-06"),
+            NoteInfo(
+                id=1,
+                body="Work on crossfire",
+                category="tactical",
+                priority=2,
+                created_at="2026-05-06",
+            ),
+            NoteInfo(
+                id=2, body="Eco round tips", category="economy", priority=1, created_at="2026-05-06"
+            ),
         ]
         with patch(_LIST_NOTES, return_value=fake_notes):
             _handle_slash("/notes", mem, state)
@@ -906,7 +914,9 @@ class TestHandleSlashNotes:
         mem = _memory()
         state = _active_state()
         output_lines: list[str] = []
-        fake_notes = [NoteInfo(id=99, body="A long spot", category="tactical", priority=2, created_at="t")]
+        fake_notes = [
+            NoteInfo(id=99, body="A long spot", category="tactical", priority=2, created_at="t")
+        ]
 
         def _capture_print(*args, **_kw):
             if args:

@@ -135,7 +135,9 @@ class TestRunMetaSync:
         with (
             patch("valocoach.retrieval.patch_tracker.HenrikClient", self._noop_henrik()),
             patch("valocoach.retrieval.patch_tracker.session_scope", self._noop_scope()),
-            patch("valocoach.retrieval.patch_tracker.invalidate_volatile", AsyncMock(return_value=0)),
+            patch(
+                "valocoach.retrieval.patch_tracker.invalidate_volatile", AsyncMock(return_value=0)
+            ),
             patch("valocoach.retrieval.patch_tracker.check_patch_update", check_mock),
             patch("valocoach.retrieval.scrapers.patch_notes.scrape_url", return_value=patch_notes),
             patch("valocoach.retrieval.scrapers.meta_stats.scrape_url", return_value=patch_notes),
@@ -145,18 +147,19 @@ class TestRunMetaSync:
             patch("builtins.open", self._mock_open(json.dumps(_VALID_NEW_META))),
             patch("valocoach.retrieval.ingester.ingest_knowledge_base", return_value={"total": 10}),
             patch("valocoach.retrieval.meta as _meta_mod", create=True),
+            patch("valocoach.retrieval.meta_sync._META_FILE", MagicMock()),
         ):
             # Patch the lazy module-level cache reset in meta_sync
-            with patch("valocoach.retrieval.meta_sync._META_FILE", MagicMock()):
-                import valocoach.retrieval.meta as _m
-                with patch.object(_m, "_cache", None, create=True):
-                    return await run_meta_sync(
-                        settings,
-                        force=force,
-                        dry_run=dry_run,
-                        youtube_videos=youtube_videos,
-                        on_step=on_step,
-                    )
+            import valocoach.retrieval.meta as _m
+
+            with patch.object(_m, "_cache", None, create=True):
+                return await run_meta_sync(
+                    settings,
+                    force=force,
+                    dry_run=dry_run,
+                    youtube_videos=youtube_videos,
+                    on_step=on_step,
+                )
 
     def _noop_henrik(self):
         @asynccontextmanager
@@ -164,6 +167,7 @@ class TestRunMetaSync:
             client = AsyncMock()
             client.get_version = AsyncMock(return_value={"version": "10.09"})
             yield client
+
         return _ctx
 
     def _noop_scope(self):
@@ -176,11 +180,13 @@ class TestRunMetaSync:
             session.scalar = AsyncMock(return_value=pv)
             session.add = MagicMock()
             yield session
+
         return _scope
 
     def _mock_open(self, read_data: str):
         """Return a mock open() that yields read_data on read and captures writes."""
         from unittest.mock import mock_open
+
         return mock_open(read_data=read_data)
 
     async def test_no_new_patch_no_force_returns_early(self):
@@ -215,7 +221,6 @@ class TestRunMetaSync:
         # No new patch, but force=True
         check_mock = AsyncMock(return_value=("10.09", False))
         notes = _make_scraped_content()
-        stats = _make_stats()
         meta_json = json.dumps(_VALID_NEW_META)
 
         with (
@@ -229,6 +234,7 @@ class TestRunMetaSync:
             patch("valocoach.retrieval.ingester.ingest_knowledge_base", return_value={"total": 5}),
         ):
             import valocoach.retrieval.meta as _m
+
             with patch.object(_m, "_cache", None, create=True):
                 result = await run_meta_sync(settings, force=True)
 
@@ -286,6 +292,7 @@ class TestRunMetaSync:
             patch("valocoach.retrieval.ingester.ingest_knowledge_base", return_value={"total": 5}),
         ):
             import valocoach.retrieval.meta as _m
+
             with patch.object(_m, "_cache", None, create=True):
                 result = await run_meta_sync(settings, force=True)
 
@@ -311,6 +318,7 @@ class TestRunMetaSync:
             patch("valocoach.retrieval.ingester.ingest_knowledge_base", return_value={"total": 5}),
         ):
             import valocoach.retrieval.meta as _m
+
             with patch.object(_m, "_cache", None, create=True):
                 result = await run_meta_sync(settings, force=True)
 
@@ -357,6 +365,7 @@ class TestRunMetaSync:
             patch("valocoach.retrieval.ingester.ingest_knowledge_base", ingest_mock),
         ):
             import valocoach.retrieval.meta as _m
+
             with patch.object(_m, "_cache", None, create=True):
                 result = await run_meta_sync(settings, force=True)
 
@@ -554,6 +563,7 @@ class TestRunMetaSync:
             ),
         ):
             import valocoach.retrieval.meta as _m
+
             with patch.object(_m, "_cache", None, create=True):
                 result = await run_meta_sync(settings, force=True)
 

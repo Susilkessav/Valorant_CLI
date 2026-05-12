@@ -466,7 +466,10 @@ class TestPromptTemplates:
         assert "GROUNDED CONTEXT" in PROMPT_TEMPLATES["agent_info"]
 
     def test_meta_template_has_tier_section(self):
-        assert "strong picks" in PROMPT_TEMPLATES["meta"].lower() or "tier" in PROMPT_TEMPLATES["meta"].lower()
+        assert (
+            "strong picks" in PROMPT_TEMPLATES["meta"].lower()
+            or "tier" in PROMPT_TEMPLATES["meta"].lower()
+        )
 
     def test_tactical_template_has_all_five_sections(self):
         tmpl = PROMPT_TEMPLATES["tactical"]
@@ -475,7 +478,10 @@ class TestPromptTemplates:
 
     def test_general_template_no_forced_structure(self):
         """general template should explicitly discourage rigid structure."""
-        assert "five-section" in PROMPT_TEMPLATES["general"] or "template" in PROMPT_TEMPLATES["general"]
+        assert (
+            "five-section" in PROMPT_TEMPLATES["general"]
+            or "template" in PROMPT_TEMPLATES["general"]
+        )
 
     def test_templates_contain_grounding_rules(self):
         """All templates embed the grounding rules (callouts, ability costs)."""
@@ -483,6 +489,15 @@ class TestPromptTemplates:
             assert "callout" in tmpl.lower() or "GROUNDED CONTEXT" in tmpl, (
                 f"Template '{intent}' appears to be missing grounding rules"
             )
+
+    def test_templates_ban_generic_owned_utility_names(self):
+        """Grounding rules must forbid invented ability labels like Flash/Molly."""
+        for intent, tmpl in PROMPT_TEMPLATES.items():
+            lowered = tmpl.lower()
+            assert "generic owned-utility labels" in lowered, (
+                f"Template '{intent}' does not ban generic utility labels"
+            )
+            assert "flash" in lowered and "molly" in lowered
 
 
 # ===========================================================================

@@ -23,9 +23,12 @@ Typical call pattern (non-fatal warning)::
 
 from __future__ import annotations
 
+import logging
 from typing import NamedTuple
 
 import httpx
+
+log = logging.getLogger(__name__)
 
 
 class CheckResult(NamedTuple):
@@ -80,7 +83,8 @@ def check_ollama(settings) -> CheckResult:
     try:
         resp = httpx.get(url, timeout=3.0)
         resp.raise_for_status()
-    except Exception:
+    except Exception as exc:
+        log.warning("Ollama preflight failed: %s", exc)
         return CheckResult(
             ok=False,
             message=f"Ollama is not reachable at {settings.ollama_host}.",
@@ -167,7 +171,8 @@ def check_vector_store(settings) -> CheckResult:
                 ),
                 hint="Seed it once with:  valocoach ingest --seed",
             )
-    except Exception:
+    except Exception as exc:
+        log.warning("Vector store preflight failed: %s", exc)
         return CheckResult(
             ok=False,
             message="Could not read vector store (may not be initialised yet).",

@@ -110,7 +110,7 @@ async def _scope(session: AsyncMock):
 
 @pytest.fixture
 def account_data():
-    from valocoach.data.models import AccountData
+    from valocoach.data.api_models import AccountData
 
     return AccountData(
         puuid=PUUID,
@@ -123,7 +123,7 @@ def account_data():
 
 @pytest.fixture
 def mmr_data():
-    from valocoach.data.models import CurrentRankData, HighestRank, MMRData
+    from valocoach.data.api_models import CurrentRankData, HighestRank, MMRData
 
     return MMRData(
         name="Yoursaviour01",

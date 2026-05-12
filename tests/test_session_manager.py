@@ -131,7 +131,9 @@ class TestSessionInfo:
 
 class TestNoteInfo:
     def test_fields_accessible(self):
-        n = NoteInfo(id=5, body="Work on crossfire", category="tactical", priority=1, created_at="2026-05-06")
+        n = NoteInfo(
+            id=5, body="Work on crossfire", category="tactical", priority=1, created_at="2026-05-06"
+        )
         assert n.id == 5
         assert n.body == "Work on crossfire"
         assert n.category == "tactical"
@@ -362,7 +364,9 @@ class TestAddCoachingNote:
 
 
 class TestListOpenNotes:
-    def _fake_note(self, *, note_id=1, body="tip", category="general", priority=2, created_at="2026-05-06"):
+    def _fake_note(
+        self, *, note_id=1, body="tip", category="general", priority=2, created_at="2026-05-06"
+    ):
         n = MagicMock()
         n.id = note_id
         n.body = body
@@ -374,7 +378,10 @@ class TestListOpenNotes:
 
     def test_returns_note_info_list(self):
         settings = _fake_settings()
-        raw = [self._fake_note(note_id=1, body="A long crossfire"), self._fake_note(note_id=2, body="Eco tips")]
+        raw = [
+            self._fake_note(note_id=1, body="A long crossfire"),
+            self._fake_note(note_id=2, body="Eco tips"),
+        ]
         ctx, _db = _mock_db_ctx()
 
         with (
@@ -423,7 +430,15 @@ class TestListOpenNotes:
 
     def test_note_info_fields_mapped_correctly(self):
         settings = _fake_settings()
-        raw = [self._fake_note(note_id=7, body="body text", category="tactical", priority=1, created_at="2026-01-01")]
+        raw = [
+            self._fake_note(
+                note_id=7,
+                body="body text",
+                category="tactical",
+                priority=1,
+                created_at="2026-01-01",
+            )
+        ]
         raw[0].match_id = "match-abc"
         ctx, _db = _mock_db_ctx()
 
@@ -504,7 +519,16 @@ class TestResolveCoachingNote:
 
 
 class TestListCoachingSessions:
-    def _fake_session(self, *, session_id=1, title="2026-05-06", started_at="2026-05-06T10:00:00", ended_at=None, agent=None, map_=None):
+    def _fake_session(
+        self,
+        *,
+        session_id=1,
+        title="2026-05-06",
+        started_at="2026-05-06T10:00:00",
+        ended_at=None,
+        agent=None,
+        map_=None,
+    ):
         s = MagicMock()
         s.id = session_id
         s.session_title = title
@@ -517,7 +541,9 @@ class TestListCoachingSessions:
     def test_returns_session_info_list(self):
         settings = _fake_settings()
         raw = [
-            self._fake_session(session_id=3, title="Post-plant drill", ended_at="2026-05-06T12:00:00"),
+            self._fake_session(
+                session_id=3, title="Post-plant drill", ended_at="2026-05-06T12:00:00"
+            ),
             self._fake_session(session_id=2, title="2026-05-05", agent="Jett"),
         ]
         ctx, _db = _mock_db_ctx()
@@ -571,7 +597,15 @@ class TestListCoachingSessions:
 
     def test_session_info_fields_mapped(self):
         settings = _fake_settings()
-        raw = [self._fake_session(session_id=9, title="T", started_at="2026-01-01T08:00:00", agent="Viper", map_="Icebox")]
+        raw = [
+            self._fake_session(
+                session_id=9,
+                title="T",
+                started_at="2026-01-01T08:00:00",
+                agent="Viper",
+                map_="Icebox",
+            )
+        ]
         ctx, _db = _mock_db_ctx()
 
         with (
@@ -624,9 +658,7 @@ class TestMMRHistoryInfo:
         assert h.mmr_change is None
 
     def test_frozen(self):
-        h = MMRHistoryInfo(
-            tier_patched="Plat I", rr=20, elo=1420, mmr_change=-15, recorded_at="t"
-        )
+        h = MMRHistoryInfo(tier_patched="Plat I", rr=20, elo=1420, mmr_change=-15, recorded_at="t")
         with pytest.raises((AttributeError, TypeError)):
             h.elo = 9999  # type: ignore[misc]
 
@@ -681,7 +713,11 @@ class TestGetMmrTrend:
 
     def test_fields_mapped_correctly(self):
         settings = _fake_settings()
-        raw = [self._fake_row(tier_patched="Silver III", rr=72, elo=1072, mmr_change=-20, recorded_at="2026-04-01")]
+        raw = [
+            self._fake_row(
+                tier_patched="Silver III", rr=72, elo=1072, mmr_change=-20, recorded_at="2026-04-01"
+            )
+        ]
         ctx, _db = _mock_db_ctx()
 
         with (
@@ -928,12 +964,12 @@ def _make_match_player(
     kills: int = 18,
     deaths: int = 8,
     assists: int = 4,
-    score: int = 4500,          # ACS = 4500/20 = 225
+    score: int = 4500,  # ACS = 4500/20 = 225
     rounds_played: int = 20,
-    headshots: int = 56,        # HS% = 56/(56+140+4) ≈ 28%
+    headshots: int = 56,  # HS% = 56/(56+140+4) ≈ 28%
     bodyshots: int = 140,
     legshots: int = 4,
-    damage_dealt: int = 2840,   # ADR = 2840/20 = 142
+    damage_dealt: int = 2840,  # ADR = 2840/20 = 142
 ):
     mp = MagicMock()
     mp.match_id = match_id
@@ -1068,7 +1104,9 @@ def _note(
     priority: int = 2,
     created_at: str = "2026-05-06",
 ) -> NoteInfo:
-    return NoteInfo(id=note_id, body=body, category=category, priority=priority, created_at=created_at)
+    return NoteInfo(
+        id=note_id, body=body, category=category, priority=priority, created_at=created_at
+    )
 
 
 class TestFormatOpenNotesContext:
@@ -1124,7 +1162,9 @@ class TestFormatOpenNotesContext:
 
     def test_compact_output(self):
         """Five notes must still be under 600 chars — keeps token cost minimal."""
-        notes = [_note(note_id=i, body="Crossfire timing on A ramp", category="aim") for i in range(5)]
+        notes = [
+            _note(note_id=i, body="Crossfire timing on A ramp", category="aim") for i in range(5)
+        ]
         result = format_open_notes_context(notes)
         assert result is not None
         assert len(result) < 600, f"too long ({len(result)} chars):\n{result}"

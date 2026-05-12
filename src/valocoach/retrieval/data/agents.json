@@ -105,7 +105,7 @@
         "E": {"name": "Dark Cover", "cost": 100, "charges": 2, "description": "Lob a shadow sphere that travels through geometry and expands into a large opaque smoke (~15 s). Hold to extend range."},
         "X": {"name": "From the Shadows", "ult_points": 7, "description": "Teleport to any location on the map (via minimap select). Appears as a visible shadow first; the teleport can be cancelled by killing the shadow."}
       },
-      "playstyle": "Most versatile controller. Dark Cover smokes ANY angle through walls. Paranoia through walls is a hard-to-block flash. From the Shadows flanks are map-defining.",
+      "playstyle": "Most versatile controller. Dark Cover smokes ANY angle through walls. Paranoia is a long-range through-wall nearsight, not a flash. From the Shadows flanks are map-defining.",
       "economy_tip": "Dark Cover (100/charge) is the cheapest per-smoke in the game. Paranoia (300) is situational — skip on eco."
     },
     {
@@ -232,9 +232,9 @@
       "name": "Cypher",
       "role": "Sentinel",
       "abilities": {
-        "C": {"name": "Cyber Cage", "cost": 100, "charges": 2, "description": "Place a small cage; activate remotely to create a vision-blocking dome and slow enemies passing through. Very cheap intel denial."},
-        "Q": {"name": "Spycam", "cost": 150, "description": "Place a remote camera on a surface. Activate to view its feed and fire a tracking dart that reveals the hit enemy."},
-        "E": {"name": "Trapwire", "cost": 200, "charges": 2, "description": "Place a tripwire across an area; enemies who cross it are tethered, decayed, and revealed if they don't destroy it in time."},
+        "C": {"name": "Trapwire", "cost": 200, "charges": 2, "description": "Place a tripwire across an area; enemies who cross it are tethered, decayed, and revealed if they don't destroy it in time."},
+        "Q": {"name": "Cyber Cage", "cost": 100, "charges": 2, "description": "Place a small cage; activate remotely to create a vision-blocking dome and audio cue when enemies pass through."},
+        "E": {"name": "Spycam", "cost": 150, "description": "Place a remote camera on a surface. Activate to view its feed and fire a tracking dart that reveals the hit enemy."},
         "X": {"name": "Neural Theft", "ult_points": 7, "description": "Use on an enemy corpse to reveal the locations of all living enemies on the map (twice in quick succession)."}
       },
       "playstyle": "Information-dominant sentinel. Tripwires + Spycam give full coverage of one side of the map. Best on one-site anchor roles.",
@@ -244,8 +244,8 @@
       "name": "Killjoy",
       "role": "Sentinel",
       "abilities": {
-        "C": {"name": "Alarmbot", "cost": 200, "description": "Place a bot that detects nearby enemies and explodes when triggered, applying Vulnerable (increased incoming damage) briefly."},
-        "Q": {"name": "Nanoswarm", "cost": 200, "charges": 2, "description": "Throw a grenade that stays hidden; activate remotely to unleash a damaging nanoswarm cloud. Best post-plant tool."},
+        "C": {"name": "Nanoswarm", "cost": 200, "charges": 2, "description": "Throw a grenade that stays hidden; activate remotely to unleash a damaging nanoswarm cloud. Best post-plant tool."},
+        "Q": {"name": "Alarmbot", "cost": 200, "description": "Place a bot that detects nearby enemies and explodes when triggered, applying Vulnerable (increased incoming damage) briefly."},
         "E": {"name": "Turret", "cost": 0, "description": "Deploy a turret that tracks and fires at enemies in a 180-degree cone. Can be recalled. Free intel + chip damage."},
         "X": {"name": "Lockdown", "ult_points": 7, "description": "Deploy a device with a 13-second wind-up that detains all enemies in a very large radius. Destroyable but punishing."}
       },

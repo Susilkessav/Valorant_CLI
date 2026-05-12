@@ -18,8 +18,7 @@ log = logging.getLogger(__name__)
 # Official Valorant patch notes URL template.
 # Valorant uses major.minor in the slug, e.g. patch 10.08 → patch-notes-10-08
 _PATCH_NOTES_URL = (
-    "https://playvalorant.com/en-us/news/game-updates/"
-    "valorant-patch-notes-{major}-{minor}/"
+    "https://playvalorant.com/en-us/news/game-updates/valorant-patch-notes-{major}-{minor}/"
 )
 
 # HenrikDev returns strings like "release-10.08-shipping-32-1234567".

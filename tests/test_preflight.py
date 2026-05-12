@@ -120,7 +120,9 @@ class TestCheckOllama:
     def test_skips_probe_for_anthropic_prefix(self):
         """anthropic/ model must return ok without touching httpx."""
         settings = _settings(ollama_model="anthropic/claude-3-5-sonnet-20241022")
-        with patch("valocoach.core.preflight.httpx.get", side_effect=AssertionError("should not probe")) as mock_get:
+        with patch(
+            "valocoach.core.preflight.httpx.get", side_effect=AssertionError("should not probe")
+        ) as mock_get:
             result = check_ollama(settings)
         mock_get.assert_not_called()
         assert result.ok
@@ -128,7 +130,9 @@ class TestCheckOllama:
     def test_skips_probe_for_openai_prefix(self):
         """openai/ model must return ok without touching httpx."""
         settings = _settings(ollama_model="openai/gpt-4o")
-        with patch("valocoach.core.preflight.httpx.get", side_effect=AssertionError("should not probe")) as mock_get:
+        with patch(
+            "valocoach.core.preflight.httpx.get", side_effect=AssertionError("should not probe")
+        ) as mock_get:
             result = check_ollama(settings)
         mock_get.assert_not_called()
         assert result.ok

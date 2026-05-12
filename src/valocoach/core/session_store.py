@@ -148,12 +148,14 @@ def session_summary(path: Path) -> str:
                 rel = f"{secs // 3600} h ago"
             else:
                 rel = f"{secs // 86400} day(s) ago"
-        except Exception:
+        except Exception as exc:
+            log.warning("Could not parse saved session timestamp %s: %s", saved_at, exc)
             rel = path.stem  # fall back to filename
 
         n = len(turns)
         return f"{n} turn(s) · saved {rel}"
-    except Exception:
+    except Exception as exc:
+        log.warning("Could not summarize session %s: %s", path, exc)
         return path.name
 
 

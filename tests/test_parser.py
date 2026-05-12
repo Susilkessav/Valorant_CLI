@@ -79,6 +79,25 @@ class TestAgents:
         assert "Jett" in parse_situation("playing JETT").agents
         assert "Jett" in parse_situation("playing jett").agents
 
+    def test_enemy_agents_do_not_become_player_agents(self):
+        s = parse_situation(
+            "we are losing 8-12 on --map bind on --side attack, "
+            "enemy has 2 sentinals cypher on A and kj on B"
+        )
+        assert s.agents == []
+        assert s.enemy_agents == ["Cypher", "Killjoy"]
+        assert s.primary_agent is None
+
+    def test_player_and_enemy_agents_are_separated(self):
+        s = parse_situation("I'm Jett on Bind attack against Cypher and KJ")
+        assert s.agents == ["Jett"]
+        assert s.enemy_agents == ["Cypher", "Killjoy"]
+
+    def test_kj_alias_resolves_to_killjoy(self):
+        s = parse_situation("enemy KJ anchors B")
+        assert s.enemy_agents == ["Killjoy"]
+        assert s.agents == []
+
 
 # ---------------------------------------------------------------------------
 # Side detection
@@ -284,6 +303,12 @@ class TestIntegration:
         assert "Side: attack" in block
         assert "Agent(s): Jett" in block
         assert "Site: A" in block
+
+    def test_metadata_block_labels_enemy_agents_separately(self):
+        s = parse_situation("attack on Bind, enemy has Cypher and KJ")
+        block = s.to_metadata_block()
+        assert "Enemy agent(s): Cypher, Killjoy" in block
+        assert "Agent(s):" not in block
 
     def test_metadata_block_empty_when_nothing_extracted(self):
         assert parse_situation("how do I improve").to_metadata_block() == ""

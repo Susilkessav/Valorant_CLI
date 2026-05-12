@@ -21,6 +21,7 @@ _P_SETTINGS = "valocoach.core.config.load_settings"
 
 def _fake_settings():
     from pathlib import Path
+
     s = MagicMock()
     s.riot_name = "T"
     s.riot_tag = "X"

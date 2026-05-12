@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from sqlalchemy import select
 
-from valocoach.data.models import (
+from valocoach.data.api_models import (
     MatchData,
     MatchMetadata,
     MatchPlayers,
@@ -12,7 +12,7 @@ from valocoach.data.models import (
     PlayerStats,
     TeamResult,
 )
-from valocoach.data.models import (
+from valocoach.data.api_models import (
     MatchPlayer as MatchPlayerModel,
 )
 from valocoach.data.orm_models import (
@@ -783,14 +783,14 @@ async def test_create_coaching_session_default_title_is_date(db_session, account
     assert cs.session_title[4] == "-" and cs.session_title[7] == "-"
 
 
-async def test_create_coaching_session_stores_focus_agent_and_map(db_session, account_data, mmr_data):
+async def test_create_coaching_session_stores_focus_agent_and_map(
+    db_session, account_data, mmr_data
+):
     """focus_agent and focus_map are persisted."""
     await upsert_player(db_session, account_data, mmr_data)
     await db_session.flush()
 
-    cs = await create_coaching_session(
-        db_session, PUUID, focus_agent="Jett", focus_map="Ascent"
-    )
+    cs = await create_coaching_session(db_session, PUUID, focus_agent="Jett", focus_map="Ascent")
     await db_session.flush()
 
     assert cs.focus_agent == "Jett"
@@ -955,12 +955,8 @@ async def test_add_coaching_note_priority_clamped_to_1_3(db_session, account_dat
     cs = await create_coaching_session(db_session, PUUID)
     await db_session.flush()
 
-    low_note = await add_coaching_note(
-        db_session, cs.id, "Too low", puuid=PUUID, priority=0
-    )
-    high_note = await add_coaching_note(
-        db_session, cs.id, "Too high", puuid=PUUID, priority=99
-    )
+    low_note = await add_coaching_note(db_session, cs.id, "Too low", puuid=PUUID, priority=0)
+    high_note = await add_coaching_note(db_session, cs.id, "Too high", puuid=PUUID, priority=99)
     await db_session.flush()
 
     assert low_note.priority == 1
@@ -1041,7 +1037,7 @@ async def test_get_open_notes_priority_ordering(db_session, account_data, mmr_da
 
     notes = await get_open_notes(db_session, PUUID)
 
-    assert notes[0].priority == 3   # high comes first
+    assert notes[0].priority == 3  # high comes first
     assert notes[1].priority == 1
 
 
@@ -1100,9 +1096,7 @@ async def test_cascade_delete_session_removes_notes(db_session, account_data, mm
     await db_session.delete(cs)
     await db_session.flush()
 
-    result = await db_session.scalars(
-        sa_select(CoachingNote).where(CoachingNote.id == note_id)
-    )
+    result = await db_session.scalars(sa_select(CoachingNote).where(CoachingNote.id == note_id))
     assert result.first() is None  # note was cascade-deleted
 
 
