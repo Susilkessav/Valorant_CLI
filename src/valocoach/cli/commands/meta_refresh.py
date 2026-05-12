@@ -10,9 +10,8 @@ Runs the full automated meta sync pipeline:
   7. Re-embed everything into ChromaDB
 
 Flags:
-  --force       Run even when no new patch is detected.
-  --dry-run     Execute all steps but don't write meta.json or re-ingest.
-  --watch       Run in continuous mode: check daily, full sync on new patch.
+  --force         Run even when no new patch is detected.
+  --dry-run       Execute all steps but don't write meta.json or re-ingest.
   --install-cron  Write a crontab entry that runs daily patch checks automatically.
 """
 
@@ -32,7 +31,6 @@ def run_meta_refresh(
     *,
     force: bool = False,
     dry_run: bool = False,
-    watch: bool = False,
     install_cron: bool = False,
     youtube: list[str] | None = None,
 ) -> None:
@@ -42,10 +40,7 @@ def run_meta_refresh(
         _install_cron()
         return
 
-    if watch:
-        _run_watch_loop(force=force, dry_run=dry_run, youtube=youtube)
-    else:
-        asyncio.run(_run_once(force=force, dry_run=dry_run, youtube=youtube))
+    asyncio.run(_run_once(force=force, dry_run=dry_run, youtube=youtube))
 
 
 # ---------------------------------------------------------------------------
@@ -160,53 +155,6 @@ def _render_result(result: object, *, dry_run: bool) -> None:
             )
     elif r.is_new_patch or r.meta_regenerated:
         display.warn("Sync completed with errors — meta.json was not updated.")
-
-
-# ---------------------------------------------------------------------------
-# Watch mode (continuous daily checks)
-# ---------------------------------------------------------------------------
-
-def _run_watch_loop(
-    *,
-    force: bool,
-    dry_run: bool,
-    youtube: list[str] | None,
-) -> None:
-    """Run indefinitely: check for a new patch every 24 hours.
-
-    When a new patch is detected the full sync pipeline fires automatically.
-    The loop can be interrupted with Ctrl-C.
-    """
-    import time
-
-    check_interval_hours = 24
-    check_interval_secs = check_interval_hours * 3_600
-
-    display.info(
-        f"Watch mode: checking for new patches every {check_interval_hours}h. "
-        "Press [bold]Ctrl-C[/bold] to stop."
-    )
-
-    while True:
-        display.console.print()
-        display.console.rule("[dim]patch check[/dim]")
-        try:
-            asyncio.run(_run_once(force=force, dry_run=dry_run, youtube=youtube))
-        except Exception as exc:
-            display.warn(f"Sync run failed: {exc}")
-
-        # After the first forced run, subsequent checks are not forced.
-        force = False
-
-        display.console.print(
-            f"\n[dim]Next check in {check_interval_hours} hours …  "
-            "(Ctrl-C to exit)[/dim]"
-        )
-        try:
-            time.sleep(check_interval_secs)
-        except KeyboardInterrupt:
-            display.info("Watch mode stopped.")
-            return
 
 
 # ---------------------------------------------------------------------------

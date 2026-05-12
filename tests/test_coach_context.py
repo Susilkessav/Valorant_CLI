@@ -883,17 +883,11 @@ def test_format_baseline_lines_returns_empty_when_no_anomalies() -> None:
 
 
 def test_build_stats_context_returns_none_when_no_data() -> None:
-    """load_player_data_async returns None → build_stats_context returns None (line 244).
-
-    Coverage target: context.py lines 243 (await), 244 (if data is None), 279 (asyncio.run).
-    """
-    from unittest.mock import AsyncMock
-
+    """load_player_data returns None → build_stats_context returns None."""
     from valocoach.coach.context import build_stats_context
 
     with patch(
-        "valocoach.coach.context.load_player_data_async",
-        new_callable=AsyncMock,
+        "valocoach.coach.context.load_player_data",
         return_value=None,
     ):
         result = build_stats_context(_settings())
@@ -902,8 +896,8 @@ def test_build_stats_context_returns_none_when_no_data() -> None:
 
 
 def test_build_stats_context_returns_none_when_rows_empty() -> None:
-    """data.rows=[] → build_stats_context returns None (line 244 second condition)."""
-    from unittest.mock import AsyncMock, MagicMock
+    """data.rows=[] → build_stats_context returns None."""
+    from unittest.mock import MagicMock
 
     from valocoach.coach.context import build_stats_context
 
@@ -911,8 +905,7 @@ def test_build_stats_context_returns_none_when_rows_empty() -> None:
     fake_data.rows = []
 
     with patch(
-        "valocoach.coach.context.load_player_data_async",
-        new_callable=AsyncMock,
+        "valocoach.coach.context.load_player_data",
         return_value=fake_data,
     ):
         result = build_stats_context(_settings())
@@ -1056,10 +1049,8 @@ def test_build_stats_context_returns_string_when_data_present() -> None:
     """data with non-empty rows → build_stats_context returns formatted string.
 
     Coverage target: context.py lines 247 (analysis), 248 (compare_baseline),
-    249 (return _format_context), 279 (asyncio.run returns str).
+    249 (return _format_context).
     """
-    from unittest.mock import AsyncMock
-
     from valocoach.coach.context import build_stats_context
     from valocoach.data.loader import PlayerData
 
@@ -1068,8 +1059,7 @@ def test_build_stats_context_returns_string_when_data_present() -> None:
     fake_data = PlayerData(player=player, rows=rows, full_matches=[])
 
     with patch(
-        "valocoach.coach.context.load_player_data_async",
-        new_callable=AsyncMock,
+        "valocoach.coach.context.load_player_data",
         return_value=fake_data,
     ):
         result = build_stats_context(_settings())

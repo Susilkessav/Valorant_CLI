@@ -4,15 +4,15 @@ The async DB plumbing is covered by test_repository.py; here we focus on
 the parts profile owns: figuring out which player to show (CLI args vs
 settings fallback) and that the renderer surfaces the right numbers.
 
-Mock contract (after stats-engine upgrade):
-    profile calls load_player_data_async (async), so mocks use
-    AsyncMock / coroutine side_effect returning PlayerData | None.
+Mock contract:
+    profile calls load_player_data (sync), so mocks use
+    MagicMock returning PlayerData | None.
 """
 
 from __future__ import annotations
 
 from io import StringIO
-from unittest.mock import AsyncMock, patch
+from unittest.mock import MagicMock, patch
 
 import click
 import pytest
@@ -333,8 +333,8 @@ def test_run_profile_legend_only_when_warnings_fire(tmp_path) -> None:
         with (
             patch("valocoach.cli.commands.profile.load_settings", return_value=fake_settings),
             patch(
-                "valocoach.cli.commands.profile.load_player_data_async",
-                new=AsyncMock(return_value=data),
+                "valocoach.cli.commands.profile.load_player_data",
+                new=MagicMock(return_value=data),
             ),
         ):
             run_profile(name="Tester", tag="NA1", console=con)
@@ -352,8 +352,8 @@ def test_run_profile_not_found_warns_and_exits(tmp_path) -> None:
     with (
         patch("valocoach.cli.commands.profile.load_settings", return_value=fake_settings),
         patch(
-            "valocoach.cli.commands.profile.load_player_data_async",
-            new=AsyncMock(return_value=None),
+            "valocoach.cli.commands.profile.load_player_data",
+            new=MagicMock(return_value=None),
         ),
         pytest.raises(click.exceptions.Exit),
     ):
@@ -364,12 +364,12 @@ def test_run_profile_passes_resolved_name_to_loader(tmp_path) -> None:
     """The loader must be called with the CLI --name/--tag, not the settings default."""
     fake_settings = _fake_settings(tmp_path)
     data = _player_data([_mp(match_id=f"m-{i}") for i in range(30)])
-    mock_loader = AsyncMock(return_value=data)
+    mock_loader = MagicMock(return_value=data)
 
     con = _capture_console()
     with (
         patch("valocoach.cli.commands.profile.load_settings", return_value=fake_settings),
-        patch("valocoach.cli.commands.profile.load_player_data_async", new=mock_loader),
+        patch("valocoach.cli.commands.profile.load_player_data", new=mock_loader),
     ):
         run_profile(name="TargetPlayer", tag="TG99", console=con)
 
@@ -383,12 +383,12 @@ def test_run_profile_uses_settings_identity_when_no_args(tmp_path) -> None:
     """No --name/--tag → loader receives settings.riot_name / riot_tag."""
     fake_settings = _fake_settings(tmp_path)
     data = _player_data([_mp(match_id=f"m-{i}") for i in range(30)])
-    mock_loader = AsyncMock(return_value=data)
+    mock_loader = MagicMock(return_value=data)
 
     con = _capture_console()
     with (
         patch("valocoach.cli.commands.profile.load_settings", return_value=fake_settings),
-        patch("valocoach.cli.commands.profile.load_player_data_async", new=mock_loader),
+        patch("valocoach.cli.commands.profile.load_player_data", new=mock_loader),
     ):
         run_profile(console=con)  # no name/tag
 
@@ -508,8 +508,8 @@ def test_run_profile_round_stats_shown_when_full_matches_present(tmp_path) -> No
     with (
         patch("valocoach.cli.commands.profile.load_settings", return_value=fake_settings),
         patch(
-            "valocoach.cli.commands.profile.load_player_data_async",
-            new=AsyncMock(return_value=data),
+            "valocoach.cli.commands.profile.load_player_data",
+            new=MagicMock(return_value=data),
         ),
     ):
         run_profile(name="Tester", tag="NA1", console=con)
@@ -528,8 +528,8 @@ def test_run_profile_no_round_stats_when_full_matches_empty(tmp_path) -> None:
     with (
         patch("valocoach.cli.commands.profile.load_settings", return_value=fake_settings),
         patch(
-            "valocoach.cli.commands.profile.load_player_data_async",
-            new=AsyncMock(return_value=data),
+            "valocoach.cli.commands.profile.load_player_data",
+            new=MagicMock(return_value=data),
         ),
     ):
         run_profile(name="Tester", tag="NA1", console=con)
@@ -571,8 +571,8 @@ def test_run_profile_no_round_stats_when_full_matches_have_zero_rounds(tmp_path)
     with (
         patch("valocoach.cli.commands.profile.load_settings", return_value=fake_settings),
         patch(
-            "valocoach.cli.commands.profile.load_player_data_async",
-            new=AsyncMock(return_value=data),
+            "valocoach.cli.commands.profile.load_player_data",
+            new=MagicMock(return_value=data),
         ),
     ):
         run_profile(name="Tester", tag="NA1", console=con)
@@ -595,8 +595,8 @@ def test_run_profile_breakdown_shown_when_multiple_agents(tmp_path) -> None:
     with (
         patch("valocoach.cli.commands.profile.load_settings", return_value=fake_settings),
         patch(
-            "valocoach.cli.commands.profile.load_player_data_async",
-            new=AsyncMock(return_value=data),
+            "valocoach.cli.commands.profile.load_player_data",
+            new=MagicMock(return_value=data),
         ),
     ):
         run_profile(name="Tester", tag="NA1", console=con)
@@ -630,7 +630,7 @@ def test_run_profile_coaching_sessions_rendered(tmp_path) -> None:
     con = _capture_console()
     with (
         patch("valocoach.cli.commands.profile.load_settings", return_value=fake_settings),
-        patch("valocoach.cli.commands.profile.load_player_data_async", new=AsyncMock(return_value=data)),
+        patch("valocoach.cli.commands.profile.load_player_data", new=MagicMock(return_value=data)),
         patch("valocoach.cli.commands.profile.list_coaching_sessions", return_value=sessions),
         patch("valocoach.cli.commands.profile.list_open_notes", return_value=[]),
     ):
@@ -656,7 +656,7 @@ def test_run_profile_open_notes_rendered(tmp_path) -> None:
     con = _capture_console()
     with (
         patch("valocoach.cli.commands.profile.load_settings", return_value=fake_settings),
-        patch("valocoach.cli.commands.profile.load_player_data_async", new=AsyncMock(return_value=data)),
+        patch("valocoach.cli.commands.profile.load_player_data", new=MagicMock(return_value=data)),
         patch("valocoach.cli.commands.profile.list_coaching_sessions", return_value=[]),
         patch("valocoach.cli.commands.profile.list_open_notes", return_value=notes),
     ):
@@ -675,7 +675,7 @@ def test_run_profile_coaching_section_exception_silently_skipped(tmp_path) -> No
     con = _capture_console()
     with (
         patch("valocoach.cli.commands.profile.load_settings", return_value=fake_settings),
-        patch("valocoach.cli.commands.profile.load_player_data_async", new=AsyncMock(return_value=data)),
+        patch("valocoach.cli.commands.profile.load_player_data", new=MagicMock(return_value=data)),
         patch("valocoach.cli.commands.profile.list_coaching_sessions",
               side_effect=RuntimeError("db down")),
         patch("valocoach.cli.commands.profile.list_open_notes", return_value=[]),
@@ -717,7 +717,7 @@ def test_run_profile_rank_trend_rendered_when_history_present(tmp_path) -> None:
     con = _capture_console()
     with (
         patch("valocoach.cli.commands.profile.load_settings", return_value=fake_settings),
-        patch("valocoach.cli.commands.profile.load_player_data_async", new=AsyncMock(return_value=data)),
+        patch("valocoach.cli.commands.profile.load_player_data", new=MagicMock(return_value=data)),
         patch("valocoach.cli.commands.profile.get_mmr_trend", return_value=history),
         patch("valocoach.cli.commands.profile.list_coaching_sessions", return_value=[]),
         patch("valocoach.cli.commands.profile.list_open_notes", return_value=[]),
@@ -739,7 +739,7 @@ def test_run_profile_rank_trend_skipped_when_no_history(tmp_path) -> None:
     con = _capture_console()
     with (
         patch("valocoach.cli.commands.profile.load_settings", return_value=fake_settings),
-        patch("valocoach.cli.commands.profile.load_player_data_async", new=AsyncMock(return_value=data)),
+        patch("valocoach.cli.commands.profile.load_player_data", new=MagicMock(return_value=data)),
         patch("valocoach.cli.commands.profile.get_mmr_trend", return_value=[]),
         patch("valocoach.cli.commands.profile.list_coaching_sessions", return_value=[]),
         patch("valocoach.cli.commands.profile.list_open_notes", return_value=[]),
@@ -764,7 +764,7 @@ def test_run_profile_rank_trend_skipped_with_single_snapshot(tmp_path) -> None:
     con = _capture_console()
     with (
         patch("valocoach.cli.commands.profile.load_settings", return_value=fake_settings),
-        patch("valocoach.cli.commands.profile.load_player_data_async", new=AsyncMock(return_value=data)),
+        patch("valocoach.cli.commands.profile.load_player_data", new=MagicMock(return_value=data)),
         patch("valocoach.cli.commands.profile.get_mmr_trend", return_value=history),
         patch("valocoach.cli.commands.profile.list_coaching_sessions", return_value=[]),
         patch("valocoach.cli.commands.profile.list_open_notes", return_value=[]),
@@ -790,7 +790,7 @@ def test_run_profile_rank_trend_elo_delta_shown(tmp_path) -> None:
     con = _capture_console()
     with (
         patch("valocoach.cli.commands.profile.load_settings", return_value=fake_settings),
-        patch("valocoach.cli.commands.profile.load_player_data_async", new=AsyncMock(return_value=data)),
+        patch("valocoach.cli.commands.profile.load_player_data", new=MagicMock(return_value=data)),
         patch("valocoach.cli.commands.profile.get_mmr_trend", return_value=history),
         patch("valocoach.cli.commands.profile.list_coaching_sessions", return_value=[]),
         patch("valocoach.cli.commands.profile.list_open_notes", return_value=[]),

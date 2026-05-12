@@ -22,10 +22,8 @@ Separation of concerns:
 
 from __future__ import annotations
 
-import asyncio
-
 from valocoach.core.config import Settings
-from valocoach.data.loader import load_player_data_async
+from valocoach.data.loader import load_player_data
 from valocoach.data.orm_models import MatchPlayer, Player
 from valocoach.stats import (
     compute_per_agent,
@@ -223,43 +221,6 @@ def _format_context(
     return "\n".join(lines)
 
 
-# ---------------------------------------------------------------------------
-# Async worker
-# ---------------------------------------------------------------------------
-
-
-async def _build_stats_context_async(
-    settings: Settings,
-    *,
-    limit: int,
-    top_n: int,
-) -> str | None:
-    """Fetch the player + recent rows and hand them to the formatter.
-
-    Returns None when the player has never been synced OR when the DB has
-    no matches for them. Either way there's nothing to personalise with —
-    caller should fall back to generic coaching.
-    """
-    data = await load_player_data_async(settings, limit=limit, include_rounds=True)
-    if data is None or not data.rows:
-        return None
-
-    analysis = analyze_rounds(data.full_matches, data.player.puuid) if data.full_matches else None
-    comparison = compare_baseline(data.rows)
-    return _format_context(
-        data.player,
-        data.rows,
-        top_n=top_n,
-        round_analysis=analysis,
-        baseline_comparison=comparison,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Sync entry point
-# ---------------------------------------------------------------------------
-
-
 def build_stats_context(
     settings: Settings,
     *,
@@ -276,4 +237,16 @@ def build_stats_context(
     Designed to be safe to call unconditionally — the caller decides whether
     to enable it; this function just reports honestly on what data exists.
     """
-    return asyncio.run(_build_stats_context_async(settings, limit=limit, top_n=top_n))
+    data = load_player_data(settings, limit=limit, include_rounds=True)
+    if data is None or not data.rows:
+        return None
+
+    analysis = analyze_rounds(data.full_matches, data.player.puuid) if data.full_matches else None
+    comparison = compare_baseline(data.rows)
+    return _format_context(
+        data.player,
+        data.rows,
+        top_n=top_n,
+        round_analysis=analysis,
+        baseline_comparison=comparison,
+    )

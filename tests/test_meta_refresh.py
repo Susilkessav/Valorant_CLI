@@ -92,29 +92,9 @@ class TestRunMetaRefresh:
             coro.close()
 
         with patch("valocoach.cli.commands.meta_refresh.asyncio.run", _close_coro):
-            run_meta_refresh(force=False, dry_run=False, watch=False)
+            run_meta_refresh(force=False, dry_run=False)
 
         assert len(calls) == 1
-
-    def test_watch_mode_calls_run_watch_loop(self):
-        from valocoach.cli.commands.meta_refresh import run_meta_refresh
-
-        with patch(
-            "valocoach.cli.commands.meta_refresh._run_watch_loop"
-        ) as mock_watch:
-            run_meta_refresh(watch=True)
-
-        mock_watch.assert_called_once()
-
-    def test_flags_forwarded_to_run_watch_loop(self):
-        from valocoach.cli.commands.meta_refresh import run_meta_refresh
-
-        with patch(
-            "valocoach.cli.commands.meta_refresh._run_watch_loop"
-        ) as mock_watch:
-            run_meta_refresh(watch=True, force=True, dry_run=True, youtube=["abc"])
-
-        mock_watch.assert_called_once_with(force=True, dry_run=True, youtube=["abc"])
 
 
 # ---------------------------------------------------------------------------
@@ -310,32 +290,7 @@ class TestInstallCron:
             _install_cron()
 
 
-# ---------------------------------------------------------------------------
-# _run_watch_loop (smoke test via KeyboardInterrupt)
-# ---------------------------------------------------------------------------
-
-
-class TestRunWatchLoop:
-    def test_watch_loop_stops_on_keyboard_interrupt(self):
-        """KeyboardInterrupt during sleep exits the loop cleanly."""
-        from valocoach.cli.commands.meta_refresh import _run_watch_loop
-
-        call_count = 0
-
-        def fake_asyncio_run(coro):
-            nonlocal call_count
-            call_count += 1
-
-        with (
-            patch("asyncio.run", side_effect=fake_asyncio_run),
-            patch("time.sleep", side_effect=KeyboardInterrupt),
-            patch("valocoach.cli.display.info"),
-            patch("valocoach.cli.display.console"),
-        ):
-            _run_watch_loop(force=False, dry_run=False, youtube=None)
-
-        assert call_count >= 1  # at least one run attempt
-
+class TestRenderResultExtra:
     def test_render_result_no_action_when_no_patch_and_no_meta(self):
         """When meta_written=False and not (is_new_patch or meta_regenerated), no warn."""
         from valocoach.cli.commands.meta_refresh import _render_result
@@ -462,28 +417,3 @@ class TestRunOnce:
         ):
             await _run_once(force=False, dry_run=False, youtube=None)
 
-
-class TestRunWatchLoopExtra:
-    """Extra watch-loop tests that don't belong in the asyncio class."""
-
-    def test_watch_loop_continues_after_run_error(self):
-        """RuntimeError from _run_once is caught and loop continues until sleep interrupt."""
-        from valocoach.cli.commands.meta_refresh import _run_watch_loop
-
-        call_count = 0
-
-        def fake_asyncio_run(coro):
-            nonlocal call_count
-            call_count += 1
-            raise RuntimeError("sync failed")
-
-        with (
-            patch("asyncio.run", side_effect=fake_asyncio_run),
-            patch("time.sleep", side_effect=KeyboardInterrupt),
-            patch("valocoach.cli.display.warn"),
-            patch("valocoach.cli.display.info"),
-            patch("valocoach.cli.display.console"),
-        ):
-            _run_watch_loop(force=False, dry_run=False, youtube=None)
-
-        assert call_count >= 1

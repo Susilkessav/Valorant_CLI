@@ -508,14 +508,14 @@ class TestPanelTitles:
         titles = list(PANEL_TITLES.values())
         assert len(titles) == len(set(titles)), "Duplicate panel titles found"
 
-    def test_clutch_title_has_emoji(self):
-        assert "⚡" in PANEL_TITLES["clutch"]
+    def test_clutch_title_mentions_clutch(self):
+        assert "Clutch" in PANEL_TITLES["clutch"]
 
     def test_economy_title_mentions_economy(self):
-        assert "Economy" in PANEL_TITLES["economy"] or "💰" in PANEL_TITLES["economy"]
+        assert "Economy" in PANEL_TITLES["economy"]
 
-    def test_stat_title_has_chart_emoji(self):
-        assert "📊" in PANEL_TITLES["stat_analysis"]
+    def test_stat_title_mentions_stats(self):
+        assert "Stats" in PANEL_TITLES["stat_analysis"]
 
 
 # ===========================================================================

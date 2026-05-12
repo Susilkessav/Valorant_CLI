@@ -255,15 +255,15 @@ Keep total response under 300 words.""".strip(),
 # ---------------------------------------------------------------------------
 
 PANEL_TITLES: dict[IntentType, str] = {
-    "clutch": "⚡ Clutch Decision",
-    "post_plant": "💣 Post-Plant",
-    "retake": "🔄 Retake Plan",
-    "economy": "💰 Economy",
-    "stat_analysis": "📊 Stats Analysis",
-    "agent_info": "🎮 Agent Info",
-    "meta": "🏆 Meta Insight",
-    "tactical": "🎯 Tactical Coach",
-    "general": "💬 Coach",
+    "clutch": "Clutch Decision",
+    "post_plant": "Post-Plant",
+    "retake": "Retake Plan",
+    "economy": "Economy",
+    "stat_analysis": "Stats Analysis",
+    "agent_info": "Agent Info",
+    "meta": "Meta Insight",
+    "tactical": "Tactical Coach",
+    "general": "Coach",
 }
 
 __all__ = ["PANEL_TITLES", "PROMPT_TEMPLATES"]

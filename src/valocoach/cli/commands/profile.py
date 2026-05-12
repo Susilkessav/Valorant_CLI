@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
-
 import typer
 from rich.console import Console
 
@@ -25,7 +23,7 @@ from valocoach.coach.session_manager import (
     list_open_notes,
 )
 from valocoach.core.config import load_settings
-from valocoach.data.loader import load_player_data_async
+from valocoach.data.loader import load_player_data
 from valocoach.stats import compute_per_agent
 from valocoach.stats.round_analyzer import analyze_rounds
 
@@ -76,14 +74,12 @@ def run_profile(
         settings_tag=settings.riot_tag,
     )
 
-    data = asyncio.run(
-        load_player_data_async(
-            settings,
-            name=resolved_name,
-            tag=resolved_tag,
-            limit=limit,
-            include_rounds=True,
-        )
+    data = load_player_data(
+        settings,
+        name=resolved_name,
+        tag=resolved_tag,
+        limit=limit,
+        include_rounds=True,
     )
 
     if data is None:

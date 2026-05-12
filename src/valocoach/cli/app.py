@@ -292,12 +292,6 @@ def meta_refresh(
         "--dry-run",
         help="Simulate all steps but do not write meta.json or re-ingest.",
     ),
-    watch: bool = typer.Option(
-        False,
-        "--watch",
-        "-w",
-        help="Run continuously, checking for a new patch every 24 hours.",
-    ),
     install_cron: bool = typer.Option(
         False,
         "--install-cron",
@@ -321,7 +315,6 @@ def meta_refresh(
       valocoach meta-refresh               # run once (only fires on new patch)
       valocoach meta-refresh --force       # force update regardless of patch
       valocoach meta-refresh --dry-run     # preview without writing anything
-      valocoach meta-refresh --watch       # run every 24 h in the foreground
       valocoach meta-refresh --install-cron  # register daily OS-level cron job
     """
     from valocoach.cli.commands.meta_refresh import run_meta_refresh
@@ -329,7 +322,6 @@ def meta_refresh(
     run_meta_refresh(
         force=force,
         dry_run=dry_run,
-        watch=watch,
         install_cron=install_cron,
         youtube=list(youtube) or None,
     )
