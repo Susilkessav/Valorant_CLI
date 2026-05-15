@@ -311,6 +311,13 @@ class RoundPlayer(Base):
     survived: Mapped[bool] = mapped_column(Boolean, default=True)
     was_afk: Mapped[bool] = mapped_column(Boolean, default=False)
     stayed_in_spawn: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Round-level ability cast counts (NULL for pre-migration rows)
+    ability_casts_grenade: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ability_casts_ability1: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ability_casts_ability2: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ability_casts_ultimate: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Damage events summary: JSON list of {receiver, damage, headshots, bodyshots, legshots}
+    damage_events_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Relationship
     round: Mapped[Round] = relationship(back_populates="round_players")

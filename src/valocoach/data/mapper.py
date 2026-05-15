@@ -252,6 +252,19 @@ def _build_round_tree(details: MatchDetails, match_id: str) -> list[Round]:
             damage_dealt = sum(
                 int(ev.get("damage", 0)) for ev in ps.damage_events if isinstance(ev, dict)
             )
+            # Compact damage events: keep only the fields useful for analysis
+            damage_summary = [
+                {
+                    "receiver": ev.get("receiver"),
+                    "damage": int(ev.get("damage", 0)),
+                    "headshots": int(ev.get("headshots", 0)),
+                    "bodyshots": int(ev.get("bodyshots", 0)),
+                    "legshots": int(ev.get("legshots", 0)),
+                }
+                for ev in ps.damage_events
+                if isinstance(ev, dict)
+            ]
+            ac = ps.ability_casts
             orm_round.round_players.append(
                 RoundPlayer(
                     match_id=match_id,
@@ -268,6 +281,11 @@ def _build_round_tree(details: MatchDetails, match_id: str) -> list[Round]:
                     survived=puuid not in victims_this_round,
                     was_afk=ps.was_afk,
                     stayed_in_spawn=ps.stayed_in_spawn,
+                    ability_casts_grenade=ac.grenade,
+                    ability_casts_ability1=ac.ability_1,
+                    ability_casts_ability2=ac.ability_2,
+                    ability_casts_ultimate=ac.ultimate,
+                    damage_events_json=json.dumps(damage_summary) if damage_summary else None,
                 )
             )
 
