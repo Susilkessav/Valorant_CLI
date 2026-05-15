@@ -334,8 +334,17 @@ def _build_completer():
 _OLLAMA_RECONNECT_KEYWORDS = ("connection", "refused", "timeout", "unreachable", "connect")
 
 
-def run_interactive() -> None:
-    """Start the interactive coaching REPL."""
+def run_interactive(
+    initial_match_context: SessionMatchContext | None = None,
+) -> None:
+    """Start the interactive coaching REPL.
+
+    Args:
+        initial_match_context: Pre-populated :class:`SessionMatchContext` to
+            carry into the REPL.  When provided the REPL skips the blank
+            context and the welcome hint updates to show what is already set.
+            Typical caller: ``post-game`` command (B6 handoff).
+    """
     from valocoach.core.config import load_settings
     from valocoach.core.preflight import check_ollama
 
@@ -360,7 +369,7 @@ def run_interactive() -> None:
         return
 
     memory = ConversationMemory(max_turns=20, max_tokens=3_000)
-    match_ctx = SessionMatchContext()
+    match_ctx = initial_match_context or SessionMatchContext()
 
     coach_state = REPLCoachState()
     coach_state.settings = settings
@@ -402,6 +411,11 @@ def run_interactive() -> None:
 
     welcome = "\n".join(_WELCOME_PARTS)
     display.console.print(welcome)
+    if initial_match_context is not None and not initial_match_context.is_empty:
+        display.console.print(
+            f"[muted]Match context pre-loaded: {initial_match_context.summary_line()}[/muted]"
+        )
+        display.console.print("[muted]Use /context to review · /reset to clear.[/muted]")
     display.console.print()
 
     from valocoach.cli.commands.coach import run_coach

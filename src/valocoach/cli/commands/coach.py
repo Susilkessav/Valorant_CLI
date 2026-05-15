@@ -75,6 +75,7 @@ def run_coach(
     no_elicit: bool = False,
     match_context=None,  # SessionMatchContext | None — avoids circular import
     conversation_history: list[dict[str, str]] | None = None,
+    force_intent: str | None = None,  # bypass classify_intent() when set
 ) -> str | None:
     settings = load_settings()
 
@@ -108,7 +109,7 @@ def run_coach(
         agent, map_, side, extra_enemies = match_context.resolve_coach_kwargs(agent, map_, side)
         match_context_block = match_context.to_context_block()
 
-    intent = classify_intent(parsed, situation)
+    intent = force_intent if force_intent is not None else classify_intent(parsed, situation)
     system_prompt_base = PROMPT_TEMPLATES[intent]
     panel_title = PANEL_TITLES[intent]
 

@@ -33,6 +33,7 @@ ALL_INTENTS: list[IntentType] = [
     "meta",
     "tactical",
     "general",
+    "post_game",
 ]
 
 

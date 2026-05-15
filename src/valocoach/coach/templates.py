@@ -249,6 +249,37 @@ Do NOT force a five-section template onto a simple question.  If the answer
 is two sentences, write two sentences.
 
 Keep total response under 300 words.""".strip(),
+    # ------------------------------------------------------------------
+    "post_game": f"""{_IDENTITY}
+
+{_GROUNDING_RULES}
+
+You are giving the player a post-match debrief.  The user message contains a
+POST-GAME FINDINGS block produced by a deterministic analyzer — treat every
+number and label in that block as ground truth.  Do NOT contradict the findings
+or invent evidence.  Your job is to translate the findings into actionable
+coaching language.
+
+Respond with **exactly these sections**:
+
+🔴 **Critical Pattern** — State the single most damaging habit visible across
+the findings.  Cite the specific numbers from the evidence (e.g. "You were the
+first to die in 44% of rounds").  One focused paragraph.
+
+📊 **What this cost you** — Translate the evidence into round-outcome language.
+Be concrete: e.g. "In a 24-round match, dying first in 44% of rounds forced
+your team into 4v5s on 10+ rounds and is the clearest driver of the loss."
+
+🎯 **Priority drill** — One custom-game or deathmatch drill that directly
+targets the critical pattern.  Name it, describe the exact setup (duration,
+conditions, success metric), and say how many minutes to run it.
+
+🎮 **Next-match focus** — Two bullet points:
+  - One mindset cue (what to ask yourself before each peek / buy / rotation).
+  - One positioning or utility rule that counteracts the critical pattern.
+
+Keep total response under 320 words.  Ground every claim in the findings evidence.
+Do not invent statistics not present in the findings.""".strip(),
 }
 
 # ---------------------------------------------------------------------------
@@ -265,6 +296,7 @@ PANEL_TITLES: dict[IntentType, str] = {
     "meta": "Meta Insight",
     "tactical": "Tactical Coach",
     "general": "Coach",
+    "post_game": "Post-Game Debrief",
 }
 
 __all__ = ["PANEL_TITLES", "PROMPT_TEMPLATES"]

@@ -40,6 +40,7 @@ def main(
         display.console.print("  [info]valocoach sync[/info]           [muted]Pull your match history[/muted]")
         display.console.print("  [info]valocoach stats[/info]          [muted]View your performance dashboard[/muted]")
         display.console.print("  [info]valocoach coach[/info] [muted]\"...\"    Get tactical advice[/muted]")
+        display.console.print("  [info]valocoach post-game[/info]      [muted]Debrief your last match[/muted]")
         display.console.print("  [info]valocoach interactive[/info]    [muted]Start a coaching session[/muted]")
         display.console.print()
         display.console.print("[muted]Run valocoach --help for all commands.[/muted]")
@@ -331,6 +332,42 @@ def meta_refresh(
         install_cron=install_cron,
         youtube=list(youtube) or None,
     )
+
+
+@app.command("post-game", rich_help_panel="Coaching")
+def post_game(
+    match_id: str | None = typer.Argument(
+        None,
+        help="Match ID to analyse (8-char prefix or full ID).  Defaults to the most recent match.",
+    ),
+    no_notes: bool = typer.Option(
+        False,
+        "--no-notes",
+        help="Skip auto-creating coaching notes for critical findings.",
+    ),
+    no_repl: bool = typer.Option(
+        False,
+        "--no-repl",
+        help="Skip the interactive REPL handoff offer at the end.",
+    ),
+) -> None:
+    """Debrief your last match: run post-game analyzers then get LLM coaching.
+
+    Loads the most recent competitive match from the local DB (or a specific
+    match by ID), runs deterministic analyzers across all rounds, surfaces the
+    top 3 findings, auto-saves critical ones as coaching notes, and asks the
+    LLM to write a structured post-game debrief.
+
+    \b
+    Examples:
+      valocoach post-game                    # debrief your latest match
+      valocoach post-game abc12345           # debrief a specific match
+      valocoach post-game --no-notes         # skip auto-note creation
+      valocoach post-game --no-repl          # skip interactive handoff
+    """
+    from valocoach.cli.commands.post_game import run_post_game
+
+    run_post_game(match_id=match_id, no_notes=no_notes, no_repl=no_repl)
 
 
 @app.command(rich_help_panel="Coaching")

@@ -18,6 +18,7 @@ Public API:
     await get_recent_matches_full(session, puuid, limit, ...) -> list[Match]
     await match_exists(session, match_id)                     -> bool
     await get_match(session, match_id)                        -> Match | None
+    await get_post_game_match(session, match_id)              -> Match | None  (full tree)
     await start_sync(session, puuid)                          -> SyncLog
     complete_sync(session, log, ...)                          -> None
     await close_stale_syncs(session, puuid, exclude_id)      -> int
@@ -46,11 +47,13 @@ from valocoach.data.mapper import match_from_details, player_from_account_mmr
 from valocoach.data.orm_models import (
     CoachingNote,
     CoachingSession,
+    Kill,
     Match,
     MatchPlayer,
     MMRHistory,
     Player,
     Round,
+    RoundPlayer,
     SyncLog,
 )
 
@@ -364,6 +367,38 @@ async def get_match(session: AsyncSession, match_id: str) -> Match | None:
         .options(
             selectinload(Match.players),
             selectinload(Match.rounds),
+        )
+    )
+    result = await session.scalars(stmt)
+    return result.first()
+
+
+async def get_post_game_match(
+    session: AsyncSession,
+    match_id: str,
+) -> Match | None:
+    """Load a single match with the full round-level tree for post-game analysis.
+
+    Eagerly loads all relationships needed by ``run_analyzers()``:
+
+      - ``Match.players``           — agent/team per participant
+      - ``Match.rounds → kills``    — per-kill timing + spatial data
+      - ``Match.rounds → round_players`` — economy + ability cast counts
+
+    All three levels use ``selectinload`` so that accessing the loaded
+    collections after the session is closed never triggers a lazy-load
+    (``expire_on_commit=False`` is set on the engine, so attributes survive
+    the ``session.commit()`` inside ``session_scope()``).
+
+    Returns ``None`` when ``match_id`` is not stored.
+    """
+    stmt = (
+        select(Match)
+        .where(Match.match_id == match_id)
+        .options(
+            selectinload(Match.players),
+            selectinload(Match.rounds).selectinload(Round.kills),
+            selectinload(Match.rounds).selectinload(Round.round_players),
         )
     )
     result = await session.scalars(stmt)
