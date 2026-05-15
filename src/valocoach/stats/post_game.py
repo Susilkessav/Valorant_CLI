@@ -882,6 +882,140 @@ def analyze_engagement_distances(match: Match, puuid: str) -> list[Finding]:
 
 
 # ---------------------------------------------------------------------------
+# Analyzer 10 — Plant/defuse site distribution (E3)
+# ---------------------------------------------------------------------------
+
+def analyze_plant_defuse_sites(match: Match, puuid: str) -> list[Finding]:
+    """E3 — plant and defuse contributions per site this match.
+
+    Surfaces predictable planting patterns (always A) and surfaces
+    whether the player is contributing to objective work.
+
+    required_fields: ["planter_puuid"] — needs Phase A migration.
+    """
+    from collections import defaultdict
+
+    plants_per_site: dict[str, int] = defaultdict(int)
+    defuses = 0
+
+    for rnd in match.rounds:
+        planter = getattr(rnd, "planter_puuid", None)
+        if planter == puuid and rnd.plant_site:
+            plants_per_site[rnd.plant_site] += 1
+        defuser = getattr(rnd, "defuser_puuid", None)
+        if defuser == puuid:
+            defuses += 1
+
+    total_plants = sum(plants_per_site.values())
+    if total_plants == 0 and defuses == 0:
+        return []
+
+    # Check for single-site over-concentration on attack (≥ 75% on one site)
+    severity: Severity = "neutral"
+    detail_lines = []
+    if plants_per_site:
+        site_str = ", ".join(
+            f"{site}: {n}×" for site, n in sorted(plants_per_site.items())
+        )
+        detail_lines.append(f"Plant distribution: {site_str}.")
+        top_site, top_count = max(plants_per_site.items(), key=lambda kv: kv[1])
+        if total_plants >= 4 and top_count / total_plants >= 0.75:
+            severity = "warning"
+            detail_lines.append(
+                f"Over-concentrating on {top_site} ({top_count}/{total_plants} plants) "
+                "makes your attack pattern predictable."
+            )
+    if defuses:
+        detail_lines.append(f"Defused {defuses} spike(s).")
+
+    headline = f"Objective: {total_plants} plant(s)"
+    if plants_per_site:
+        top_site_str = max(plants_per_site, key=lambda s: plants_per_site[s])
+        headline += f" (mostly {top_site_str})" if len(plants_per_site) > 1 else ""
+    if defuses:
+        headline += f", {defuses} defuse(s)"
+
+    return [
+        Finding(
+            severity=severity,
+            category="objective",
+            headline=headline,
+            detail=" ".join(detail_lines),
+            evidence={
+                "plants_total": total_plants,
+                "plants_per_site": dict(plants_per_site),
+                "defuses": defuses,
+            },
+            root_cause_tag="objective_work",
+            required_fields=["planter_puuid"],
+        )
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Analyzer 11 — MMR trend (E4, standalone — needs MMR data from separate query)
+# ---------------------------------------------------------------------------
+
+def analyze_mmr_trend(mmr_rows: list) -> list[Finding]:
+    """E4 — detect significant MMR decline across recent tracked games.
+
+    Args:
+        mmr_rows: MMRHistory ORM rows, most-recent first (repo.get_mmr_history
+                  returns them in that order). Pass the last 5–10 rows.
+
+    Returns a Finding when either:
+    - 3 or more consecutive losses (mmr_change < 0 in a row), or
+    - total RR delta is ≤ −50 across the last 5 entries.
+
+    Never raises — on any data issue returns [].
+    """
+    if not mmr_rows or len(mmr_rows) < 2:
+        return []
+
+    try:
+        last5 = mmr_rows[:5]
+
+        # Consecutive loss streak (from most recent)
+        streak = 0
+        for row in last5:
+            if (row.mmr_change or 0) < 0:
+                streak += 1
+            else:
+                break
+
+        total_delta = sum(row.mmr_change or 0 for row in last5)
+
+        if streak < 3 and total_delta > -50:
+            return []
+
+        severity: Severity = "critical" if total_delta <= -80 else "warning"
+        current = f"{mmr_rows[0].tier_patched} {mmr_rows[0].rr}RR"
+        detail = (
+            f"Currently {current}. "
+            f"{abs(total_delta)} RR lost across the last {len(last5)} tracked games"
+            + (f" ({streak} consecutive losses)" if streak >= 3 else "")
+            + ". Consider reviewing your agent/map pool or queuing after a break."
+        )
+        return [
+            Finding(
+                severity=severity,
+                category="momentum",
+                headline=f"RR decline: {total_delta:+d} across last {len(last5)} games",
+                detail=detail,
+                evidence={
+                    "total_delta": total_delta,
+                    "consecutive_losses": streak,
+                    "current_rr": mmr_rows[0].rr,
+                    "current_tier": mmr_rows[0].tier_patched,
+                },
+                root_cause_tag="mmr_decline",
+            )
+        ]
+    except Exception:
+        return []
+
+
+# ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
 
@@ -895,6 +1029,7 @@ _ANALYZERS = [
     analyze_clutch_moments,
     analyze_death_locations,
     analyze_engagement_distances,
+    analyze_plant_defuse_sites,
 ]
 
 
@@ -964,6 +1099,8 @@ def format_findings_block(findings: list[Finding]) -> str:
 __all__ = [
     "Finding",
     "Severity",
+    "analyze_mmr_trend",
+    "analyze_plant_defuse_sites",
     "format_findings_block",
     "run_analyzers",
     "select_top_findings",

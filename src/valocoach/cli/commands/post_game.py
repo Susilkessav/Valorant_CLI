@@ -25,6 +25,7 @@ from valocoach.cli import display
 from valocoach.coach.match_context import SessionMatchContext
 from valocoach.stats.post_game import (
     Finding,
+    analyze_mmr_trend,
     format_findings_block,
     run_analyzers,
     select_top_findings,
@@ -76,6 +77,26 @@ def _load_match_sync(settings, puuid: str, match_id: str | None):
     except Exception as exc:
         display.warn(f"DB error loading match: {exc}")
         return None
+
+
+def _load_mmr_sync(settings, puuid: str, limit: int = 10) -> list:
+    """Load up to *limit* MMRHistory rows for *puuid*, most-recent first.
+
+    Returns an empty list on any DB error or when no rows exist.
+    """
+
+    async def _run():
+        from valocoach.data.database import ensure_db, session_scope
+        from valocoach.data.repository import get_mmr_history
+
+        await ensure_db(_db_path(settings))
+        async with session_scope() as db:
+            return await get_mmr_history(db, puuid, limit=limit)
+
+    try:
+        return asyncio.run(_run())
+    except Exception:
+        return []
 
 
 # ---------------------------------------------------------------------------
@@ -323,6 +344,12 @@ def run_post_game(
 
     # ── Run analyzers ─────────────────────────────────────────────────────
     findings = run_analyzers(match, puuid)
+
+    # E4: prepend MMR trend findings (loaded separately, not from match data)
+    mmr_rows = _load_mmr_sync(settings, puuid, limit=10)
+    mmr_findings = analyze_mmr_trend(mmr_rows)
+    findings = mmr_findings + findings
+
     top = select_top_findings(findings, n=3)
 
     # ── Render findings panel ─────────────────────────────────────────────

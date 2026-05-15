@@ -34,12 +34,51 @@ from valocoach.stats import (
 from valocoach.stats.baseline import BaselineComparison, compare_baseline
 from valocoach.stats.round_analyzer import (
     RoundAnalysis,
+    WeaponSplit,
     analyze_rounds,
+    analyze_rounds_per_map,
     clutch_stat,
+    compute_weapon_stats,
     kast_stat,
     multi_kill_summary,
     trade_efficiency_stat,
 )
+
+def _detect_tilt(rows: list[MatchPlayer]) -> str | None:
+    """E5 — detect WR decline in the back half of today's gaming session.
+
+    Requires ≥ 6 matches today. Returns a warning string when WR drops ≥ 20pp
+    from the first half to the second half of today's session, else None.
+    """
+    from datetime import date, timezone
+    from datetime import datetime as _dt
+
+    today_str = _dt.now(tz=timezone.utc).strftime("%Y-%m-%d")
+    today_rows = sorted(
+        [r for r in rows if r.started_at[:10] == today_str],
+        key=lambda r: r.started_at,
+    )
+    if len(today_rows) < 6:
+        return None
+
+    mid = len(today_rows) // 2
+    early = today_rows[:mid]
+    late = today_rows[mid:]
+
+    early_wr = sum(1 for r in early if r.won) / len(early)
+    late_wr = sum(1 for r in late if r.won) / len(late)
+
+    drop = early_wr - late_wr
+    if drop >= 0.20:
+        n = len(today_rows)
+        e_pct = round(early_wr * 100)
+        l_pct = round(late_wr * 100)
+        return (
+            f"⚠ Session tilt ({n} games today): "
+            f"WR dropped {e_pct}% → {l_pct}% — consider a break."
+        )
+    return None
+
 
 # Default match window for the context snippet. Mirrors the profile card —
 # "at a glance" form, not a deep dive. Override per-call if needed.
@@ -131,6 +170,8 @@ def _format_context(
     top_n: int = DEFAULT_TOP_N,
     round_analysis: RoundAnalysis | None = None,
     baseline_comparison: BaselineComparison | None = None,
+    per_map_analysis: dict[str, RoundAnalysis] | None = None,   # E1
+    weapon_splits: list[WeaponSplit] | None = None,               # E2
 ) -> str:
     """Render a compact context block for the LLM prompt.
 
@@ -214,10 +255,36 @@ def _format_context(
             s = m.stats
             split_flags = reliability_flags(s, is_split=True)
             split_thin = " (thin sample)" if not all(split_flags.values()) else ""
+            # E1: per-map ATK/DEF split
+            map_ra = per_map_analysis.get(m.map_name) if per_map_analysis else None
+            side_str = ""
+            if (
+                map_ra is not None
+                and map_ra.attack_win_rate is not None
+                and map_ra.defense_win_rate is not None
+            ):
+                side_str = (
+                    f" · ATK {_pct(map_ra.attack_win_rate)}"
+                    f"/{_pct(map_ra.defense_win_rate)} DEF"
+                )
             lines.append(
                 f"- {m.map_name} ({s.matches}g{split_thin}): "
-                f"{_pct(s.win_rate)} WR · ACS {s.acs:.0f}"
+                f"{_pct(s.win_rate)} WR · ACS {s.acs:.0f}{side_str}"
             )
+
+    # E2: weapon HS% — only when we have meaningful data
+    if weapon_splits:
+        top_weapons = weapon_splits[:4]  # at most 4
+        weapon_str = " · ".join(
+            f"{w.weapon} {_pct(w.hs_pct)}"
+            for w in top_weapons
+        )
+        lines.append(f"Weapon HS%: {weapon_str}")
+
+    # E5: session tilt detector
+    tilt_warn = _detect_tilt(rows)
+    if tilt_warn:
+        lines.append(tilt_warn)
 
     return "\n".join(lines)
 
@@ -244,10 +311,26 @@ def build_stats_context(
 
     analysis = analyze_rounds(data.full_matches, data.player.puuid) if data.full_matches else None
     comparison = compare_baseline(data.rows)
+
+    # E1: per-map ATK/DEF split
+    per_map_analysis = (
+        analyze_rounds_per_map(data.full_matches, data.player.puuid)
+        if data.full_matches
+        else None
+    )
+    # E2: weapon HS%
+    weapon_splits = (
+        compute_weapon_stats(data.full_matches, data.player.puuid)
+        if data.full_matches
+        else None
+    )
+
     return _format_context(
         data.player,
         data.rows,
         top_n=top_n,
         round_analysis=analysis,
         baseline_comparison=comparison,
+        per_map_analysis=per_map_analysis,
+        weapon_splits=weapon_splits,
     )
