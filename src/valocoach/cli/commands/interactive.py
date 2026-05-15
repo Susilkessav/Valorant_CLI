@@ -284,6 +284,7 @@ def run_interactive() -> None:
                 response = run_coach(
                     situation=user_input,
                     conversation_history=prior_history,
+                    no_elicit=True,  # REPL has slash commands for context — no prompting
                 )
             except Exception as exc:
                 err_lower = str(exc).lower()

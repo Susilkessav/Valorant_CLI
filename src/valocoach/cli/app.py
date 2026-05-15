@@ -56,6 +56,11 @@ def coach(
         "--with-stats/--no-stats",
         help="Include your recent performance stats in the prompt (default on).",
     ),
+    no_elicit: bool = typer.Option(
+        False,
+        "--no-elicit",
+        help="Skip the interactive context questions and go straight to coaching.",
+    ),
 ) -> None:
     """Get tactical coaching for a match situation."""
     from valocoach.cli.commands.coach import run_coach
@@ -77,6 +82,7 @@ def coach(
         map_=map_,
         side=side,
         with_stats=with_stats,
+        no_elicit=no_elicit,
     )
 
 

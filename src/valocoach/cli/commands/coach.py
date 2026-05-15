@@ -72,6 +72,7 @@ def run_coach(
     side: str | None = None,
     *,
     with_stats: bool = True,
+    no_elicit: bool = False,
     conversation_history: list[dict[str, str]] | None = None,
 ) -> str | None:
     settings = load_settings()
@@ -92,6 +93,12 @@ def run_coach(
         display.warn(f"{vs_result.message}\n  {vs_result.hint}")
 
     parsed, agent, map_, side = _resolve_fields(situation, agent, map_, side)
+
+    if not no_elicit:
+        from valocoach.coach.elicitation import run_elicitation, should_elicit
+
+        if should_elicit(parsed, situation):
+            parsed, agent, map_, side = run_elicitation(parsed, agent, map_, side)
 
     intent = classify_intent(parsed, situation)
     system_prompt_base = PROMPT_TEMPLATES[intent]
