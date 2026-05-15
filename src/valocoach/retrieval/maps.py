@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import logging
 from difflib import get_close_matches
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 _DATA_FILE = Path(__file__).parent / "data" / "maps.json"
 _cache: list[dict] | None = None
@@ -53,5 +56,26 @@ def format_map_context(name: str) -> str | None:
         lines.append(f"Rotations: {map_data['rotations']}")
     if map_data.get("notes"):
         lines.append(f"Map notes: {map_data['notes']}")
+
+    # C5 — stale-map warning: warn when map data hasn't been verified against
+    # the current patch so the LLM knows callouts might be outdated.
+    last_verified = map_data.get("last_verified_patch")
+    if last_verified:
+        try:
+            from valocoach.retrieval.meta import get_meta
+            current_patch = get_meta().get("patch", "")
+            if current_patch and last_verified != current_patch:
+                lines.append(
+                    f"⚠ Map data last verified for patch {last_verified} — "
+                    f"callouts may be outdated for patch {current_patch}."
+                )
+                log.debug(
+                    "C5: stale map warning for %s (verified=%s, current=%s)",
+                    map_data["name"],
+                    last_verified,
+                    current_patch,
+                )
+        except Exception:
+            pass  # Never block map context due to a staleness check failure
 
     return "\n".join(lines)

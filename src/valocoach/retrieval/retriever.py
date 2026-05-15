@@ -97,7 +97,7 @@ def retrieve_static(
         else:
             log.warning("Map '%s' not found in knowledge base.", map_)
 
-    meta_ctx = format_meta_context(agent=agent, map_name=map_)
+    meta_ctx = format_meta_context(agent=agent, map_name=map_, data_dir=data_dir)
     parts.append(meta_ctx)
     sources.append("knowledge_base/meta")
 

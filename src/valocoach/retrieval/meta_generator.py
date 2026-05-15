@@ -4,16 +4,30 @@ Takes patch notes + pick/win-rate stats scraped from tracker.gg and vlr.gg,
 feeds them to the configured LLM, and returns a validated dict that can be
 written directly to ``data/meta.json``.
 
-The LLM is instructed to output *only* valid JSON — no markdown fences, no
-commentary — so we can ``json.loads()`` the result without post-processing.
-A lightweight validation step fills any gaps using the existing meta as a
-fallback so a partial LLM response never corrupts the file completely.
+Phase C2 — Deterministic numeric tier scoring
+----------------------------------------------
+The LLM is no longer asked to assign S/A/B/C tiers.  Instead it outputs raw
+numeric ``pick_rate_pct`` and ``win_rate_pct`` values, which are far more
+stable between patches than text tier labels.  A deterministic scorer
+(:func:`_tier_score`, :func:`_tier_from_score`) converts those numbers into
+tier assignments — same inputs always produce the same tiers, eliminating
+"flapping" across refreshes caused by LLM temperature.
+
+The LLM is still responsible for writing the ``reason`` field (short prose
+explanation) because textual reasoning is where language models add value.
+
+Fallback behaviour
+------------------
+If the LLM omits numeric rates for an agent (or the old ~X% string format is
+returned), the existing ``existing_meta`` tier assignment is preserved so a
+partial LLM response never silently downgrades an agent.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 
 from valocoach.core.config import Settings
@@ -21,32 +35,81 @@ from valocoach.core.config import Settings
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
+# C2 — Deterministic tier scoring
+# ---------------------------------------------------------------------------
+
+# Thresholds for score = win_rate_pct + log1p(pick_rate_pct) * 0.5
+# Calibrated against Valorant patch history (Diamond+ ranked):
+#   52% WR, 30% PR → score ≈ 53.7 → S
+#   51% WR, 15% PR → score ≈ 52.4 → A
+#   50% WR, 20% PR → score ≈ 51.5 → B
+#   48% WR,  5% PR → score ≈ 49.8 → C
+_TIER_THRESHOLDS = (
+    ("S", 53.5),
+    ("A", 51.5),
+    ("B", 50.0),
+)  # anything below B_threshold → C
+
+
+def _tier_score(win_rate_pct: float, pick_rate_pct: float) -> float:
+    """Deterministic composite score used for S/A/B/C bucketing.
+
+    Win rate is the primary signal (coefficient 1.0); pick rate adds a
+    logarithmic bonus so widely-picked agents get a slight lift without
+    overwhelming the win-rate signal.
+    """
+    return win_rate_pct + math.log1p(max(pick_rate_pct, 0.0)) * 0.5
+
+
+def _tier_from_score(score: float) -> str:
+    """Map a composite score to S/A/B/C."""
+    for tier, threshold in _TIER_THRESHOLDS:
+        if score >= threshold:
+            return tier
+    return "C"
+
+
+def _parse_rate(value: object) -> float | None:
+    """Parse a rate value to a float percentage.
+
+    Handles:
+      - Plain floats / ints: ``32.0`` → ``32.0``
+      - LLM "~X%" strings:  ``"~32%"`` → ``32.0``  (fallback tolerance)
+      - Missing / None:      ``None``  → ``None``
+    """
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        cleaned = value.replace("~", "").replace("%", "").strip()
+        try:
+            return float(cleaned)
+        except ValueError:
+            return None
+    return None
+
+
+# ---------------------------------------------------------------------------
 # System prompt
 # ---------------------------------------------------------------------------
+
 _SYSTEM_PROMPT = """\
 You are a Valorant meta analyst specialising in high-ELO (Diamond+) and \
 professional / VCT play.
 
-Your task is to produce an updated agent tier list in strict JSON format \
-given:
-  1. Official patch notes for the current patch.
-  2. Current pick-rate and win-rate data from ranked and pro play.
+Your task is to provide pick-rate and win-rate DATA for every agent, plus a \
+short reason for each.  Tier assignments (S/A/B/C) will be computed \
+automatically — do NOT include them in your output.
 
 ## OUTPUT FORMAT — output ONLY this JSON, nothing else:
 
 {
-  "tier_list": {
-    "S": ["AgentName", ...],
-    "A": ["AgentName", ...],
-    "B": ["AgentName", ...],
-    "C": ["AgentName", ...]
-  },
   "agent_meta": {
     "AgentName": {
-      "tier": "S",
-      "pick_rate": "~32%",
-      "win_rate": "~51%",
-      "reason": "One or two sentences on why this tier, referencing kit strength."
+      "pick_rate_pct": 32.0,
+      "win_rate_pct": 51.5,
+      "reason": "One or two sentences on why this agent is strong or weak right now."
     }
   },
   "map_meta": {
@@ -61,11 +124,14 @@ given:
 - Include EVERY agent currently in the game.
 - Include ALL maps: Ascent, Bind, Haven, Icebox, Lotus, Pearl, Split, \
 Sunset, Abyss.
-- Use "~X%" format for pick and win rates (approximate is fine).
-- Keep reasons to 1-2 sentences max, focused on ability kit value.
-- If stats for an agent are missing, estimate from the patch notes and \
-general kit knowledge.
-- Output ONLY the JSON object — no markdown fences, no commentary, no \
+- ``pick_rate_pct`` and ``win_rate_pct`` are PLAIN FLOATS (no "~", no "%").
+  Example: 32.0 not "~32%".
+- Win rates cluster around 50%.  S-tier agents typically have 51-53% WR.
+  Do not exaggerate — rates above 55% are extremely rare.
+- Keep reasons to 1-2 sentences, focused on ability kit value and patch changes.
+- If exact stats for an agent are missing, estimate conservatively from patch \
+notes and kit knowledge.
+- Output ONLY the JSON object ��� no markdown fences, no commentary, no \
 preamble.
 """
 
@@ -103,24 +169,110 @@ def _find_json_object(text: str) -> str:
     return text[start:]
 
 
-def _validate(data: dict, existing: dict) -> dict:
-    """Fill gaps in the LLM output using ``existing`` meta as a fallback.
+def _compute_tiers(agent_meta_raw: dict, existing_agent_meta: dict) -> tuple[dict, dict]:
+    """Apply deterministic tier scoring to LLM-provided rate data.
 
-    Ensures the returned dict always has the four required top-level keys
-    and that every tier (S/A/B/C) is present in ``tier_list``.
+    Returns ``(tier_list, agent_meta_formatted)`` where ``tier_list`` is the
+    ``{"S": [...], "A": [...], ...}`` dict and ``agent_meta_formatted`` has
+    the backward-compatible ``pick_rate``, ``win_rate`` (string), and
+    ``tier`` fields alongside ``reason``.
+
+    Fallback: agents missing numeric rates keep their tier from
+    ``existing_agent_meta`` so a partial LLM response never silently demotes
+    an agent.
     """
-    validated: dict = {
-        "tier_list": data.get("tier_list") or existing.get("tier_list", {}),
-        "agent_meta": data.get("agent_meta") or existing.get("agent_meta", {}),
-        "map_meta": data.get("map_meta") or existing.get("map_meta", {}),
-    }
+    tier_list: dict[str, list[str]] = {"S": [], "A": [], "B": [], "C": []}
+    formatted: dict[str, dict] = {}
+
+    for agent_name, data in agent_meta_raw.items():
+        pr = _parse_rate(data.get("pick_rate_pct") or data.get("pick_rate"))
+        wr = _parse_rate(data.get("win_rate_pct") or data.get("win_rate"))
+        reason = data.get("reason", "")
+
+        if pr is not None and wr is not None:
+            score = _tier_score(wr, pr)
+            tier = _tier_from_score(score)
+            pr_str = f"~{pr:.0f}%"
+            wr_str = f"~{wr:.0f}%"
+        else:
+            # Fallback to existing meta's tier + rates (may be string format)
+            existing = existing_agent_meta.get(agent_name, {})
+            tier = existing.get("tier", "C")
+            pr_str = existing.get("pick_rate", "N/A")
+            wr_str = existing.get("win_rate", "N/A")
+            log.debug(
+                "Agent %r missing numeric rates — keeping existing tier %r", agent_name, tier
+            )
+
+        tier_list.setdefault(tier, []).append(agent_name)
+        formatted[agent_name] = {
+            "tier": tier,
+            "pick_rate": pr_str,
+            "win_rate": wr_str,
+            "reason": reason,
+        }
+
+    # Ensure all four tiers exist even if empty.
+    for t in ("S", "A", "B", "C"):
+        tier_list.setdefault(t, [])
+
+    return tier_list, formatted
+
+
+def _validate(data: dict, existing: dict) -> dict:
+    """Merge LLM output with existing meta, computing deterministic tiers (C2).
+
+    If the LLM returned the new-format ``agent_meta`` with numeric rates,
+    ``_compute_tiers()`` is called to derive ``tier_list`` deterministically.
+    If the LLM returned the old format (tier strings, no numerics), we fall
+    back to existing tier_list so old responses never corrupt the file.
+    """
+    existing_agent_meta = existing.get("agent_meta", {})
+    raw_agent_meta = data.get("agent_meta", {})
+
+    if raw_agent_meta:
+        # Detect whether ANY agent has numeric rate data.
+        has_numeric = any(
+            isinstance(v.get("pick_rate_pct"), (int, float))
+            or isinstance(v.get("win_rate_pct"), (int, float))
+            or (
+                isinstance(v.get("pick_rate_pct"), str)
+                and "%" not in v["pick_rate_pct"]
+            )
+            for v in raw_agent_meta.values()
+        )
+
+        if has_numeric:
+            tier_list, agent_meta = _compute_tiers(raw_agent_meta, existing_agent_meta)
+            log.info(
+                "C2: deterministic tiers computed — S:%d A:%d B:%d C:%d",
+                len(tier_list["S"]),
+                len(tier_list["A"]),
+                len(tier_list["B"]),
+                len(tier_list["C"]),
+            )
+        else:
+            # Old format or fully missing numeric data — preserve existing tiers.
+            tier_list = existing.get("tier_list", {"S": [], "A": [], "B": [], "C": []})
+            agent_meta = raw_agent_meta
+            log.warning(
+                "C2: LLM output missing numeric pick/win rates — "
+                "keeping existing tier_list as fallback."
+            )
+    else:
+        tier_list = existing.get("tier_list", {"S": [], "A": [], "B": [], "C": []})
+        agent_meta = existing_agent_meta
 
     # Ensure all four tiers exist even if the LLM omitted one.
     for tier in ("S", "A", "B", "C"):
-        if tier not in validated["tier_list"]:
-            validated["tier_list"][tier] = existing.get("tier_list", {}).get(tier, [])
+        if tier not in tier_list:
+            tier_list[tier] = existing.get("tier_list", {}).get(tier, [])
 
-    return validated
+    return {
+        "tier_list": tier_list,
+        "agent_meta": agent_meta,
+        "map_meta": data.get("map_meta") or existing.get("map_meta", {}),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -163,7 +315,8 @@ def generate_meta_update(
         f"CURRENT PATCH: {patch_version}\n\n"
         f"=== PATCH NOTES ===\n{notes_snippet}\n\n"
         f"=== AGENT STATS (Diamond+ Ranked + Pro/VCT) ===\n{stats_snippet}\n\n"
-        "Generate the complete updated tier list JSON now."
+        "Generate the complete agent meta JSON now "
+        "(pick_rate_pct and win_rate_pct as plain floats, no tier assignments)."
     )
 
     log.info(

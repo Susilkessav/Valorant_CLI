@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 _DATA_FILE = Path(__file__).parent / "data" / "meta.json"
 _cache: dict | None = None
@@ -28,11 +31,20 @@ def _lookup_key(values: dict, key: str) -> str | None:
 def format_meta_context(
     agent: str | None = None,
     map_name: str | None = None,
+    data_dir: Path | None = None,
 ) -> str:
     """Return a compact LLM-injectable meta block.
 
     Includes the tier list header, economy thresholds, and — when provided —
     map-specific and agent-specific meta snippets.
+
+    Args:
+        agent:    Agent name to inject per-agent meta + recent patch changes.
+        map_name: Map name to inject map-specific meta + recent patch changes.
+        data_dir: Root data directory.  When provided, patch diff facts from
+                  ``patch_changes/{patch}.json`` (C3) are injected alongside
+                  the agent / map meta so the LLM knows about buff/nerfs that
+                  occurred in the current patch.
     """
     meta = _load()
     lines: list[str] = [f"META (Patch {meta['patch']}, updated {meta['updated']})"]
@@ -72,5 +84,54 @@ def format_meta_context(
             )
             if agent_meta.get("reason"):
                 lines.append(f"  {agent_meta['reason']}")
+
+    # C4 — inject patch diff facts for the queried agent / map so the LLM
+    # has grounded "what changed this patch" context rather than guessing.
+    if data_dir is not None:
+        patch_version = meta.get("patch", "")
+        if patch_version:
+            try:
+                from valocoach.retrieval.patch_diff import load_patch_changes
+
+                diff = load_patch_changes(patch_version, Path(data_dir))
+                if diff:
+                    diff_lines: list[str] = []
+
+                    if agent:
+                        # Case-insensitive agent lookup in diff
+                        diff_agents = diff.get("agents", {})
+                        diff_agent_key = next(
+                            (k for k in diff_agents if k.casefold() == agent.casefold()),
+                            None,
+                        )
+                        if diff_agent_key:
+                            changes = diff_agents[diff_agent_key]
+                            diff_lines.append(
+                                f"\nPatch {patch_version} changes for {diff_agent_key}:"
+                            )
+                            for ch in changes:
+                                tag = ch.get("change_type", "adjust").upper()
+                                ability = f" [{ch['ability']}]" if ch.get("ability") else ""
+                                diff_lines.append(f"  [{tag}]{ability} {ch['description']}")
+
+                    if map_name:
+                        diff_maps = diff.get("maps", {})
+                        diff_map_key = next(
+                            (k for k in diff_maps if k.casefold() == map_name.casefold()),
+                            None,
+                        )
+                        if diff_map_key:
+                            changes = diff_maps[diff_map_key]
+                            diff_lines.append(
+                                f"\nPatch {patch_version} changes for {diff_map_key}:"
+                            )
+                            for ch in changes:
+                                tag = ch.get("change_type", "adjust").upper()
+                                diff_lines.append(f"  [{tag}] {ch['description']}")
+
+                    if diff_lines:
+                        lines.extend(diff_lines)
+            except Exception as exc:
+                log.debug("C4: could not load patch diff for %s: %s", patch_version, exc)
 
     return "\n".join(lines)
