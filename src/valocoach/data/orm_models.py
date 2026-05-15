@@ -249,8 +249,14 @@ class Round(Base):
     bomb_planted: Mapped[bool] = mapped_column(Boolean, default=False)
     plant_site: Mapped[str | None] = mapped_column(String, nullable=True)
     planter_puuid: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Plant coordinates (NULL for pre-migration matches)
+    plant_x: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    plant_y: Mapped[int | None] = mapped_column(Integer, nullable=True)
     bomb_defused: Mapped[bool] = mapped_column(Boolean, default=False)
     defuser_puuid: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Defuse coordinates (NULL for pre-migration matches)
+    defuse_x: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    defuse_y: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Relationships
     match: Mapped[Match] = relationship(back_populates="rounds")
@@ -346,6 +352,14 @@ class Kill(Base):
     weapon_name: Mapped[str | None] = mapped_column(String, nullable=True)
     is_headshot: Mapped[bool] = mapped_column(Boolean, default=False)
     assistants_json: Mapped[str] = mapped_column(Text, default="[]")  # JSON array of PUUIDs
+    # Spatial data (NULL for matches synced before this schema version)
+    killer_x: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    killer_y: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    victim_x: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    victim_y: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    engagement_distance: Mapped[float | None] = mapped_column(
+        String, nullable=True
+    )  # stored as TEXT to avoid float precision issues; cast on read
 
     # Relationship
     round: Mapped[Round] = relationship(back_populates="kills")
