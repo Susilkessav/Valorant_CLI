@@ -2,6 +2,11 @@
 
 Wraps ``run_coach`` in a persistent prompt_toolkit session so the player
 can have a multi-turn conversation without re-typing the command each time.
+
+Match context (/agent, /map, /side, /score, etc.) is persisted across turns
+via ``SessionMatchContext`` so the player only needs to set each field once
+per session.  The context is injected into every ``run_coach`` call as a
+structured header, ensuring the LLM always has the current match state.
 """
 
 from __future__ import annotations
@@ -9,6 +14,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from valocoach.cli import display
+from valocoach.coach.match_context import SessionMatchContext
 from valocoach.coach.session_manager import (
     REPLCoachState,
     add_coaching_note,
@@ -28,44 +34,191 @@ from valocoach.core.session_store import (
 )
 
 _SLASH_HELP: dict[str, str] = {
-    "/help": "Show this help message.",
-    "/clear": "Clear conversation memory — start a fresh session.",
-    "/memory": "Show turn count and token usage in the current window.",
-    "/save": "Save the current session to disk immediately.",
-    "/sessions": "List previously saved sessions.",
-    "/stats": "Display your recent stats card.",
-    "/note": "Add a coaching note: /note <text>",
-    "/notes": "List your open (unresolved) coaching notes.",
-    "/resolve": "Resolve a coaching note by id: /resolve <id>",
-    "/quit": "Exit the REPL (also: Ctrl-D, Ctrl-C).",
+    # ── Match context ──────────────────────────────────────────────────
+    "/agent":   "Set your agent:  /agent Jett",
+    "/map":     "Set the map:     /map Ascent",
+    "/side":    "Set your side:   /side attack  or  /side defense",
+    "/score":   "Set the score:   /score 9-11",
+    "/won":     "Mark last match as won.",
+    "/lost":    "Mark last match as lost.",
+    "/eco":     "Set economy:     /eco eco  |  /eco half  |  /eco full",
+    "/enemy":   "Add an enemy agent:  /enemy Cypher",
+    "/half":    "Toggle side at half-time (attack ↔ defense).",
+    "/context": "Show current match context.",
+    "/reset":   "Clear all match context for this session.",
+    # ── Session management ─────────────────────────────────────────────
+    "/help":    "Show this help message.",
+    "/clear":   "Clear conversation memory — start a fresh session.",
+    "/memory":  "Show turn count and token usage in the current window.",
+    "/save":    "Save the current session to disk immediately.",
+    "/sessions":"List previously saved sessions.",
+    "/stats":   "Display your recent stats card.",
+    "/note":    "Add a coaching note:  /note <text>",
+    "/notes":   "List your open (unresolved) coaching notes.",
+    "/resolve": "Resolve a coaching note by id:  /resolve <id>",
+    "/quit":    "Exit the REPL (also: Ctrl-D, Ctrl-C).",
 }
+
+_CONTEXT_CMDS = frozenset({
+    "/agent", "/map", "/side", "/score", "/won", "/lost",
+    "/eco", "/enemy", "/half", "/context", "/reset",
+})
 
 _WELCOME_PARTS = [
     "",
     "[val.red]━━━ Interactive Coaching Mode ━━━[/val.red]",
     "",
     "[heading]Ask anything about your gameplay.[/heading]",
-    '[muted]Example: "losing on Ascent attack as Jett, score is 8-12"[/muted]',
+    '[muted]Set context first: /agent Jett  /map Ascent  /side attack[/muted]',
+    '[muted]Then ask: "how do I hold A site better?"[/muted]',
     "",
-    "[muted]Commands: {cmds}  ·  Ctrl-D to exit[/muted]",
+    "[muted]Commands: /help  ·  Ctrl-D to exit[/muted]",
 ]
 
 
 def _print_help() -> None:
     display.console.print()
-    display.console.print("[heading]Slash commands:[/heading]")
+    display.console.print("[heading]Match context commands:[/heading]")
+    for cmd in _CONTEXT_CMDS:
+        if cmd in _SLASH_HELP:
+            display.console.print(f"  [info]{cmd:<10}[/info] {_SLASH_HELP[cmd]}")
+    display.console.print()
+    display.console.print("[heading]Session commands:[/heading]")
     for cmd, desc in _SLASH_HELP.items():
-        display.console.print(f"  [info]{cmd:<10}[/info] {desc}")
+        if cmd not in _CONTEXT_CMDS:
+            display.console.print(f"  [info]{cmd:<10}[/info] {desc}")
     display.console.print()
 
 
-def _handle_slash(
+def _handle_context_slash(
+    raw_input: str,
     cmd: str,
+    match_ctx: SessionMatchContext,
+) -> None:
+    """Handle match-context slash commands that write to ``match_ctx``."""
+    from valocoach.coach.elicitation import _match_agent, _match_map, _match_score, _SIDE_MAP, _ECON_MAP
+
+    arg = raw_input.strip()[len(cmd):].strip()
+
+    if cmd == "/agent":
+        if not arg:
+            display.warn("Usage: /agent <name>   e.g. /agent Jett")
+            return
+        resolved = _match_agent(arg)
+        if resolved:
+            match_ctx.agent = resolved
+            display.success(f"Agent set: {resolved}")
+        else:
+            display.warn(f"Agent '{arg}' not recognised.  Check spelling or try the full name.")
+
+    elif cmd == "/map":
+        if not arg:
+            display.warn("Usage: /map <name>   e.g. /map Ascent")
+            return
+        resolved = _match_map(arg)
+        if resolved:
+            match_ctx.map = resolved
+            display.success(f"Map set: {resolved}")
+        else:
+            display.warn(f"Map '{arg}' not recognised.")
+
+    elif cmd == "/side":
+        if not arg:
+            display.warn("Usage: /side attack  or  /side defense")
+            return
+        normalized = _SIDE_MAP.get(arg.lower())
+        if normalized:
+            match_ctx.side = normalized
+            display.success(f"Side set: {normalized}")
+        else:
+            display.warn(f"Side '{arg}' not recognised.  Use 'attack' or 'defense'.")
+
+    elif cmd == "/score":
+        if not arg:
+            display.warn("Usage: /score 9-11")
+            return
+        parsed_score = _match_score(arg)
+        if parsed_score:
+            match_ctx.score = parsed_score
+            display.success(f"Score set: {parsed_score[0]}-{parsed_score[1]}")
+        else:
+            display.warn(f"Score '{arg}' not recognised.  Use format: 9-11")
+
+    elif cmd == "/won":
+        match_ctx.result = "won"
+        display.success("Result set: won")
+
+    elif cmd == "/lost":
+        match_ctx.result = "lost"
+        display.success("Result set: lost")
+
+    elif cmd == "/eco":
+        if not arg:
+            display.warn("Usage: /eco eco  |  /eco half  |  /eco full")
+            return
+        normalized = _ECON_MAP.get(arg.lower())
+        if normalized:
+            match_ctx.econ = normalized
+            display.success(f"Economy set: {normalized.replace('_', ' ')}")
+        else:
+            display.warn(f"Economy '{arg}' not recognised.  Use: eco / half / full")
+
+    elif cmd == "/enemy":
+        if not arg:
+            display.warn("Usage: /enemy <agent>   e.g. /enemy Cypher")
+            return
+        resolved = _match_agent(arg)
+        if resolved:
+            added = match_ctx.add_enemy(resolved)
+            if added:
+                display.success(f"Enemy agent added: {resolved}")
+            else:
+                display.info(f"{resolved} is already in enemy list.")
+        else:
+            display.warn(f"Agent '{arg}' not recognised.")
+
+    elif cmd == "/half":
+        old_side = match_ctx.side
+        match_ctx.flip_side()
+        if match_ctx.side != old_side and match_ctx.side:
+            display.success(f"Side flipped: {old_side or '?'} → {match_ctx.side}  (half-time)")
+        elif match_ctx.side is None:
+            display.warn("No side set yet — use /side attack or /side defense first.")
+        else:
+            display.info(f"Side unchanged: {match_ctx.side}")
+
+    elif cmd == "/context":
+        display.console.print()
+        display.console.print("[heading]Current match context:[/heading]")
+        display.console.print(f"  {match_ctx.summary_line()}")
+        if not match_ctx.is_empty:
+            ctx_block = match_ctx.to_context_block()
+            if ctx_block:
+                display.console.print()
+                for line in ctx_block.splitlines():
+                    display.console.print(f"  [muted]{line}[/muted]")
+        display.console.print()
+
+    elif cmd == "/reset":
+        match_ctx.reset()
+        display.success("Match context cleared.")
+
+
+def _handle_slash(
+    raw_input: str,
     memory: ConversationMemory,
     state: REPLCoachState | None = None,
+    *,
+    match_ctx: SessionMatchContext | None = None,
 ) -> None:
-    raw_input = cmd
     cmd = raw_input.strip().lower().split()[0]
+
+    # Context commands are handled by a dedicated function
+    if cmd in _CONTEXT_CMDS:
+        if match_ctx is None:
+            match_ctx = SessionMatchContext()
+        _handle_context_slash(raw_input, cmd, match_ctx)
+        return
 
     if cmd == "/help":
         _print_help()
@@ -126,9 +279,7 @@ def _handle_slash(
 
     elif cmd == "/notes":
         if state is None or state.puuid is None:
-            display.warn(
-                "No player profile found — run `valocoach sync` first."
-            )
+            display.warn("No player profile found — run `valocoach sync` first.")
             return
         notes = list_open_notes(state.settings, state.puuid)
         if not notes:
@@ -209,6 +360,7 @@ def run_interactive() -> None:
         return
 
     memory = ConversationMemory(max_turns=20, max_tokens=3_000)
+    match_ctx = SessionMatchContext()
 
     coach_state = REPLCoachState()
     coach_state.settings = settings
@@ -248,8 +400,7 @@ def run_interactive() -> None:
         complete_while_typing=False,
     )
 
-    cmd_list = "  ".join(_SLASH_HELP.keys())
-    welcome = "\n".join(_WELCOME_PARTS).format(cmds=cmd_list)
+    welcome = "\n".join(_WELCOME_PARTS)
     display.console.print(welcome)
     display.console.print()
 
@@ -272,7 +423,7 @@ def run_interactive() -> None:
 
             if user_input.startswith("/"):
                 try:
-                    _handle_slash(user_input, memory, coach_state)
+                    _handle_slash(user_input, memory, coach_state, match_ctx=match_ctx)
                 except SystemExit:
                     display.console.print("[muted]Bye.[/muted]")
                     break
@@ -284,7 +435,8 @@ def run_interactive() -> None:
                 response = run_coach(
                     situation=user_input,
                     conversation_history=prior_history,
-                    no_elicit=True,  # REPL has slash commands for context — no prompting
+                    no_elicit=True,       # REPL uses slash commands for context
+                    match_context=match_ctx,
                 )
             except Exception as exc:
                 err_lower = str(exc).lower()

@@ -492,6 +492,8 @@ class CoachingSession(Base):
     # Optional focus context for the session
     focus_agent: Mapped[str | None] = mapped_column(String, nullable=True)
     focus_map: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Serialised SessionMatchContext state — JSON blob, NULL when never set
+    match_context_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Relationship
     notes: Mapped[list[CoachingNote]] = relationship(

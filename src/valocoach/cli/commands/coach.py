@@ -73,6 +73,7 @@ def run_coach(
     *,
     with_stats: bool = True,
     no_elicit: bool = False,
+    match_context=None,  # SessionMatchContext | None — avoids circular import
     conversation_history: list[dict[str, str]] | None = None,
 ) -> str | None:
     settings = load_settings()
@@ -99,6 +100,13 @@ def run_coach(
 
         if should_elicit(parsed, situation):
             parsed, agent, map_, side = run_elicitation(parsed, agent, map_, side)
+
+    # Merge persistent match context — per-turn values take precedence
+    match_context_block: str | None = None
+    extra_enemies: list[str] = []
+    if match_context is not None and not match_context.is_empty:
+        agent, map_, side, extra_enemies = match_context.resolve_coach_kwargs(agent, map_, side)
+        match_context_block = match_context.to_context_block()
 
     intent = classify_intent(parsed, situation)
     system_prompt_base = PROMPT_TEMPLATES[intent]
@@ -155,14 +163,24 @@ def run_coach(
     resolved_agents: list[str] = parsed.agents
     if agent and agent not in parsed.agents:
         resolved_agents = [agent, *parsed.agents]
+    # Merge extra enemies from match context (not already in parsed enemies)
+    resolved_enemies = list(parsed.enemy_agents)
+    for e in extra_enemies:
+        if e not in resolved_enemies:
+            resolved_enemies.append(e)
     resolved_display = parsed.model_copy(
         update={
             "agents": resolved_agents,
+            "enemy_agents": resolved_enemies,
             "map": map_,
             "side": side,
         }
     )
     user_msg_parts: list[str] = []
+    # Persistent match context header comes first so the LLM sees it before the
+    # per-turn metadata block — it acts as the "ground truth" for the session.
+    if match_context_block:
+        user_msg_parts.append(match_context_block)
     metadata_block = resolved_display.to_metadata_block()
     if metadata_block:
         user_msg_parts.append(metadata_block)
