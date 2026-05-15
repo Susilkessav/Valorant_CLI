@@ -290,15 +290,22 @@ class TestFetchTranscript:
         assert result is not None
         assert result.fetched_at  # non-empty ISO timestamp
 
-    def test_title_contains_video_id(self):
+    def test_title_uses_oembed_title(self):
+        """D1: title should come from oEmbed, not a placeholder."""
         from valocoach.retrieval.scrapers.youtube import fetch_transcript
 
         mock_cls = self._mock_api(entries=self._entries())
-        with patch(_YT_API_CLS, mock_cls):
+        with (
+            patch(_YT_API_CLS, mock_cls),
+            patch(
+                "valocoach.retrieval.scrapers.youtube.fetch_video_metadata",
+                return_value={"title": "Haven A Execute Guide", "channel": "Woohoojin"},
+            ),
+        ):
             result = fetch_transcript("dQw4w9WgXcQ")
 
         assert result is not None
-        assert "dQw4w9WgXcQ" in result.title
+        assert result.title == "Haven A Execute Guide"
 
 
 # ---------------------------------------------------------------------------

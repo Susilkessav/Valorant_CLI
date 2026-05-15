@@ -143,10 +143,20 @@ def retrieve_static(
                     text = hit["text"]
                     if text not in seen:
                         seen.add(text)
-                        name = hit["metadata"].get("name", "supplemental")
-                        doc_type = hit["metadata"]["type"].upper()
-                        vector_parts.append(f"[{doc_type}: {name}]\n{text}")
-                        sources.append(hit["metadata"].get("source", "vector_store"))
+                        meta = hit["metadata"]
+                        # D6 — YouTube chunks get a citable [YOUTUBE: title @ mm:ss]
+                        # reference so users can verify the source.
+                        if meta.get("type") == "youtube":
+                            yt_title = meta.get("title", "YouTube")
+                            start = int(meta.get("start_seconds", 0))
+                            mins, secs = divmod(start, 60)
+                            label = f"[YOUTUBE: {yt_title} @ {mins}:{secs:02d}]"
+                        else:
+                            doc_type = meta.get("type", "doc").upper()
+                            name = meta.get("name", "supplemental")
+                            label = f"[{doc_type}: {name}]"
+                        vector_parts.append(f"{label}\n{text}")
+                        sources.append(meta.get("source", "vector_store"))
 
         parts.extend(vector_parts[:n_results])
 

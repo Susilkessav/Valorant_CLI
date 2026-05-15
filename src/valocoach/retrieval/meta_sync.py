@@ -217,28 +217,26 @@ async def run_meta_sync(
         result.errors.append(f"Stats scrape error: {exc}")
         _step("stats_scrape", f"error: {exc}")
 
-    # ── 4. YouTube transcripts ─────────────────────────────────────────────
+    # ── 4. YouTube transcripts (Phase D pipeline) ─────────────────────────
     if youtube_videos:
         _step("youtube_ingest")
-        from valocoach.retrieval.ingester import ingest_text
-        from valocoach.retrieval.scrapers.youtube import fetch_transcript
-        from valocoach.retrieval.vector_store import LIVE_COLLECTION
+        from valocoach.retrieval.youtube_ingest import ingest_youtube_video
 
         total_chunks = 0
         for video in youtube_videos:
             try:
-                transcript = fetch_transcript(video)
-                if transcript and not dry_run:
-                    n = ingest_text(
+                if not dry_run:
+                    n = ingest_youtube_video(
                         settings.data_dir,
-                        transcript.text,
-                        doc_type="youtube",
-                        name=transcript.title,
-                        source=transcript.url,
-                        collection_name=LIVE_COLLECTION,
+                        video,
+                        settings,
+                        force=False,
+                        summarize=False,
                     )
                     total_chunks += n
                     log.info("Ingested %d chunk(s) from %s", n, video)
+                else:
+                    log.info("dry_run: skipping YouTube ingest for %s", video)
             except Exception as exc:
                 result.errors.append(f"YouTube ingest error ({video}): {exc}")
 
