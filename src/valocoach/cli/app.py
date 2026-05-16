@@ -334,6 +334,34 @@ def meta_refresh(
     )
 
 
+@app.command("lineup", rich_help_panel="Coaching")
+def lineup(
+    agent: str | None = typer.Argument(None, help="Agent name (e.g. Sova, Viper, KAY/O)."),
+    map_: str | None = typer.Option(None, "--map", "-m", help="Map name (e.g. Ascent, Bind)."),
+    site: str | None = typer.Option(None, "--site", "-s", help="Site letter: A, B, or C."),
+    query: str | None = typer.Option(
+        None, "--query", "-q", help="Override the search query (natural language)."
+    ),
+    n_results: int = typer.Option(5, "--top", "-n", help="Number of lineups to show (default 5)."),
+) -> None:
+    """Find ability lineups for an agent, map, and site.
+
+    Searches the lineup database (seeded from YouTube guides + built-in entries).
+    Run  valocoach ingest --seed  to load the bundled lineups.
+
+    Examples:
+
+      valocoach lineup Sova --map Ascent --site A
+
+      valocoach lineup Viper --map Bind
+
+      valocoach lineup --query "Sova post-plant shock bolt Haven C"
+    """
+    from valocoach.cli.commands.lineup import run_lineup
+
+    run_lineup(agent=agent, map_name=map_, site=site, query=query, n_results=n_results)
+
+
 @app.command("post-game", rich_help_panel="Coaching")
 def post_game(
     match_id: str | None = typer.Argument(

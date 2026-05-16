@@ -281,6 +281,64 @@ def _offer_repl_handoff(match_ctx: SessionMatchContext) -> None:
 
 
 # ---------------------------------------------------------------------------
+# G6 — Lineup suggestion for low-utility agents
+# ---------------------------------------------------------------------------
+
+# Agents where lineup/ability placement matters enough to surface suggestions
+_UTIL_HEAVY_AGENTS = frozenset({
+    "Sova", "Viper", "KAY/O", "Fade", "Brimstone", "Skye", "Breach",
+    "Astra", "Harbor", "Gekko", "Tejo",
+})
+
+
+def _suggest_lineups_for_low_util(
+    findings: list[Finding],
+    agent: str | None,
+    map_name: str | None,
+    settings,
+) -> str | None:
+    """Return a lineup suggestion block if low_utility fired for a util-heavy agent.
+
+    Searches the lineup database and returns the top 2 results formatted as a
+    coaching context block.  Returns None if no suggestions are available.
+    """
+    if not agent or not map_name:
+        return None
+
+    agent_clean = agent.strip()
+    if agent_clean not in _UTIL_HEAVY_AGENTS:
+        return None
+
+    has_low_util = any(f.root_cause_tag == "low_utility" for f in findings)
+    if not has_low_util:
+        return None
+
+    try:
+        from valocoach.retrieval.lineups import format_lineup_results, search_lineups
+
+        hits = search_lineups(
+            settings.data_dir,
+            query=f"{agent_clean} ability lineup {map_name}",
+            agent=agent_clean,
+            map_name=map_name.strip(),
+            n_results=2,
+        )
+        if not hits:
+            return None
+
+        formatted = format_lineup_results(hits)
+        return (
+            f"LINEUP SUGGESTIONS for {agent_clean} on {map_name.strip()} "
+            "(player used fewer abilities than expected):\n"
+            + formatted
+        )
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).debug("G6: lineup suggestion failed: %s", exc)
+        return None
+
+
+# ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
 
@@ -375,7 +433,15 @@ def run_post_game(
     player_agent = player_mp.agent_name if player_mp else None
 
     findings_block = format_findings_block(top)
-    situation = f"{findings_block}\n\nDebrief this match."
+
+    # G6 — If a utility-heavy agent had low casts, surface relevant lineup suggestions.
+    lineup_block = _suggest_lineups_for_low_util(top, player_agent, match.map_name, settings)
+
+    situation = (
+        f"{findings_block}\n\n{lineup_block}\n\nDebrief this match."
+        if lineup_block
+        else f"{findings_block}\n\nDebrief this match."
+    )
 
     run_coach(
         situation=situation,

@@ -96,6 +96,16 @@ def _do_seed(data_dir: Path) -> None:
         f"{counts['agents']} agents · {counts['maps']} maps · {counts['meta']} meta"
     )
 
+    # G5 — also seed the built-in lineup entries
+    try:
+        from valocoach.retrieval.lineups import ingest_seed_lineups
+
+        n_lineups = ingest_seed_lineups(data_dir)
+        if n_lineups:
+            display.success(f"Seeded {n_lineups} lineup entries (valocoach lineup ready)")
+    except Exception as exc:
+        display.console.print(f"[muted]Lineup seed skipped: {exc}[/muted]")
+
 
 def _do_url(data_dir: Path, url: str) -> None:
     from valocoach.retrieval.ingester import ingest_text

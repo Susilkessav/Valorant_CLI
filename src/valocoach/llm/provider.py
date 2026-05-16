@@ -60,3 +60,23 @@ def stream_completion(
         content = getattr(delta, "content", None)
         if content:
             yield content
+
+
+def call_llm(
+    system: str,
+    user: str,
+    settings: Settings,
+    max_tokens: int | None = None,
+) -> str:
+    """Non-streaming LLM call — returns the full response as a string.
+
+    Convenience wrapper around ``stream_completion`` for cases where
+    streaming is not needed (e.g. structured metadata extraction).
+
+    Returns empty string on any error.
+    """
+    try:
+        tokens = list(stream_completion(settings, system, user))
+        return "".join(tokens)
+    except Exception:
+        return ""
