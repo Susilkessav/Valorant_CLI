@@ -45,18 +45,37 @@ from valocoach.stats.round_analyzer import (
 )
 
 def _detect_tilt(rows: list[MatchPlayer]) -> str | None:
-    """E5 — detect WR decline in the back half of today's gaming session.
+    """E5 — detect WR decline in the back half of the current gaming session.
 
-    Requires ≥ 6 matches today. Returns a warning string when WR drops ≥ 20pp
-    from the first half to the second half of today's session, else None.
+    Uses a rolling 8-hour window ending at "now" rather than a calendar day.
+    This sidesteps the timezone problem: a UTC-based "today" split late-night
+    PST sessions across two days and hid genuine tilt.  An 8-hour window
+    captures any realistic gaming session in one bucket regardless of where
+    the player lives.
+
+    Requires ≥ 6 matches in the window. Returns a warning when WR drops
+    ≥ 20pp from the first half to the second half of the window.
     """
-    from datetime import date, timezone
     from datetime import datetime as _dt
+    from datetime import timedelta, timezone
 
-    today_str = _dt.now(tz=timezone.utc).strftime("%Y-%m-%d")
+    # Rolling window: anchor to "now" in UTC (started_at is stored as UTC ISO).
+    # 8 hours is wide enough to capture an evening session but narrow enough
+    # to exclude yesterday's games.
+    now = _dt.now(tz=timezone.utc)
+    cutoff = (now - timedelta(hours=8)).isoformat()
+
+    def _row_started_at(r: MatchPlayer) -> str:
+        # started_at may be str (most rows) or datetime (depending on driver).
+        # Normalise to ISO string for comparison; cheap and robust.
+        v = r.started_at
+        if isinstance(v, _dt):
+            return v.isoformat()
+        return str(v) if v is not None else ""
+
     today_rows = sorted(
-        [r for r in rows if r.started_at[:10] == today_str],
-        key=lambda r: r.started_at,
+        [r for r in rows if _row_started_at(r) >= cutoff],
+        key=_row_started_at,
     )
     if len(today_rows) < 6:
         return None
@@ -74,7 +93,7 @@ def _detect_tilt(rows: list[MatchPlayer]) -> str | None:
         e_pct = round(early_wr * 100)
         l_pct = round(late_wr * 100)
         return (
-            f"⚠ Session tilt ({n} games today): "
+            f"⚠ Session tilt ({n} games in last 8h): "
             f"WR dropped {e_pct}% → {l_pct}% — consider a break."
         )
     return None

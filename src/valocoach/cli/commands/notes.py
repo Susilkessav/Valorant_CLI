@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import logging
+
 import typer
+
+log = logging.getLogger(__name__)
 
 from valocoach.cli import display
 from valocoach.cli.formatter import render_open_notes
@@ -37,6 +41,7 @@ def _infer_category(text: str) -> str:
         intent = classify_intent(parsed, text)
         return _INTENT_TO_CATEGORY.get(intent, "general")
     except Exception:
+        log.debug("intent classification failed, defaulting to general", exc_info=True)
         return "general"
 
 

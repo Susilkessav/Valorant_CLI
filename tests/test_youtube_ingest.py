@@ -271,7 +271,11 @@ class TestIsVideoIngested:
 
 class TestRetrieverCitations:
     def test_youtube_hit_formatted_with_timestamp(self):
-        """Verify retrieve_static formats YouTube hits as [YOUTUBE: title @ mm:ss]."""
+        """Verify retrieve_static formats YouTube hits as [SOURCE: youtube/title @ mm:ss].
+
+        The label format was unified across all retrieval types so the LLM
+        grounding rule (cite [SOURCE: ...] tags) has a single shape to follow.
+        """
         from valocoach.retrieval.retriever import retrieve_static
 
         youtube_hit = {
@@ -307,8 +311,9 @@ class TestRetrieverCitations:
                 map_="Haven",
             )
 
-        # At least one chunk should contain [YOUTUBE: ...] citation
+        # At least one chunk should contain a [SOURCE: youtube/...] citation
+        # with the title and a mm:ss timestamp.
         combined = "\n".join(result.static_chunks)
-        assert "[YOUTUBE:" in combined
+        assert "[SOURCE: youtube/" in combined
         assert "Haven A Execute Guide" in combined
         assert "12:34" in combined

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterator
 
 import litellm
 
 from valocoach.core.config import Settings
+
+log = logging.getLogger(__name__)
 
 # Silence LiteLLM's debug noise
 litellm.suppress_debug_info = True
@@ -99,5 +102,8 @@ def call_llm(
 
         response = litellm.completion(**completion_kwargs)
         return response.choices[0].message.content or ""
-    except Exception:
+    except Exception as exc:
+        # WARNING (not silent) so operators see Ollama/auth/rate-limit failures
+        # rather than mistaking them for "the LLM couldn't decide".
+        log.warning("call_llm failed: %s", exc, exc_info=log.isEnabledFor(logging.DEBUG))
         return ""

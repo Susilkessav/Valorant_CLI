@@ -280,6 +280,10 @@ conditions, success metric), and say how many minutes to run it.
   - One mindset cue (what to ask yourself before each peek / buy / rotation).
   - One positioning or utility rule that counteracts the critical pattern.
 
+If a LINEUP SUGGESTIONS block is present in the user message, quote ONE
+lineup from it inside the Priority drill or Next-match focus section and
+cite its [SOURCE: youtube/...] tag verbatim so the player can find the clip.
+
 Keep total response under 320 words.  Ground every claim in the findings evidence.
 Do not invent statistics not present in the findings.""".strip(),
 }

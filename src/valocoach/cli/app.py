@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import logging
+
 import typer
 
 from valocoach import __version__
 from valocoach.cli import display
+
+log = logging.getLogger(__name__)
 
 app = typer.Typer(
     name="valocoach",
@@ -141,6 +145,19 @@ def sync(
     async def _run():
         await ensure_db(settings.data_dir / "valocoach.db")
 
+        # Housekeeping: every sync also sweeps expired retrieval cache rows
+        # (SQLite meta_cache + ChromaDB live docs).  Without this the cache
+        # grows unbounded — purge_expired() was previously only called by
+        # tests.  Failures are logged at debug, never block the sync.
+        try:
+            from valocoach.retrieval.cache import purge_expired
+
+            purged = await purge_expired(settings.data_dir)
+            if purged:
+                log.debug("Purged %d expired cache entries before sync", purged)
+        except Exception:
+            log.debug("cache purge during sync failed", exc_info=True)
+
         try:
             result = await sync_player_matches(settings, limit=limit, full=full, mode=mode)
         except (SyncError, ConfigError) as exc:
@@ -181,7 +198,7 @@ def sync(
                     f"[muted]{arrow} {delta_str} elo since last sync[/muted]"
                 )
         except Exception:
-            pass
+            log.debug("MMR snapshot rendering failed", exc_info=True)
 
 
 @app.command(rich_help_panel="Performance")

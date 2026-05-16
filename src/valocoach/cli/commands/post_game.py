@@ -16,8 +16,11 @@ B6    — After the LLM debrief, offers to launch the interactive REPL with
 from __future__ import annotations
 
 import asyncio
+import logging
 import sys
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 import typer
 
@@ -96,6 +99,7 @@ def _load_mmr_sync(settings, puuid: str, limit: int = 10) -> list:
     try:
         return asyncio.run(_run())
     except Exception:
+        log.debug("MMR history load failed", exc_info=True)
         return []
 
 

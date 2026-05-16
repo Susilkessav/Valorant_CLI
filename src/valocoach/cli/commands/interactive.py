@@ -11,7 +11,10 @@ structured header, ensuring the LLM always has the current match state.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 from valocoach.cli import display
 from valocoach.coach.match_context import SessionMatchContext
@@ -328,6 +331,9 @@ def _build_completer():
         words = list(list_agent_names()) + list(list_map_names()) + list(_SLASH_HELP.keys())
         return WordCompleter(words, ignore_case=True, sentence=True)
     except Exception:
+        # prompt_toolkit / agent list optional — falling back to no completer
+        # is the right behavior; just leave a debug breadcrumb.
+        log.debug("autocompleter unavailable", exc_info=True)
         return None
 
 

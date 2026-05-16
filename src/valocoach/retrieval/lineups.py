@@ -39,6 +39,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from pathlib import Path
 from typing import Any
 
@@ -50,6 +51,53 @@ _COLLECTION = "valocoach_live"
 
 # Seed file path
 _SEED_FILE = Path(__file__).parent / "data" / "lineups_seed.json"
+
+# Lineups live as long as YouTube chunks — 60 days.  Keeps the LIVE
+# collection bounded and matches the YouTube TTL so a single purge sweep
+# handles both.
+_LINEUP_TTL_SECONDS = 60 * 24 * 3600
+
+# ---------------------------------------------------------------------------
+# Canonical-case normalisation
+# ---------------------------------------------------------------------------
+# ChromaDB $eq filters are case-sensitive; LLM extractions return arbitrary
+# casing ("sova", "SOVA", "Sova").  We canonicalise both at write time and
+# at query time so filtered retrieval actually finds chunks.
+
+_CANONICAL_AGENTS: dict[str, str] = {a.lower(): a for a in (
+    "Astra", "Breach", "Brimstone", "Chamber", "Clove", "Cypher", "Deadlock",
+    "Fade", "Gekko", "Harbor", "Iso", "Jett", "KAY/O", "Killjoy", "Neon",
+    "Omen", "Phoenix", "Raze", "Reyna", "Sage", "Skye", "Sova", "Tejo",
+    "Viper", "Vyse", "Waylay", "Yoru",
+)}
+_CANONICAL_MAPS: dict[str, str] = {m.lower(): m for m in (
+    "Ascent", "Bind", "Breeze", "Fracture", "Haven", "Icebox", "Lotus",
+    "Pearl", "Split", "Sunset", "Abyss", "Corrode",
+)}
+_CANONICAL_SITES = {"a": "A", "b": "B", "c": "C", "mid": "Mid"}
+
+
+def _canon_agent(value: str | None) -> str | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    # Strip spaces + try direct lookup; if the LLM wrote "kay-o" or "kay o"
+    # nothing matches and we return the title-cased value as a best effort.
+    key = value.strip().lower().replace("-", "/").replace(" ", "")
+    # Re-key the canonical table without the / to allow "kayo" → "KAY/O"
+    flat = {k.replace("/", ""): v for k, v in _CANONICAL_AGENTS.items()}
+    return flat.get(key) or _CANONICAL_AGENTS.get(value.strip().lower()) or value.strip().title()
+
+
+def _canon_map(value: str | None) -> str | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    return _CANONICAL_MAPS.get(value.strip().lower()) or value.strip().title()
+
+
+def _canon_site(value: str | None) -> str | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    return _CANONICAL_SITES.get(value.strip().lower()) or value.strip().upper()
 
 
 # ---------------------------------------------------------------------------
@@ -103,13 +151,35 @@ def extract_lineup_metadata(text: str, settings: Any) -> dict:
         if not raw:
             return defaults
 
-        # Extract JSON from response (LLM sometimes wraps in markdown)
-        m = re.search(r"\{[^{}]+\}", raw, re.DOTALL)
-        if not m:
+        # Try direct parse first (works when the LLM follows instructions).
+        # Only fall back to regex extraction when the response has chatter
+        # around the JSON — the regex tolerates flat objects only, so a
+        # direct parse handles future schema growth.
+        parsed: dict | None = None
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            m = re.search(r"\{.*\}", raw, re.DOTALL)
+            if m:
+                try:
+                    parsed = json.loads(m.group())
+                except json.JSONDecodeError:
+                    parsed = None
+
+        if not isinstance(parsed, dict):
             return defaults
 
-        parsed = json.loads(m.group())
-        return {k: parsed.get(k) or None for k in defaults}
+        # Normalise to canonical case so ChromaDB $eq filters actually hit.
+        result: dict[str, str | None] = dict(defaults)
+        result["agent"] = _canon_agent(parsed.get("agent"))
+        result["map"] = _canon_map(parsed.get("map"))
+        result["site"] = _canon_site(parsed.get("site"))
+        # Side/ability/purpose are stored lower-cased for consistency.
+        for key in ("ability", "side", "purpose"):
+            v = parsed.get(key)
+            if isinstance(v, str) and v.strip():
+                result[key] = v.strip()
+        return result
 
     except Exception as exc:
         log.debug("G2: lineup metadata extraction failed: %s", exc)
@@ -150,6 +220,9 @@ def ingest_lineup_chunk(
         "channel": channel,
         "start_seconds": start_seconds,
         "source": url,
+        # TTL matches YouTube chunks so cache.purge_expired() cleans both in
+        # one sweep — without this lineup chunks lived forever in Chroma.
+        "expires_at_unix": int(time.time()) + _LINEUP_TTL_SECONDS,
         **{k: v for k, v in meta_fields.items() if v is not None},
     }
 
@@ -204,10 +277,18 @@ def ingest_seed_lineups(data_dir: Path) -> int:
             "start_seconds": 0,
             "source": entry.get("source", "lineups_seed"),
         }
-        # Add optional structured fields only if present
-        for field in ("agent", "ability", "map", "site", "side", "purpose"):
+        # Add optional structured fields only if present.  Canonicalise the
+        # filtered fields so retrieval $eq filters match regardless of how
+        # the seed JSON was authored.
+        for field in ("ability", "side", "purpose"):
             if entry.get(field):
                 meta[field] = entry[field]
+        if entry.get("agent"):
+            meta["agent"] = _canon_agent(entry["agent"])
+        if entry.get("map"):
+            meta["map"] = _canon_map(entry["map"])
+        if entry.get("site"):
+            meta["site"] = _canon_site(entry["site"])
         texts.append(text)
         ids.append(doc_id)
         metas.append(meta)
@@ -269,13 +350,15 @@ def search_lineups(
     # in their metadata.  Lineup chunks whose LLM extraction returned None for
     # agent/map/site will not appear in filtered queries — they are still
     # reachable via unfiltered text-similarity search (omit agent/map_name/site).
+    # Canonicalise filter values to match the write-side canonicalisation —
+    # otherwise "sova" / "Sova" / "SOVA" all fail to match the stored "Sova".
     conditions: list[dict] = [{"type": {"$eq": "lineup"}}]
     if agent:
-        conditions.append({"agent": {"$eq": agent}})
+        conditions.append({"agent": {"$eq": _canon_agent(agent)}})
     if map_name:
-        conditions.append({"map": {"$eq": map_name}})
+        conditions.append({"map": {"$eq": _canon_map(map_name)}})
     if site:
-        conditions.append({"site": {"$eq": site.upper()}})
+        conditions.append({"site": {"$eq": _canon_site(site)}})
 
     where: dict | None = None
     if len(conditions) == 1:

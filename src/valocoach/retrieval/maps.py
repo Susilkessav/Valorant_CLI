@@ -76,7 +76,9 @@ def format_map_context(name: str) -> str | None:
                     current_patch,
                 )
         except Exception:
-            pass  # Never block map context due to a staleness check failure
+            # Never block map context due to a staleness check failure, but
+            # leave a debug breadcrumb so misconfigured meta.json is diagnosable.
+            log.debug("C5 stale-map check failed for %s", map_data.get("name"), exc_info=True)
 
     # F3 — provenance tag so LLM can cite the source
     lines.append(f"[SOURCE: knowledge_base/maps/{map_data['name']}]")

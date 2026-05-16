@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import logging
+
 from valocoach.cli import display
+
+log = logging.getLogger(__name__)
 from valocoach.coach import build_stats_context
 from valocoach.coach.intent import classify_intent
 from valocoach.coach.templates import PANEL_TITLES, PROMPT_TEMPLATES
@@ -143,7 +147,7 @@ def run_coach(
             if lm is not None:
                 last_match_context = format_last_match_context(lm)
         except Exception:
-            pass
+            log.debug("last-match context unavailable", exc_info=True)
 
     notes_context: str | None = None
     if with_stats:
@@ -159,7 +163,7 @@ def run_coach(
                 open_notes = list_open_notes(settings, puuid, limit=5)
                 notes_context = format_open_notes_context(open_notes)
         except Exception:
-            pass
+            log.debug("open-notes context unavailable", exc_info=True)
 
     resolved_agents: list[str] = parsed.agents
     if agent and agent not in parsed.agents:
@@ -238,6 +242,6 @@ def run_coach(
                     "run [info]valocoach patch --check[/info] to refresh.[/muted]"
                 )
         except Exception:
-            pass
+            log.debug("patch staleness check failed", exc_info=True)
 
     return response_text or None

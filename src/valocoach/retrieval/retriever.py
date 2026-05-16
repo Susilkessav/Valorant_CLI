@@ -144,17 +144,23 @@ def retrieve_static(
                     if text not in seen:
                         seen.add(text)
                         meta = hit["metadata"]
-                        # D6 — YouTube chunks get a citable [YOUTUBE: title @ mm:ss]
-                        # reference so users can verify the source.
-                        if meta.get("type") == "youtube":
+                        # Unified provenance tag — every retrieved chunk uses
+                        # the same `[SOURCE: kind/name]` form so the LLM has
+                        # one citation style to follow (see GROUNDING_RULES in
+                        # coach/templates.py).  Per-type detail goes inside.
+                        doc_type = (meta.get("type") or "doc").lower()
+                        if doc_type == "youtube":
                             yt_title = meta.get("title", "YouTube")
                             start = int(meta.get("start_seconds", 0))
                             mins, secs = divmod(start, 60)
-                            label = f"[YOUTUBE: {yt_title} @ {mins}:{secs:02d}]"
-                        else:
-                            doc_type = meta.get("type", "doc").upper()
-                            name = meta.get("name", "supplemental")
-                            label = f"[{doc_type}: {name}]"
+                            detail = f"{yt_title} @ {mins}:{secs:02d}"
+                        elif doc_type == "patch_note":
+                            detail = meta.get("title") or meta.get("name") or "patch_notes"
+                        elif doc_type == "web":
+                            detail = meta.get("title") or meta.get("source") or "web"
+                        else:  # concept / generic
+                            detail = meta.get("name") or meta.get("title") or doc_type
+                        label = f"[SOURCE: {doc_type}/{detail}]"
                         vector_parts.append(f"{label}\n{text}")
                         sources.append(meta.get("source", "vector_store"))
 

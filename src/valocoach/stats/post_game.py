@@ -34,11 +34,14 @@ Severity scale
 from __future__ import annotations
 
 import json
+import logging
 import math
 from dataclasses import dataclass, field
 from typing import Literal
 
 from valocoach.data.orm_models import Kill, Match, OrmMatchPlayer, Round, RoundPlayer
+
+log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Finding dataclass
@@ -151,7 +154,8 @@ def _my_deaths_in_round(rnd: Round, puuid: str) -> list[Kill]:
 
 
 def _round_won(rnd: Round, my_team: str) -> bool:
-    return rnd.winning_team == my_team
+    # Guard against pre-migration rows where winning_team may be NULL.
+    return (rnd.winning_team or "") == my_team
 
 
 def _has_field(match: Match, field_name: str) -> bool:
@@ -548,46 +552,47 @@ def analyze_traded_deaths(match: Match, puuid: str) -> list[Finding]:
 # ---------------------------------------------------------------------------
 
 def analyze_side_split(match: Match, puuid: str) -> list[Finding]:
-    """Compare ATK vs DEF performance within this match."""
+    """Compare ATK vs DEF performance within this match.
+
+    Side derivation uses round_analyzer._infer_attacker_team (scans for the
+    first plant with a known planter_puuid) and the canonical get_side()
+    helper which accounts for the half-swap at round 12 AND overtime
+    alternation.  Falls back to the round_number < 12 heuristic only when
+    no plant has a planter_puuid (pre-migration matches), and even then
+    only if my_team starts on attack — which we can't know without a plant,
+    so we skip side analysis entirely rather than mis-label half the rounds.
+    """
+    from valocoach.stats.round_analyzer import _infer_attacker_team, get_side
+
     mp = _get_mp(match, puuid)
     if mp is None:
         return []
 
     my_team = mp.team
+    team_map = {p.puuid: p.team for p in match.players if p.puuid is not None}
+    attacker_team = _infer_attacker_team(match, team_map)
+    if attacker_team is None:
+        # No plant data — we cannot determine which team started on attack.
+        # Returning [] is safer than guessing my_team starts on attack
+        # (the previous heuristic) which silently mis-labelled half of matches
+        # where the player started on defense.
+        return []
 
-    # Determine attacker team for round 1 (rounds 0-11 = first half)
-    # In Valorant: team that attacks in first 12 rounds swaps for second 12.
-    # We use the heuristic: if my_team == round.winning_team, we won that round.
     atk_rounds_won = 0
     atk_rounds_played = 0
     def_rounds_won = 0
     def_rounds_played = 0
 
-    # Determine attacker team from round_players.team field (set per-round by mapper)
-    is_attack = False  # BUG-1 fix: initialise before loop to prevent UnboundLocalError
     for rnd in match.rounds:
-        # Find my round_player entry to know my side this round
         rp = _round_player(rnd, puuid)
         if rp is None:
             continue
-
         won = _round_won(rnd, my_team)
-
-        # Derive attack/defense side from plant events or round number heuristic.
-        # The check is unconditional (not gated on rp.team == my_team) so
-        # is_attack is always assigned before use below.
-        if rnd.bomb_planted:
-            # Planter team attacked this round — check if the planter is on my team.
-            # Use `p.team` (the ORM column name) not `p.team_id` (doesn't exist).
-            is_attack = (rnd.planter_puuid is not None and
-                         any(p.puuid == rnd.planter_puuid and p.team == my_team
-                             for p in match.players))
-        else:
-            # No plant — fall back to round-number heuristic:
-            # rounds 0–11 = first half; sides swap at round 12.
-            is_attack = rnd.round_number < 12
-
-        if is_attack:
+        side = get_side(rnd.round_number, attacker_team)
+        # The player is on attack when their team matches the attacking team
+        # for this round.  Compare lowercased to defend against case drift.
+        on_attack = (side == "attack") == (my_team.lower() == attacker_team.lower())
+        if on_attack:
             atk_rounds_played += 1
             if won:
                 atk_rounds_won += 1
@@ -997,6 +1002,7 @@ def analyze_mmr_trend(mmr_rows: list) -> list[Finding]:
             )
         ]
     except Exception:
+        log.debug("analyze_mmr_trend failed", exc_info=True)
         return []
 
 
@@ -1029,7 +1035,9 @@ def run_analyzers(match: Match, puuid: str) -> list[Finding]:
                 if _can_run(match, f.required_fields):
                     all_findings.append(f)
         except Exception:
-            pass  # individual analyzer failure never breaks the command
+            # One analyzer's failure shouldn't break the command, but it should
+            # be visible at debug log so we can diagnose silent drops.
+            log.debug("post-game analyzer %s raised", fn.__name__, exc_info=True)
     return all_findings
 
 

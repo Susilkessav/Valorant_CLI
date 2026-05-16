@@ -364,9 +364,11 @@ class Kill(Base):
     killer_y: Mapped[int | None] = mapped_column(Integer, nullable=True)
     victim_x: Mapped[int | None] = mapped_column(Integer, nullable=True)
     victim_y: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    engagement_distance: Mapped[float | None] = mapped_column(
-        String, nullable=True
-    )  # stored as TEXT to avoid float precision issues; cast on read
+    # Stored as TEXT to dodge SQLite float-precision drift; analyzers cast
+    # on read (see analyze_engagement_distances).  The annotation type is
+    # ``str | None`` so static checkers stop reporting false "expected float"
+    # warnings at the call sites that explicitly float(...) the value.
+    engagement_distance: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # Relationship
     round: Mapped[Round] = relationship(back_populates="kills")

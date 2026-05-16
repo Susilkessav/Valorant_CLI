@@ -282,7 +282,9 @@ def _tally_round(
 ) -> None:
     """Classify one round's events and update accumulators in place."""
     acc.rounds += 1
-    won = rnd.winning_team.lower() == player_team.lower()
+    # Guard against pre-migration rows where winning_team is NULL — skip side
+    # accounting AND won flag entirely rather than crashing.
+    won = (rnd.winning_team or "").lower() == player_team.lower()
 
     # Side accounting — only when we know which team started on attack.
     if attacker_team is not None:
