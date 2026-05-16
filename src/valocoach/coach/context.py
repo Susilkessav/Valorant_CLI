@@ -308,6 +308,30 @@ def _format_context(
     return "\n".join(lines)
 
 
+def get_top_played_agents(
+    settings: Settings,
+    *,
+    limit: int = DEFAULT_LIMIT,
+    top_n: int = DEFAULT_TOP_N,
+) -> list[str]:
+    """Return the player's most-played agent names across recent matches.
+
+    Returned in descending match-count order, length up to ``top_n``.  Empty
+    list when there is no local data — caller should treat that as "no
+    grounded agent context available" rather than guessing.
+
+    Used by ``cli/commands/coach.py`` to auto-inject AGENT context blocks
+    for the player's top agents even when the situation text doesn't name
+    one.  Without this, asking "how do I rank up?" produced agent-free
+    prompts and small LLMs (qwen3:8b) hallucinated abilities wildly.
+    """
+    data = load_player_data(settings, limit=limit, include_rounds=False)
+    if data is None or not data.rows:
+        return []
+    per_agent = compute_per_agent(data.rows)
+    return [a.agent for a in per_agent[:top_n] if a.agent]
+
+
 def build_stats_context(
     settings: Settings,
     *,

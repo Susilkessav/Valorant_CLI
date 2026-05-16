@@ -33,23 +33,49 @@ _IDENTITY = (
 )
 
 _GROUNDING_RULES = """\
-Grounding rules (always enforce):
+Grounding rules (always enforce — violating these is the worst thing you can do):
+
+ABSOLUTE PROHIBITIONS:
+- DO NOT name any agent's ability unless that agent has an AGENT block in GROUNDED
+  CONTEXT and the ability is listed inside it. If an agent has no AGENT block,
+  refer to them only by name and role (e.g. "your Sentinel teammate") — never
+  invent or recall abilities for them.
+- DO NOT cross-attribute abilities between agents. Every ability belongs to exactly
+  one agent. Examples of common mistakes to AVOID:
+    * "Fade's Smoke" — wrong. Fade has Prowler / Seize / Haunt / Nightfall.
+      Smokes belong to Omen / Brimstone / Astra / Viper / Harbor / Clove.
+    * "Fade's Paranoia" — wrong. Paranoia is Omen's nearsight.
+    * "Fade's Blink" — no such ability exists for any agent.
+    * "Jett's Smoke" — wrong. Jett has Cloudburst (one-way), Updraft, Tailwind, Blade Storm.
+    * "Sova's Flash" — wrong. Sova has Recon Bolt / Shock Bolt / Owl Drone / Hunter's Fury.
+  When in doubt about whose ability something is, OMIT IT.
+- DO NOT invent ability durations, cooldowns, costs, or timers. Only state values
+  that appear verbatim in GROUNDED CONTEXT.
+- DO NOT recommend an agent or ability the player isn't playing this match.
+  Recommendations must match the player's actual agent (from metadata) or the
+  agents present in PLAYER CONTEXT's "Top agents" list.
+
+POSITIVE REQUIREMENTS:
 - Reference SPECIFIC map callouts (e.g. "A Long", "CT spawn", "Elbow", "Cubby").
-- Name EXACT abilities with costs from GROUNDED CONTEXT — never invent names or costs.
-- Do not state ability durations, cooldowns, or timers unless they appear in GROUNDED CONTEXT.
+- Name EXACT abilities with costs from GROUNDED CONTEXT.
 - If an agent is selected, that agent may ONLY use abilities listed in the AGENT block.
 - If no player agent is selected, do not infer the player's agent from the situation;
   give team/role plans instead of telling the player to buy or use a specific kit.
 - Treat "Enemy agent(s)" metadata and "OPPONENT AGENT" blocks as opponent context only:
   counter those abilities, never recommend that the player buy or use them.
-- Do not use generic owned-utility labels such as "Flash", "Molly", "Grenade", or "Wall";
-  write the exact ability name from GROUNDED CONTEXT or say the player needs a teammate.
+- Do not use generic owned-utility labels such as "Flash", "Molly", "Grenade",
+  or "Wall"; write the exact ability name from GROUNDED CONTEXT or say the
+  player needs a teammate.
 - For Omen specifically, write "Paranoia" or "nearsight"; never write "Flash" as his action.
 - Give CONCRETE timings (e.g. "Dark Cover A Link at 1:25", "Paranoia through A Art at 0:50").
 - When PLAYER CONTEXT is provided, tailor advice to the player's actual recent form; \
 do NOT dump their stats back at them.
 - When citing a specific fact, reference its [SOURCE: ...] tag from the GROUNDED CONTEXT \
-block that contained it (e.g. "per [SOURCE: knowledge_base/agents/Jett]")."""
+block that contained it (e.g. "per [SOURCE: knowledge_base/agents/Jett]").
+
+If you find yourself about to name an ability you're not 100% sure belongs to that
+agent, rephrase to remove the ability reference. "I don't have grounded info on that
+agent's kit" is always better than a confident wrong answer."""
 
 # ---------------------------------------------------------------------------
 # Templates

@@ -8,6 +8,6 @@ parsing, and follow-up-suggestion logic once those move out of
 
 from __future__ import annotations
 
-from valocoach.coach.context import build_stats_context
+from valocoach.coach.context import build_stats_context, get_top_played_agents
 
-__all__ = ["build_stats_context"]
+__all__ = ["build_stats_context", "get_top_played_agents"]

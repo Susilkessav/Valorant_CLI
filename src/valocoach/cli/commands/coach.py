@@ -42,7 +42,19 @@ def _build_grounded_context(
     situation: str,
     side: str | None,
     data_dir,
+    *,
+    extra_agents: list[str] | None = None,
 ) -> str | None:
+    """Build the GROUNDED CONTEXT block fed to the LLM.
+
+    ``extra_agents`` are the player's most-played agents (from
+    ``coach.context.get_top_played_agents``).  Their AGENT blocks are
+    prepended to the vector-retrieved chunks so that even when the user
+    asks an agent-less question ("how do I rank up?"), the LLM has the
+    real ability lists for agents the player actually uses — preventing
+    small models like qwen3:8b from hallucinating ("Fade's Smoke",
+    "Fade's Paranoia", etc.).
+    """
     from valocoach.retrieval.retriever import retrieve_static
 
     if agent and not format_agent_context(agent):
@@ -51,7 +63,26 @@ def _build_grounded_context(
         display.warn(f"Map '{map_}' not found in knowledge base — coach may improvise.")
 
     result = retrieve_static(situation, data_dir, agent=agent, map_=map_, side=side)
-    return result.to_context_string()
+    parts: list[str] = []
+
+    # Prepend AGENT blocks for the player's top agents that aren't already
+    # the explicit `agent`.  Skip silently when the JSON knowledge base
+    # has no entry (e.g. a brand-new agent the user pulled before we
+    # updated agents.json) — the grounding rule covers that case.
+    if extra_agents:
+        seen = {a.lower() for a in (agent,) if a}
+        for extra in extra_agents:
+            if not extra or extra.lower() in seen:
+                continue
+            block = format_agent_context(extra)
+            if block:
+                parts.append(block)
+                seen.add(extra.lower())
+
+    base = result.to_context_string()
+    if base:
+        parts.append(base)
+    return "\n\n".join(parts) if parts else None
 
 
 def _resolve_fields(
@@ -117,12 +148,27 @@ def run_coach(
     system_prompt_base = PROMPT_TEMPLATES[intent]
     panel_title = PANEL_TITLES[intent]
 
+    # Auto-inject AGENT blocks for the player's most-played agents.  Without
+    # this, agent-less questions like "how do I rank up?" produce a
+    # context-free prompt and small models hallucinate abilities for
+    # whichever agent name they pick from training data.  Wrapped in a
+    # try because stats may be unavailable on a fresh install.
+    extra_agents: list[str] = []
+    if with_stats:
+        try:
+            from valocoach.coach import get_top_played_agents
+
+            extra_agents = get_top_played_agents(settings)
+        except Exception:
+            log.debug("top-played agents lookup failed", exc_info=True)
+
     grounded_context = _build_grounded_context(
         agent=agent,
         map_=map_,
         situation=situation,
         side=side,
         data_dir=settings.data_dir,
+        extra_agents=extra_agents,
     )
 
     stats_context: str | None = None
