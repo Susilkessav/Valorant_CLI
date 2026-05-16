@@ -78,4 +78,7 @@ def format_map_context(name: str) -> str | None:
         except Exception:
             pass  # Never block map context due to a staleness check failure
 
+    # F3 — provenance tag so LLM can cite the source
+    lines.append(f"[SOURCE: knowledge_base/maps/{map_data['name']}]")
+
     return "\n".join(lines)

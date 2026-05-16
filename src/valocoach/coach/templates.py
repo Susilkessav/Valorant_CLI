@@ -47,7 +47,9 @@ Grounding rules (always enforce):
 - For Omen specifically, write "Paranoia" or "nearsight"; never write "Flash" as his action.
 - Give CONCRETE timings (e.g. "Dark Cover A Link at 1:25", "Paranoia through A Art at 0:50").
 - When PLAYER CONTEXT is provided, tailor advice to the player's actual recent form; \
-do NOT dump their stats back at them."""
+do NOT dump their stats back at them.
+- When citing a specific fact, reference its [SOURCE: ...] tag from the GROUNDED CONTEXT \
+block that contained it (e.g. "per [SOURCE: knowledge_base/agents/Jett]")."""
 
 # ---------------------------------------------------------------------------
 # Templates

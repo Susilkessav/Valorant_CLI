@@ -1,0 +1,42 @@
+# Meta tier reference — held-out tier list for eval_meta.py regression checks.
+#
+# These placements reflect community consensus for Valorant patch 10.08
+# (Diamond+ ranked). Update this file after each major meta shift that you
+# have manually verified — it is the ground truth for F1 eval runs.
+#
+# Precision/recall thresholds (default --threshold 0.6) mean up to 40% of
+# S-tier agents can move without triggering a failure. Tighten the threshold
+# when you want stricter regression detection.
+#
+# Agents that commonly flip between tiers each patch (e.g. Reyna, Clove)
+# should be placed in the LOWER of their expected tiers to avoid false
+# failures on small meta movements.
+
+reference_tiers:
+  S:
+    - Omen
+    - Viper
+    - Killjoy
+    - Jett
+    - Sova
+  A:
+    - Raze
+    - Cypher
+    - Fade
+    - Brimstone
+    - Skye
+  B:
+    - Reyna
+    - KAY/O
+    - Chamber
+    - Sage
+    - Breach
+  C:
+    - Phoenix
+    - Yoru
+    - Harbor
+    - Astra
+
+# Agents explicitly excluded from eval (new agents, incomplete data, etc.)
+# Add agent names here to skip them in precision/recall calculations.
+exclude: []

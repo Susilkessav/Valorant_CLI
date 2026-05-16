@@ -134,4 +134,7 @@ def format_meta_context(
             except Exception as exc:
                 log.debug("C4: could not load patch diff for %s: %s", patch_version, exc)
 
+    # F3 — provenance tag so LLM can cite the source
+    lines.append(f"[SOURCE: knowledge_base/meta/{meta.get('patch', 'unknown')}]")
+
     return "\n".join(lines)

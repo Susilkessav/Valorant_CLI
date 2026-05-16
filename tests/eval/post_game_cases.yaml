@@ -1,0 +1,48 @@
+# Post-game analyzer eval cases — hand-labeled test fixtures for eval_post_game.py
+#
+# Each case specifies what scenario to simulate and which finding root_cause_tag
+# values must (or must not) appear in the analyzer output.
+#
+# Root cause tags correspond to Finding.root_cause_tag values in post_game.py.
+# The eval script builds synthetic Match objects programmatically for each
+# scenario type — no real API calls or database needed.
+
+cases:
+
+  - id: heavy_early_deaths
+    description: "Player dying first in 50%+ of rounds should trigger entry_failure"
+    scenario: first_contact_deaths
+    expected_findings:
+      - entry_failure
+    must_not_find:
+      - entry_success
+
+  - id: strong_entry_player
+    description: "Player getting first blood in 35%+ of rounds should trigger entry_success"
+    scenario: first_contact_bloods
+    expected_findings:
+      - entry_success
+    must_not_find:
+      - entry_failure
+
+  - id: side_performance_gap
+    description: "Large ATK vs DEF win rate gap should trigger side_imbalance"
+    scenario: side_split_gap
+    expected_findings:
+      - side_imbalance
+    must_not_find: []
+
+  - id: low_utility_use
+    description: "Very low ability cast count should flag low_utility"
+    scenario: low_utility
+    expected_findings:
+      - low_utility
+    must_not_find: []
+
+  - id: average_match
+    description: "Average stats with no extreme values should not produce critical findings"
+    scenario: average_match
+    expected_findings: []
+    must_not_find:
+      - entry_failure
+      - low_utility
