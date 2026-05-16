@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import logging
+
 import typer
 
 from valocoach import __version__
 from valocoach.cli import display
+
+log = logging.getLogger(__name__)
 
 app = typer.Typer(
     name="valocoach",
@@ -40,6 +44,7 @@ def main(
         display.console.print("  [info]valocoach sync[/info]           [muted]Pull your match history[/muted]")
         display.console.print("  [info]valocoach stats[/info]          [muted]View your performance dashboard[/muted]")
         display.console.print("  [info]valocoach coach[/info] [muted]\"...\"    Get tactical advice[/muted]")
+        display.console.print("  [info]valocoach post-game[/info]      [muted]Debrief your last match[/muted]")
         display.console.print("  [info]valocoach interactive[/info]    [muted]Start a coaching session[/muted]")
         display.console.print()
         display.console.print("[muted]Run valocoach --help for all commands.[/muted]")
@@ -55,6 +60,11 @@ def coach(
         True,
         "--with-stats/--no-stats",
         help="Include your recent performance stats in the prompt (default on).",
+    ),
+    no_elicit: bool = typer.Option(
+        False,
+        "--no-elicit",
+        help="Skip the interactive context questions and go straight to coaching.",
     ),
 ) -> None:
     """Get tactical coaching for a match situation."""
@@ -77,6 +87,7 @@ def coach(
         map_=map_,
         side=side,
         with_stats=with_stats,
+        no_elicit=no_elicit,
     )
 
 
@@ -134,6 +145,19 @@ def sync(
     async def _run():
         await ensure_db(settings.data_dir / "valocoach.db")
 
+        # Housekeeping: every sync also sweeps expired retrieval cache rows
+        # (SQLite meta_cache + ChromaDB live docs).  Without this the cache
+        # grows unbounded — purge_expired() was previously only called by
+        # tests.  Failures are logged at debug, never block the sync.
+        try:
+            from valocoach.retrieval.cache import purge_expired
+
+            purged = await purge_expired(settings.data_dir)
+            if purged:
+                log.debug("Purged %d expired cache entries before sync", purged)
+        except Exception:
+            log.debug("cache purge during sync failed", exc_info=True)
+
         try:
             result = await sync_player_matches(settings, limit=limit, full=full, mode=mode)
         except (SyncError, ConfigError) as exc:
@@ -174,7 +198,7 @@ def sync(
                     f"[muted]{arrow} {delta_str} elo since last sync[/muted]"
                 )
         except Exception:
-            pass
+            log.debug("MMR snapshot rendering failed", exc_info=True)
 
 
 @app.command(rich_help_panel="Performance")
@@ -325,6 +349,70 @@ def meta_refresh(
         install_cron=install_cron,
         youtube=list(youtube) or None,
     )
+
+
+@app.command("lineup", rich_help_panel="Coaching")
+def lineup(
+    agent: str | None = typer.Argument(None, help="Agent name (e.g. Sova, Viper, KAY/O)."),
+    map_: str | None = typer.Option(None, "--map", "-m", help="Map name (e.g. Ascent, Bind)."),
+    site: str | None = typer.Option(None, "--site", "-s", help="Site letter: A, B, or C."),
+    query: str | None = typer.Option(
+        None, "--query", "-q", help="Override the search query (natural language)."
+    ),
+    n_results: int = typer.Option(5, "--top", "-n", help="Number of lineups to show (default 5)."),
+) -> None:
+    """Find ability lineups for an agent, map, and site.
+
+    Searches the lineup database (seeded from YouTube guides + built-in entries).
+    Run  valocoach ingest --seed  to load the bundled lineups.
+
+    Examples:
+
+      valocoach lineup Sova --map Ascent --site A
+
+      valocoach lineup Viper --map Bind
+
+      valocoach lineup --query "Sova post-plant shock bolt Haven C"
+    """
+    from valocoach.cli.commands.lineup import run_lineup
+
+    run_lineup(agent=agent, map_name=map_, site=site, query=query, n_results=n_results)
+
+
+@app.command("post-game", rich_help_panel="Coaching")
+def post_game(
+    match_id: str | None = typer.Argument(
+        None,
+        help="Match ID to analyse (8-char prefix or full ID).  Defaults to the most recent match.",
+    ),
+    no_notes: bool = typer.Option(
+        False,
+        "--no-notes",
+        help="Skip auto-creating coaching notes for critical findings.",
+    ),
+    no_repl: bool = typer.Option(
+        False,
+        "--no-repl",
+        help="Skip the interactive REPL handoff offer at the end.",
+    ),
+) -> None:
+    """Debrief your last match: run post-game analyzers then get LLM coaching.
+
+    Loads the most recent competitive match from the local DB (or a specific
+    match by ID), runs deterministic analyzers across all rounds, surfaces the
+    top 3 findings, auto-saves critical ones as coaching notes, and asks the
+    LLM to write a structured post-game debrief.
+
+    \b
+    Examples:
+      valocoach post-game                    # debrief your latest match
+      valocoach post-game abc12345           # debrief a specific match
+      valocoach post-game --no-notes         # skip auto-note creation
+      valocoach post-game --no-repl          # skip interactive handoff
+    """
+    from valocoach.cli.commands.post_game import run_post_game
+
+    run_post_game(match_id=match_id, no_notes=no_notes, no_repl=no_repl)
 
 
 @app.command(rich_help_panel="Coaching")

@@ -89,8 +89,8 @@ Commands are organized into four groups visible in `--help`:
 
 | Group | Commands |
 |---|---|
-| **Coaching** | `coach`, `interactive`, `notes`, `sessions` |
-| **Performance** | `stats`, `profile` |
+| **Coaching** | `coach`, `interactive`, `notes`, `sessions`, `lineup` |
+| **Performance** | `stats`, `profile`, `post-game` |
 | **Data** | `sync`, `ingest`, `index` |
 | **Game Info** | `meta`, `meta-refresh`, `patch` |
 
@@ -256,6 +256,68 @@ Sub-commands:
 Notes are also accessible from interactive mode with `/note`, `/notes`, and
 `/resolve`.
 
+## Lineups
+
+Search the local lineup library — hand-verified seed entries plus any
+YouTube transcript chunks the ingest pipeline classified as `lineups` and
+extracted metadata from.
+
+```bash
+uv run valocoach lineup Sova --map Ascent --site A
+uv run valocoach lineup --map Bind --query "post-plant B"
+uv run valocoach lineup Brimstone --map Haven
+```
+
+Results show the agent, ability, map, site, purpose, and (for video-sourced
+entries) a `📹 channel "title" @ mm:ss` reference so you can find the clip.
+
+Options:
+
+| Option | Meaning |
+|---|---|
+| `<agent>` | Positional. Filter to one agent (e.g. `Sova`, `Viper`, `KAY/O`). |
+| `--map`, `-m` | Filter to one map. |
+| `--site`, `-s` | Site letter: `A`, `B`, `C`, or `Mid`. |
+| `--query`, `-q` | Free-text similarity query, e.g. `"smoke A Long"`. |
+| `--top`, `-n` | Maximum hits to return. Default is `5`. |
+
+Filters are canonical-case normalised on both write (ingest) and read
+(query), so `--agent sova`, `--agent Sova`, and `--agent SOVA` all match the
+same entries. If no hits return, broaden the filters or omit `--query`.
+
+## Post-Game Debrief
+
+Run a finding-based analysis of your most recent stored match and get a
+focused 4-section coaching debrief.
+
+```bash
+uv run valocoach post-game
+```
+
+The analyzer runs ten deterministic checks on the match — first-contact
+patterns, economy decisions, utility efficiency, round-timing, traded
+deaths, ATK/DEF side split, clutch conversion, death-location clustering,
+engagement distance, plant/defuse site distribution — plus an MMR-trend
+check across recent ranked games. The top three findings (collapsed by
+root cause) are written into a structured block that the LLM uses as
+ground truth for the debrief.
+
+The debrief is laid out as:
+
+1. **🔴 Critical Pattern** — single most damaging habit, with numbers.
+2. **📊 What this cost you** — round-outcome translation.
+3. **🎯 Priority drill** — one custom-game or DM drill that targets it.
+4. **🎮 Next-match focus** — one mindset cue + one rule.
+
+When a `low_utility` finding fires on a util-heavy agent (Sova, Viper,
+KAY/O, Brimstone, Omen, Fade, Cypher, Killjoy), the debrief also injects a
+LINEUP SUGGESTIONS block pulled from the lineup library and the LLM is
+told to quote one with its `[SOURCE: youtube/...]` citation.
+
+Requires at least one synced match. Plant-site analyzer + spatial
+analyzers degrade gracefully on matches synced before the spatial-data
+schema migration.
+
 ## Coaching Sessions
 
 Sessions are the saved conversation histories from `interactive` mode.
@@ -284,6 +346,8 @@ Default behavior:
 - Inspects up to 20 matches.
 - Stops early when it reaches an already stored match.
 - Stores data in `~/.valocoach/data/valocoach.db`.
+- Sweeps expired retrieval cache rows (SQLite `meta_cache` + live ChromaDB
+  docs) before fetching, so the cache stays bounded over time.
 
 Options:
 
@@ -503,6 +567,8 @@ uv run valocoach patch --check
 |---|---|
 | Get advice now | `uv run valocoach coach "retaking B on Bind as Sova"` |
 | Start a multi-turn session | `uv run valocoach interactive` |
+| Debrief your last match | `uv run valocoach post-game` |
+| Look up a lineup | `uv run valocoach lineup Sova --map Ascent --site A` |
 | Add a note during session | `/note work on smoke timings` |
 | Review open notes | `uv run valocoach notes list` |
 | Sync recent ranked matches | `uv run valocoach sync` |

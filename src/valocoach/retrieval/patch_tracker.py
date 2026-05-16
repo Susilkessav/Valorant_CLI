@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -14,6 +15,40 @@ from valocoach.data.orm_models import PatchVersion
 from valocoach.retrieval.cache import invalidate_volatile
 
 log = logging.getLogger(__name__)
+
+# HenrikDev's /v1/version response uses multiple version-like fields:
+#   - "version"            → build number only (e.g. "25") — NOT user-facing
+#   - "riotClientVersion"  → full string like "release-10.09-shipping-25-12345"
+#   - "branch"             → e.g. "release-10.09"
+#   - "build_ver"          → same shape as riotClientVersion (newer schemas)
+# Earlier code grabbed "version" alone, which surfaced the build number to the
+# user and broke patch-notes URL construction.  Extract X.YY from the first
+# field that contains it; fall back to the raw "version" so we never store
+# the literal string "unknown" if the response shape changes again.
+_PATCH_NUMBER_RE = re.compile(r"(\d+)\.(\d{2})")
+
+
+def _extract_patch_number(data: dict) -> str:
+    """Pull "X.YY" from a HenrikDev /v1/version payload.
+
+    Tries the X.YY-yielding fields in priority order; returns the raw
+    "version" field (or "unknown") if none of them parse.
+    """
+    for key in ("riotClientVersion", "build_ver", "branch"):
+        v = data.get(key)
+        if not v:
+            continue
+        m = _PATCH_NUMBER_RE.search(str(v))
+        if m:
+            return f"{m.group(1)}.{m.group(2)}"
+    # Last-ditch: "version" itself may already be X.YY in some regions.
+    raw = data.get("version")
+    if raw:
+        m = _PATCH_NUMBER_RE.search(str(raw))
+        if m:
+            return f"{m.group(1)}.{m.group(2)}"
+        return str(raw)
+    return "unknown"
 
 
 async def check_patch_update(settings: Settings) -> tuple[str, bool]:
@@ -30,7 +65,9 @@ async def check_patch_update(settings: Settings) -> tuple[str, bool]:
     async with HenrikClient(settings) as client:
         version_data = await client.get_version(settings.riot_region)
 
-    current = version_data.get("version", "unknown")
+    # Extract user-facing X.YY (e.g. "10.09") rather than the bare build
+    # number HenrikDev returns in the "version" field.
+    current = _extract_patch_number(version_data)
 
     async with session_scope() as s:
         latest = await s.scalar(select(PatchVersion).order_by(PatchVersion.detected_at.desc()))

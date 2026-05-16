@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import logging
+
 from valocoach.cli import display
+
+log = logging.getLogger(__name__)
 from valocoach.coach import build_stats_context
 from valocoach.coach.intent import classify_intent
 from valocoach.coach.templates import PANEL_TITLES, PROMPT_TEMPLATES
@@ -38,7 +42,19 @@ def _build_grounded_context(
     situation: str,
     side: str | None,
     data_dir,
+    *,
+    extra_agents: list[str] | None = None,
 ) -> str | None:
+    """Build the GROUNDED CONTEXT block fed to the LLM.
+
+    ``extra_agents`` are the player's most-played agents (from
+    ``coach.context.get_top_played_agents``).  Their AGENT blocks are
+    prepended to the vector-retrieved chunks so that even when the user
+    asks an agent-less question ("how do I rank up?"), the LLM has the
+    real ability lists for agents the player actually uses — preventing
+    small models like qwen3:8b from hallucinating ("Fade's Smoke",
+    "Fade's Paranoia", etc.).
+    """
     from valocoach.retrieval.retriever import retrieve_static
 
     if agent and not format_agent_context(agent):
@@ -47,7 +63,26 @@ def _build_grounded_context(
         display.warn(f"Map '{map_}' not found in knowledge base — coach may improvise.")
 
     result = retrieve_static(situation, data_dir, agent=agent, map_=map_, side=side)
-    return result.to_context_string()
+    parts: list[str] = []
+
+    # Prepend AGENT blocks for the player's top agents that aren't already
+    # the explicit `agent`.  Skip silently when the JSON knowledge base
+    # has no entry (e.g. a brand-new agent the user pulled before we
+    # updated agents.json) — the grounding rule covers that case.
+    if extra_agents:
+        seen = {a.lower() for a in (agent,) if a}
+        for extra in extra_agents:
+            if not extra or extra.lower() in seen:
+                continue
+            block = format_agent_context(extra)
+            if block:
+                parts.append(block)
+                seen.add(extra.lower())
+
+    base = result.to_context_string()
+    if base:
+        parts.append(base)
+    return "\n\n".join(parts) if parts else None
 
 
 def _resolve_fields(
@@ -72,7 +107,10 @@ def run_coach(
     side: str | None = None,
     *,
     with_stats: bool = True,
+    no_elicit: bool = False,
+    match_context=None,  # SessionMatchContext | None — avoids circular import
     conversation_history: list[dict[str, str]] | None = None,
+    force_intent: str | None = None,  # bypass classify_intent() when set
 ) -> str | None:
     settings = load_settings()
 
@@ -93,9 +131,36 @@ def run_coach(
 
     parsed, agent, map_, side = _resolve_fields(situation, agent, map_, side)
 
-    intent = classify_intent(parsed, situation)
+    if not no_elicit:
+        from valocoach.coach.elicitation import run_elicitation, should_elicit
+
+        if should_elicit(parsed, situation):
+            parsed, agent, map_, side = run_elicitation(parsed, agent, map_, side)
+
+    # Merge persistent match context — per-turn values take precedence
+    match_context_block: str | None = None
+    extra_enemies: list[str] = []
+    if match_context is not None and not match_context.is_empty:
+        agent, map_, side, extra_enemies = match_context.resolve_coach_kwargs(agent, map_, side)
+        match_context_block = match_context.to_context_block()
+
+    intent = force_intent if force_intent is not None else classify_intent(parsed, situation)
     system_prompt_base = PROMPT_TEMPLATES[intent]
     panel_title = PANEL_TITLES[intent]
+
+    # Auto-inject AGENT blocks for the player's most-played agents.  Without
+    # this, agent-less questions like "how do I rank up?" produce a
+    # context-free prompt and small models hallucinate abilities for
+    # whichever agent name they pick from training data.  Wrapped in a
+    # try because stats may be unavailable on a fresh install.
+    extra_agents: list[str] = []
+    if with_stats:
+        try:
+            from valocoach.coach import get_top_played_agents
+
+            extra_agents = get_top_played_agents(settings)
+        except Exception:
+            log.debug("top-played agents lookup failed", exc_info=True)
 
     grounded_context = _build_grounded_context(
         agent=agent,
@@ -103,6 +168,7 @@ def run_coach(
         situation=situation,
         side=side,
         data_dir=settings.data_dir,
+        extra_agents=extra_agents,
     )
 
     stats_context: str | None = None
@@ -127,7 +193,7 @@ def run_coach(
             if lm is not None:
                 last_match_context = format_last_match_context(lm)
         except Exception:
-            pass
+            log.debug("last-match context unavailable", exc_info=True)
 
     notes_context: str | None = None
     if with_stats:
@@ -143,19 +209,29 @@ def run_coach(
                 open_notes = list_open_notes(settings, puuid, limit=5)
                 notes_context = format_open_notes_context(open_notes)
         except Exception:
-            pass
+            log.debug("open-notes context unavailable", exc_info=True)
 
     resolved_agents: list[str] = parsed.agents
     if agent and agent not in parsed.agents:
         resolved_agents = [agent, *parsed.agents]
+    # Merge extra enemies from match context (not already in parsed enemies)
+    resolved_enemies = list(parsed.enemy_agents)
+    for e in extra_enemies:
+        if e not in resolved_enemies:
+            resolved_enemies.append(e)
     resolved_display = parsed.model_copy(
         update={
             "agents": resolved_agents,
+            "enemy_agents": resolved_enemies,
             "map": map_,
             "side": side,
         }
     )
     user_msg_parts: list[str] = []
+    # Persistent match context header comes first so the LLM sees it before the
+    # per-turn metadata block — it acts as the "ground truth" for the session.
+    if match_context_block:
+        user_msg_parts.append(match_context_block)
     metadata_block = resolved_display.to_metadata_block()
     if metadata_block:
         user_msg_parts.append(metadata_block)
@@ -212,6 +288,6 @@ def run_coach(
                     "run [info]valocoach patch --check[/info] to refresh.[/muted]"
                 )
         except Exception:
-            pass
+            log.debug("patch staleness check failed", exc_info=True)
 
     return response_text or None

@@ -42,6 +42,11 @@ from valocoach.stats.calculator import (
     compute_player_stats,
     reliability_flags,
 )
+from valocoach.stats.round_analyzer import (
+    WeaponSplit,
+    analyze_rounds_per_map,
+    compute_weapon_stats,
+)
 from valocoach.stats.filters import (
     apply_filters,
     filter_by_agent,
@@ -56,6 +61,10 @@ from valocoach.stats.filters import (
 )
 
 __all__ = [
+    # round_analyzer extras (E1/E2)
+    "WeaponSplit",
+    "analyze_rounds_per_map",
+    "compute_weapon_stats",
     # calculator
     "MIN_MATCHES_ACS",
     "MIN_MATCHES_ADR",

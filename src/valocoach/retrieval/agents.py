@@ -64,4 +64,7 @@ def format_agent_context(name: str) -> str | None:
     if agent.get("economy_tip"):
         lines.append(f"Economy note: {agent['economy_tip']}")
 
+    # F3 — provenance tag so LLM can cite the source
+    lines.append(f"[SOURCE: knowledge_base/agents/{agent['name']}]")
+
     return "\n".join(lines)

@@ -54,6 +54,35 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
+def _xy(location: dict) -> tuple[int | None, int | None]:
+    """Extract (x, y) integers from an API location dict.
+
+    HenrikDev v4 location shape: ``{"x": int, "y": int}``.
+    Returns ``(None, None)`` when the dict is absent or malformed so callers
+    can safely unpack and store NULL without crashing.
+    """
+    if not isinstance(location, dict):
+        return None, None
+    x = location.get("x")
+    y = location.get("y")
+    return (
+        int(x) if isinstance(x, int | float) else None,
+        int(y) if isinstance(y, int | float) else None,
+    )
+
+
+def _engagement_distance(kx: int | None, ky: int | None, vx: int | None, vy: int | None) -> str | None:
+    """Return Euclidean distance between killer and victim as a TEXT string.
+
+    Stored as TEXT to avoid float precision noise in SQLite.  Cast to float
+    when reading.  Returns None when any coordinate is absent.
+    """
+    if kx is None or ky is None or vx is None or vy is None:
+        return None
+    dist = ((kx - vx) ** 2 + (ky - vy) ** 2) ** 0.5
+    return f"{dist:.2f}"
+
+
 def _tier_int(tier_id: str) -> int | None:
     """Convert a tier id string ("13") to int (13).  Returns None on blank / non-numeric."""
     return int(tier_id) if tier_id and tier_id.lstrip("-").isdigit() else None
@@ -193,6 +222,8 @@ def _build_round_tree(details: MatchDetails, match_id: str) -> list[Round]:
     round_map: dict[int, Round] = {}
 
     for rnd in details.rounds:
+        plant_x, plant_y = _xy(rnd.plant.location) if rnd.plant else (None, None)
+        defuse_x, defuse_y = _xy(rnd.defuse.location) if rnd.defuse else (None, None)
         orm_round = Round(
             match_id=match_id,
             round_number=rnd.id,
@@ -201,10 +232,14 @@ def _build_round_tree(details: MatchDetails, match_id: str) -> list[Round]:
             bomb_planted=rnd.plant is not None,
             plant_site=rnd.plant.site if rnd.plant else None,
             planter_puuid=rnd.plant.player.puuid if rnd.plant and rnd.plant.player.puuid else None,
+            plant_x=plant_x,
+            plant_y=plant_y,
             bomb_defused=rnd.defuse is not None,
             defuser_puuid=rnd.defuse.player.puuid
             if rnd.defuse and rnd.defuse.player.puuid
             else None,
+            defuse_x=defuse_x,
+            defuse_y=defuse_y,
         )
         round_map[rnd.id] = orm_round
 
@@ -217,6 +252,19 @@ def _build_round_tree(details: MatchDetails, match_id: str) -> list[Round]:
             damage_dealt = sum(
                 int(ev.get("damage", 0)) for ev in ps.damage_events if isinstance(ev, dict)
             )
+            # Compact damage events: keep only the fields useful for analysis
+            damage_summary = [
+                {
+                    "receiver": ev.get("receiver"),
+                    "damage": int(ev.get("damage", 0)),
+                    "headshots": int(ev.get("headshots", 0)),
+                    "bodyshots": int(ev.get("bodyshots", 0)),
+                    "legshots": int(ev.get("legshots", 0)),
+                }
+                for ev in ps.damage_events
+                if isinstance(ev, dict)
+            ]
+            ac = ps.ability_casts
             orm_round.round_players.append(
                 RoundPlayer(
                     match_id=match_id,
@@ -233,6 +281,11 @@ def _build_round_tree(details: MatchDetails, match_id: str) -> list[Round]:
                     survived=puuid not in victims_this_round,
                     was_afk=ps.was_afk,
                     stayed_in_spawn=ps.stayed_in_spawn,
+                    ability_casts_grenade=ac.grenade,
+                    ability_casts_ability1=ac.ability_1,
+                    ability_casts_ability2=ac.ability_2,
+                    ability_casts_ultimate=ac.ultimate,
+                    damage_events_json=json.dumps(damage_summary) if damage_summary else None,
                 )
             )
 
@@ -242,6 +295,18 @@ def _build_round_tree(details: MatchDetails, match_id: str) -> list[Round]:
             # kill references a round index not present in rounds list — skip
             log.debug("kill in unknown round %d — skipped", kill.round)
             continue
+
+        # Extract spatial data from the kill event.
+        # kill.location is the victim's position at death.
+        # kill.player_locations is a list of {puuid, location: {x, y}, view_radians}
+        # for all players at the moment of the kill — we use the killer's entry.
+        victim_x, victim_y = _xy(kill.location)
+        killer_x: int | None = None
+        killer_y: int | None = None
+        for pl in kill.player_locations:
+            if isinstance(pl, dict) and pl.get("player_id") == kill.killer.puuid:
+                killer_x, killer_y = _xy(pl.get("location", {}))
+                break
 
         orm_round.kills.append(
             Kill(
@@ -253,6 +318,11 @@ def _build_round_tree(details: MatchDetails, match_id: str) -> list[Round]:
                 weapon_name=kill.weapon.name,  # None on ability kills
                 is_headshot=False,  # not present in v4
                 assistants_json=json.dumps([a.puuid for a in kill.assistants]),
+                killer_x=killer_x,
+                killer_y=killer_y,
+                victim_x=victim_x,
+                victim_y=victim_y,
+                engagement_distance=_engagement_distance(killer_x, killer_y, victim_x, victim_y),
             )
         )
 

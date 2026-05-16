@@ -249,8 +249,14 @@ class Round(Base):
     bomb_planted: Mapped[bool] = mapped_column(Boolean, default=False)
     plant_site: Mapped[str | None] = mapped_column(String, nullable=True)
     planter_puuid: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Plant coordinates (NULL for pre-migration matches)
+    plant_x: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    plant_y: Mapped[int | None] = mapped_column(Integer, nullable=True)
     bomb_defused: Mapped[bool] = mapped_column(Boolean, default=False)
     defuser_puuid: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Defuse coordinates (NULL for pre-migration matches)
+    defuse_x: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    defuse_y: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Relationships
     match: Mapped[Match] = relationship(back_populates="rounds")
@@ -305,6 +311,13 @@ class RoundPlayer(Base):
     survived: Mapped[bool] = mapped_column(Boolean, default=True)
     was_afk: Mapped[bool] = mapped_column(Boolean, default=False)
     stayed_in_spawn: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Round-level ability cast counts (NULL for pre-migration rows)
+    ability_casts_grenade: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ability_casts_ability1: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ability_casts_ability2: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ability_casts_ultimate: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Damage events summary: JSON list of {receiver, damage, headshots, bodyshots, legshots}
+    damage_events_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Relationship
     round: Mapped[Round] = relationship(back_populates="round_players")
@@ -346,6 +359,16 @@ class Kill(Base):
     weapon_name: Mapped[str | None] = mapped_column(String, nullable=True)
     is_headshot: Mapped[bool] = mapped_column(Boolean, default=False)
     assistants_json: Mapped[str] = mapped_column(Text, default="[]")  # JSON array of PUUIDs
+    # Spatial data (NULL for matches synced before this schema version)
+    killer_x: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    killer_y: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    victim_x: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    victim_y: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Stored as TEXT to dodge SQLite float-precision drift; analyzers cast
+    # on read (see analyze_engagement_distances).  The annotation type is
+    # ``str | None`` so static checkers stop reporting false "expected float"
+    # warnings at the call sites that explicitly float(...) the value.
+    engagement_distance: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # Relationship
     round: Mapped[Round] = relationship(back_populates="kills")
@@ -492,6 +515,8 @@ class CoachingSession(Base):
     # Optional focus context for the session
     focus_agent: Mapped[str | None] = mapped_column(String, nullable=True)
     focus_map: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Serialised SessionMatchContext state — JSON blob, NULL when never set
+    match_context_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Relationship
     notes: Mapped[list[CoachingNote]] = relationship(

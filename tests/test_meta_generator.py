@@ -97,15 +97,23 @@ _EXISTING = {
 
 class TestValidate:
     def test_uses_llm_data_when_present(self):
+        """C2: when LLM supplies numeric rates, deterministic tiers are computed."""
         from valocoach.retrieval.meta_generator import _validate
 
+        # Reyna with high enough rates to land in S tier:
+        # score = 52.5 + log1p(25.0)*0.5 ≈ 54.1 → S
         data = {
-            "tier_list": {"S": ["Reyna"], "A": [], "B": [], "C": []},
-            "agent_meta": {"Reyna": {"tier": "S"}},
+            "agent_meta": {
+                "Reyna": {
+                    "pick_rate_pct": 25.0,
+                    "win_rate_pct": 52.5,
+                    "reason": "Powerful duelist in solo queue.",
+                }
+            },
             "map_meta": {},
         }
         result = _validate(data, _EXISTING)
-        assert result["tier_list"]["S"] == ["Reyna"]
+        assert "Reyna" in result["tier_list"]["S"]
 
     def test_falls_back_to_existing_when_llm_data_missing(self):
         from valocoach.retrieval.meta_generator import _validate

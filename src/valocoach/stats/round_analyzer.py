@@ -282,7 +282,9 @@ def _tally_round(
 ) -> None:
     """Classify one round's events and update accumulators in place."""
     acc.rounds += 1
-    won = rnd.winning_team.lower() == player_team.lower()
+    # Guard against pre-migration rows where winning_team is NULL — skip side
+    # accounting AND won flag entirely rather than crashing.
+    won = (rnd.winning_team or "").lower() == player_team.lower()
 
     # Side accounting — only when we know which team started on attack.
     if attacker_team is not None:
@@ -677,6 +679,68 @@ def trade_participation_stat(analysis: RoundAnalysis, matches: int) -> StatResul
         is_reliable=rel and not no_teammate_deaths,
         warning=warn or ("⚠ no teammate deaths in sample" if no_teammate_deaths else None),
     )
+
+
+def analyze_rounds_per_map(
+    matches: Iterable[Match],
+    puuid: str,
+) -> dict[str, RoundAnalysis]:
+    """Run analyze_rounds() for each distinct map, returning map_name → RoundAnalysis.
+
+    Used by the coach context (E1) to inject per-map ATK/DEF split into the
+    Top maps section so the LLM can see which side the player struggles on
+    for each map, not just overall.
+    """
+    from collections import defaultdict
+    buckets: dict[str, list[Match]] = defaultdict(list)
+    for match in matches:
+        buckets[match.map_name].append(match)
+    return {map_name: analyze_rounds(ms, puuid) for map_name, ms in buckets.items()}
+
+
+@dataclass(frozen=True, slots=True)
+class WeaponSplit:
+    """Per-weapon kill + headshot counts for a player (E2)."""
+    weapon: str
+    kills: int
+    headshots: int
+
+    @property
+    def hs_pct(self) -> float:
+        return self.headshots / self.kills if self.kills else 0.0
+
+
+def compute_weapon_stats(
+    matches: Iterable[Match],
+    puuid: str,
+    min_kills: int = 5,
+) -> list[WeaponSplit]:
+    """Per-weapon kill and headshot counts, sorted by kill count (descending).
+
+    Only weapons with at least *min_kills* are returned — below that the
+    HS% is too noisy to surface.  ``weapon_name`` NULL rows (ability kills)
+    are excluded.
+
+    The function walks ``match.rounds[*].kills`` for kills where
+    ``killer_puuid == puuid``.  Matches must have rounds + kills eagerly
+    loaded (same contract as :func:`analyze_rounds`).
+    """
+    from collections import defaultdict
+    weapon_hits: dict[str, list[bool]] = defaultdict(list)
+
+    for match in matches:
+        for rnd in match.rounds:
+            for kill in rnd.kills:
+                if kill.killer_puuid == puuid and kill.weapon_name:
+                    weapon_hits[kill.weapon_name].append(bool(kill.is_headshot))
+
+    splits = [
+        WeaponSplit(weapon=weapon, kills=len(hs_list), headshots=sum(hs_list))
+        for weapon, hs_list in weapon_hits.items()
+        if len(hs_list) >= min_kills
+    ]
+    splits.sort(key=lambda w: -w.kills)
+    return splits
 
 
 def multi_kill_summary(analysis: RoundAnalysis) -> str:

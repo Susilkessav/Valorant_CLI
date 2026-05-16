@@ -50,6 +50,7 @@ class SyncResult:
     meta_regenerated: bool = False
     meta_written: bool = False
     meta_ingested: bool = False
+    patch_diff_extracted: bool = False   # C3 — set when patch changes are extracted
 
     errors: list[str] = field(default_factory=list)
 
@@ -156,6 +157,25 @@ async def run_meta_sync(
         result.errors.append(f"Patch notes scrape error: {exc}")
         _step("patch_notes", f"error: {exc}")
 
+    # ── 2b. C3 — Extract patch changes into {data_dir}/patch_changes/ ────────
+    if patch_notes_text and not dry_run:
+        try:
+            from valocoach.retrieval.patch_diff import extract_patch_changes
+
+            m_clean = re.search(r"(\d+\.\d+)", patch_version)
+            clean_for_diff = m_clean.group(1) if m_clean else patch_version
+            extract_patch_changes(
+                patch_notes_text=patch_notes_text,
+                patch_version=clean_for_diff,
+                data_dir=settings.data_dir,
+                settings=settings,
+            )
+            result.patch_diff_extracted = True
+            _step("patch_diff", "ok")
+        except Exception as exc:
+            result.errors.append(f"Patch diff extraction error: {exc}")
+            log.warning("C3: patch diff extraction failed: %s", exc)
+
     # ── 3. Stats scrape ────────────────────────────────────────────────────
     _step("stats_scrape")
     stats_text = ""
@@ -197,28 +217,26 @@ async def run_meta_sync(
         result.errors.append(f"Stats scrape error: {exc}")
         _step("stats_scrape", f"error: {exc}")
 
-    # ── 4. YouTube transcripts ─────────────────────────────────────────────
+    # ── 4. YouTube transcripts (Phase D pipeline) ─────────────────────────
     if youtube_videos:
         _step("youtube_ingest")
-        from valocoach.retrieval.ingester import ingest_text
-        from valocoach.retrieval.scrapers.youtube import fetch_transcript
-        from valocoach.retrieval.vector_store import LIVE_COLLECTION
+        from valocoach.retrieval.youtube_ingest import ingest_youtube_video
 
         total_chunks = 0
         for video in youtube_videos:
             try:
-                transcript = fetch_transcript(video)
-                if transcript and not dry_run:
-                    n = ingest_text(
+                if not dry_run:
+                    n = ingest_youtube_video(
                         settings.data_dir,
-                        transcript.text,
-                        doc_type="youtube",
-                        name=transcript.title,
-                        source=transcript.url,
-                        collection_name=LIVE_COLLECTION,
+                        video,
+                        settings,
+                        force=False,
+                        summarize=False,
                     )
                     total_chunks += n
                     log.info("Ingested %d chunk(s) from %s", n, video)
+                else:
+                    log.info("dry_run: skipping YouTube ingest for %s", video)
             except Exception as exc:
                 result.errors.append(f"YouTube ingest error ({video}): {exc}")
 
@@ -288,6 +306,13 @@ async def run_meta_sync(
 
             result.meta_written = True
             _step("meta_write", "ok")
+
+            # ── C5: update last_verified_patch on every map ────────────────
+            try:
+                _update_maps_verified_patch(clean_patch)
+                _step("maps_verify", f"ok (patch={clean_patch})")
+            except Exception as exc:
+                log.warning("C5: could not update last_verified_patch: %s", exc)
         else:
             _step("meta_write", "skipped (dry_run)")
 
@@ -296,7 +321,7 @@ async def run_meta_sync(
         _step("meta_generate", f"error: {exc}")
         return result
 
-    # ── 7. Re-ingest knowledge base ────────────────────────────────────────
+    # ── 7. Re-ingest knowledge base (only fires when meta.json was written) ──
     if result.meta_written:
         _step("re_ingest")
         try:
@@ -310,3 +335,33 @@ async def run_meta_sync(
             _step("re_ingest", f"error: {exc}")
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# C5 helper — stamp last_verified_patch on every map entry
+# ---------------------------------------------------------------------------
+
+_MAPS_FILE = Path(__file__).parent / "data" / "maps.json"
+
+
+def _update_maps_verified_patch(patch_version: str) -> None:
+    """Write *patch_version* as ``last_verified_patch`` on every map in maps.json.
+
+    Called after a successful ``meta.json`` write so map data is considered
+    verified against the current patch.
+    """
+    with open(_MAPS_FILE) as f:
+        data = json.load(f)
+
+    for map_entry in data.get("maps", []):
+        map_entry["last_verified_patch"] = patch_version
+
+    with open(_MAPS_FILE, "w") as f:
+        json.dump(data, f, indent=2)
+        f.write("\n")
+
+    log.info(
+        "C5: set last_verified_patch=%s on %d map(s)",
+        patch_version,
+        len(data.get("maps", [])),
+    )

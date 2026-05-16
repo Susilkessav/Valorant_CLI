@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterator
 
 import litellm
 
 from valocoach.core.config import Settings
+
+log = logging.getLogger(__name__)
 
 # Silence LiteLLM's debug noise
 litellm.suppress_debug_info = True
@@ -60,3 +63,47 @@ def stream_completion(
         content = getattr(delta, "content", None)
         if content:
             yield content
+
+
+def call_llm(
+    system: str,
+    user: str,
+    settings: Settings,
+    max_tokens: int | None = None,
+) -> str:
+    """Non-streaming LLM call — returns the full response as a string.
+
+    Convenience wrapper for cases where streaming is not needed (e.g. structured
+    metadata extraction).  Pass ``max_tokens`` to cap the response length — useful
+    for structured extraction calls that should never produce more than a short JSON.
+
+    Returns empty string on any error.
+    """
+    try:
+        model = settings.ollama_model
+        is_ollama_model = model.startswith("ollama/")
+        if not model.startswith(("ollama/", "anthropic/", "openai/")):
+            model = f"ollama/{model}"
+            is_ollama_model = True
+
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ]
+        completion_kwargs: dict = {
+            "model": model,
+            "messages": messages,
+            "temperature": settings.llm_temperature,
+            "max_tokens": max_tokens if max_tokens is not None else settings.llm_max_tokens,
+            "stream": False,
+        }
+        if is_ollama_model:
+            completion_kwargs["api_base"] = settings.ollama_host
+
+        response = litellm.completion(**completion_kwargs)
+        return response.choices[0].message.content or ""
+    except Exception as exc:
+        # WARNING (not silent) so operators see Ollama/auth/rate-limit failures
+        # rather than mistaking them for "the LLM couldn't decide".
+        log.warning("call_llm failed: %s", exc, exc_info=log.isEnabledFor(logging.DEBUG))
+        return ""

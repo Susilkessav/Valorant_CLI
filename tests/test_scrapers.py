@@ -290,15 +290,22 @@ class TestFetchTranscript:
         assert result is not None
         assert result.fetched_at  # non-empty ISO timestamp
 
-    def test_title_contains_video_id(self):
+    def test_title_uses_oembed_title(self):
+        """D1: title should come from oEmbed, not a placeholder."""
         from valocoach.retrieval.scrapers.youtube import fetch_transcript
 
         mock_cls = self._mock_api(entries=self._entries())
-        with patch(_YT_API_CLS, mock_cls):
+        with (
+            patch(_YT_API_CLS, mock_cls),
+            patch(
+                "valocoach.retrieval.scrapers.youtube.fetch_video_metadata",
+                return_value={"title": "Haven A Execute Guide", "channel": "Woohoojin"},
+            ),
+        ):
             result = fetch_transcript("dQw4w9WgXcQ")
 
         assert result is not None
-        assert "dQw4w9WgXcQ" in result.title
+        assert result.title == "Haven A Execute Guide"
 
 
 # ---------------------------------------------------------------------------
@@ -467,3 +474,139 @@ class TestPatchNotes:
         # No mock needed — build_patch_notes_url returns None → early return
         result = fetch_patch_notes("garbage-version")
         assert result is None
+
+
+# ---------------------------------------------------------------------------
+# F4 — Patch notes multi-source fallback chain
+# ---------------------------------------------------------------------------
+
+
+class TestFetchPatchNotesFallback:
+    """F4 — verify that fetch_patch_notes() falls back through the source chain."""
+
+    def test_returns_primary_when_playvalorant_succeeds(self):
+        """When playvalorant.com returns content, no fallback is called."""
+        from valocoach.retrieval.scrapers import ScrapedContent
+        from valocoach.retrieval.scrapers.patch_notes import fetch_patch_notes
+
+        primary_content = MagicMock(spec=ScrapedContent)
+        primary_content.text = "Official patch notes text"
+
+        call_log: list[str] = []
+
+        def fake_scrape(url: str, **kw) -> MagicMock | None:
+            call_log.append(url)
+            if "playvalorant.com" in url:
+                return primary_content
+            return None
+
+        with patch(_PATCH_SCRAPE_URL, side_effect=fake_scrape):
+            result = fetch_patch_notes("10.09")
+
+        assert result is primary_content
+        # Only the primary URL should have been tried
+        assert len([u for u in call_log if "playvalorant.com" in u]) == 1
+        assert not any("liquipedia" in u for u in call_log)
+
+    def test_falls_back_to_liquipedia_when_primary_fails(self):
+        """When playvalorant.com returns None, liquipedia.net is tried next."""
+        from valocoach.retrieval.scrapers import ScrapedContent
+        from valocoach.retrieval.scrapers.patch_notes import fetch_patch_notes
+
+        liquipedia_content = MagicMock(spec=ScrapedContent)
+        # Must be ≥500 chars to pass the JS-blank-page check in _fetch_liquipedia
+        liquipedia_content.text = "Liquipedia patch summary. " * 25
+
+        def fake_scrape(url: str, **kw) -> MagicMock | None:
+            if "playvalorant.com" in url:
+                return None  # primary fails
+            if "liquipedia.net" in url:
+                return liquipedia_content
+            return None
+
+        with patch(_PATCH_SCRAPE_URL, side_effect=fake_scrape):
+            result = fetch_patch_notes("10.09")
+
+        assert result is liquipedia_content
+
+    def test_falls_back_to_reddit_when_primary_and_liquipedia_fail(self):
+        """When both primary and liquipedia fail, Reddit search is tried."""
+        from valocoach.retrieval.scrapers import ScrapedContent
+        from valocoach.retrieval.scrapers.patch_notes import fetch_patch_notes
+
+        reddit_content = MagicMock(spec=ScrapedContent)
+        reddit_content.text = "Reddit post with patch notes link"
+
+        # Reddit fallback uses urlopen then scrape_url on the post URL
+        import json as _json
+
+        # Use a non-playvalorant, non-liquipedia URL so fake_scrape can distinguish it
+        _ARTICLE_URL = "https://valorant.fandom.com/wiki/Patch_10.09"
+        fake_reddit_response = _json.dumps({
+            "data": {
+                "children": [
+                    {
+                        "data": {
+                            "title": "VALORANT Patch Notes 10.09",
+                            "url": _ARTICLE_URL,
+                            "is_self": False,
+                            "permalink": "/r/VALORANT/comments/abc/patch_10_09/",
+                        }
+                    }
+                ]
+            }
+        }).encode()
+
+        mock_resp = MagicMock()
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+        mock_resp.read.return_value = fake_reddit_response
+
+        def fake_scrape(url: str, **kw) -> MagicMock | None:
+            if "playvalorant.com" in url or "liquipedia.net" in url:
+                return None  # primary and fallback 1 fail
+            # Any other URL (the linked article from Reddit) returns content
+            return reddit_content
+
+        with (
+            patch(_PATCH_SCRAPE_URL, side_effect=fake_scrape),
+            patch(
+                "valocoach.retrieval.scrapers.patch_notes.urlopen",
+                return_value=mock_resp,
+            ),
+        ):
+            result = fetch_patch_notes("10.09")
+
+        assert result is reddit_content
+
+
+# ---------------------------------------------------------------------------
+# F3 — Provenance tags on context blocks
+# ---------------------------------------------------------------------------
+
+
+class TestProvenanceTags:
+    """F3 — every context formatter must end with a [SOURCE: ...] tag."""
+
+    def test_agent_context_has_source_tag(self):
+        from valocoach.retrieval.agents import format_agent_context
+
+        result = format_agent_context("Jett")
+        assert result is not None
+        assert result.endswith("]")
+        assert "[SOURCE: knowledge_base/agents/Jett]" in result
+
+    def test_map_context_has_source_tag(self):
+        from valocoach.retrieval.maps import format_map_context
+
+        result = format_map_context("Ascent")
+        assert result is not None
+        assert "[SOURCE: knowledge_base/maps/Ascent]" in result
+
+    def test_meta_context_has_source_tag(self):
+        from valocoach.retrieval.meta import format_meta_context
+
+        result = format_meta_context()
+        assert result is not None
+        # Patch version varies — just assert the prefix is present
+        assert "[SOURCE: knowledge_base/meta/" in result

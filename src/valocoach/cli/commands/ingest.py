@@ -96,6 +96,16 @@ def _do_seed(data_dir: Path) -> None:
         f"{counts['agents']} agents · {counts['maps']} maps · {counts['meta']} meta"
     )
 
+    # G5 — also seed the built-in lineup entries
+    try:
+        from valocoach.retrieval.lineups import ingest_seed_lineups
+
+        n_lineups = ingest_seed_lineups(data_dir)
+        if n_lineups:
+            display.success(f"Seeded {n_lineups} lineup entries (valocoach lineup ready)")
+    except Exception as exc:
+        display.console.print(f"[muted]Lineup seed skipped: {exc}[/muted]")
+
 
 def _do_url(data_dir: Path, url: str) -> None:
     from valocoach.retrieval.ingester import ingest_text
@@ -168,27 +178,36 @@ def _do_corpus(data_dir: Path, corpus_root: Path | None = None) -> None:
 
 
 def _do_youtube(data_dir: Path, youtube: str) -> None:
-    from valocoach.retrieval.ingester import ingest_text
-    from valocoach.retrieval.scrapers.youtube import fetch_transcript
+    """Route YouTube ingest through the full Phase D pipeline.
 
-    with display.console.status(f"[info]Fetching YouTube transcript: {youtube} …[/info]"):
-        content = fetch_transcript(youtube)
+    Uses ``ingest_youtube_video`` which applies:
+      - D2: deduplication check (skips already-ingested videos)
+      - D4: anchor-based relevance filter (drops off-topic chunks)
+      - G2: lineup chunk routing for chunks classified 'lineups'
+    """
+    from valocoach.core.config import load_settings
+    from valocoach.retrieval.youtube_ingest import ingest_youtube_video
 
-    if content is None:
-        display.error(f"Could not fetch transcript for {youtube}")
-        raise typer.Exit(1)
+    settings = load_settings()
 
-    try:
-        with display.console.status("[info]Embedding and indexing…[/info]"):
-            n = ingest_text(
+    with display.console.status(f"[info]Fetching + classifying YouTube transcript: {youtube} …[/info]"):
+        try:
+            n = ingest_youtube_video(
                 data_dir,
-                content.text,
-                doc_type="youtube",
-                name=content.title,
-                source=content.url,
-                extra_metadata={"fetched_at": content.fetched_at, "ttl_tier": "live"},
+                youtube,
+                settings,
+                force=False,
+                summarize=False,
             )
+        except Exception as e:
+            display.error(f"YouTube ingest failed: {e}")
+            raise typer.Exit(1) from e
+
+    if n == 0:
+        display.console.print(
+            "[muted]0 chunks ingested — video may already be in the database "
+            "(use meta-refresh --youtube to force re-ingest), or all content "
+            "was filtered as off-topic.[/muted]"
+        )
+    else:
         display.success(f"Ingested {n} chunk(s) from YouTube video.")
-    except Exception as e:
-        display.error(f"YouTube ingest failed: {e}")
-        raise typer.Exit(1) from e

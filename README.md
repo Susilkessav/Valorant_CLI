@@ -27,6 +27,8 @@ valocoach coach "we keep losing 8-12 on Ascent attack as Jett, they stack A"
 - [Command reference](#command-reference)
   - [coach](#coach)
   - [interactive](#interactive)
+  - [post-game](#post-game)
+  - [lineup](#lineup)
   - [stats](#stats)
   - [sync](#sync)
   - [profile](#profile)
@@ -226,6 +228,46 @@ Bye.
 
 ---
 
+### post-game
+
+Run a deterministic finding-based analysis of your most recent stored match and stream a focused 4-section debrief: critical pattern, round-cost translation, priority drill, next-match focus.
+
+```bash
+valocoach post-game
+```
+
+Ten analyzers run against the match — first-contact patterns, economy decisions, utility efficiency, round-timing, traded deaths, ATK/DEF side split, clutches, death-location clustering, engagement distance, plant/defuse site distribution — plus an MMR-trend check over recent ranked games. The top three findings (collapsed by root cause) are injected into the prompt as ground truth, so every claim in the debrief is tied to a number.
+
+When a `low_utility` finding fires on a util-heavy agent (Sova / Viper / KAY/O / Brimstone / Omen / Fade / Cypher / Killjoy), the debrief also pulls a relevant lineup from the local library and the LLM is told to cite it.
+
+Requires at least one synced match. Spatial analyzers (death clusters, engagement distance) degrade gracefully on matches synced before the spatial-data migration.
+
+---
+
+### lineup
+
+Search the local lineup library — hand-verified seed entries plus any YouTube transcript chunks the ingest pipeline classified as `lineups`.
+
+```bash
+valocoach lineup Sova --map Ascent --site A
+valocoach lineup Viper --map Bind --query "post-plant B"
+valocoach lineup --map Haven --site C
+```
+
+**Options:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `<agent>` | — | Positional. Filter to one agent (e.g. `Sova`, `KAY/O`). |
+| `--map`, `-m` | — | Filter to one map. |
+| `--site`, `-s` | — | Site letter: `A`, `B`, `C`, or `Mid`. |
+| `--query`, `-q` | — | Free-text similarity query. |
+| `--top`, `-n` | `5` | Maximum hits to return. |
+
+Filter values are canonical-case normalised at both write and read time, so `sova` / `Sova` / `SOVA` all match the same entries.
+
+---
+
 ### stats
 
 Show your performance dashboard built from locally synced matches.
@@ -280,6 +322,8 @@ valocoach sync
 | `--mode` | `competitive` | Game mode: `competitive`, `unrated`, etc. |
 
 **Examples:**
+
+Every sync run also sweeps expired retrieval cache rows (SQLite `meta_cache` + live ChromaDB docs) before fetching, so the cache stays bounded.
 
 ```bash
 # Standard incremental sync (stops when it hits already-stored matches)

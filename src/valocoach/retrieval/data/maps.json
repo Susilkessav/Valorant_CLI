@@ -2,6 +2,7 @@
   "maps": [
     {
       "name": "Ascent",
+      "last_verified_patch": "10.08",
       "sites": ["A", "B"],
       "callouts": {
         "A": ["A Main", "A Lobby", "A Catwalk", "A Market", "A Wine", "A Courtyard", "A Garden", "A Tree", "A Generator", "A Heaven", "A Rafters", "A Default Plant"],
@@ -13,6 +14,7 @@
     },
     {
       "name": "Bind",
+      "last_verified_patch": "10.08",
       "sites": ["A", "B"],
       "callouts": {
         "A": ["A Short", "A Long", "A Lobby", "A Lamps", "A Bath", "A Hookah", "A Heaven", "A Site", "A Showers"],
@@ -24,6 +26,7 @@
     },
     {
       "name": "Haven",
+      "last_verified_patch": "10.08",
       "sites": ["A", "B", "C"],
       "callouts": {
         "A": ["A Long", "A Short", "A Lobby", "A Corner", "A Sewer", "A Catwalk", "A Site", "A Box", "A Heaven", "A Link"],
@@ -36,6 +39,7 @@
     },
     {
       "name": "Icebox",
+      "last_verified_patch": "10.08",
       "sites": ["A", "B"],
       "callouts": {
         "A": ["A Main", "A Lobby", "A Rafters", "A Site", "A Tube", "A Kitchen", "A Conveyor", "A Green", "A Screen"],
@@ -47,6 +51,7 @@
     },
     {
       "name": "Lotus",
+      "last_verified_patch": "10.08",
       "sites": ["A", "B", "C"],
       "callouts": {
         "A": ["A Main", "A Stairs", "A Rubble", "A Mound", "A Tree", "A Site", "A Dropdown"],
@@ -59,6 +64,7 @@
     },
     {
       "name": "Pearl",
+      "last_verified_patch": "10.08",
       "sites": ["A", "B"],
       "callouts": {
         "A": ["A Main", "A Art", "A Lobby", "A Link", "A CT", "A Site", "A Default"],
@@ -70,6 +76,7 @@
     },
     {
       "name": "Split",
+      "last_verified_patch": "10.08",
       "sites": ["A", "B"],
       "callouts": {
         "A": ["A Main", "A Ramps", "A Lobby", "A Sewer", "A Heaven", "A Screens", "A Site", "A Default", "A Link"],
@@ -81,6 +88,7 @@
     },
     {
       "name": "Sunset",
+      "last_verified_patch": "10.08",
       "sites": ["A", "B"],
       "callouts": {
         "A": ["A Main", "A Elbow", "A Lobby", "A Bridge", "A Heaven", "A Site", "A Default"],
@@ -92,6 +100,7 @@
     },
     {
       "name": "Abyss",
+      "last_verified_patch": "10.08",
       "sites": ["A", "B"],
       "callouts": {
         "A": ["A Main", "A Hall", "A Ledge", "A Site", "A Default", "A Link"],
