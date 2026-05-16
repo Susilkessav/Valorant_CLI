@@ -49,7 +49,8 @@ def run_lineup(
     panel_title = " · ".join(title_parts)
 
     with display.command_frame(panel_title):
-        with display.status("Searching lineup database…"):
+        # Rich's Console.status (not display.status — that doesn't exist).
+        with display.console.status("[info]Searching lineup database…[/info]"):
             hits = search_lineups(
                 settings.data_dir,
                 search_query,
