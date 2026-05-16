@@ -333,14 +333,15 @@ def ingest_youtube_video(
     texts: list[str] = []
     ids: list[str] = []
     metadatas: list[dict] = []
+    lineup_count = 0  # track separately so the return value is the TOTAL chunks stored
 
     for chunk, category, score in kept:
         # D5: optional LLM summarisation — summary becomes the embedding target
         embed_text = summarise_chunk(settings, chunk.text) if summarize else chunk.text
 
         # G2 — lineup chunks get an additional LLM metadata extraction pass.
-        # The chunk is still stored in the LIVE collection with type=lineup
-        # rather than type=youtube so the lineup retriever can filter on it.
+        # They are stored with type=lineup (not type=youtube) so the lineup
+        # retriever can filter them by agent/map/site metadata.
         if category == "lineups":
             try:
                 from valocoach.retrieval.lineups import ingest_lineup_chunk
@@ -355,6 +356,7 @@ def ingest_youtube_video(
                     url=chunk.url,
                     settings=settings,
                 )
+                lineup_count += 1
             except Exception as exc:
                 log.warning("G2: lineup ingest failed for %s @ %ds: %s", video_id, chunk.start_seconds, exc)
             # Don't also add to the standard YouTube batch (avoid duplicate)
@@ -380,15 +382,17 @@ def ingest_youtube_video(
         )
 
     n = _upsert_batch(data_dir, texts, ids, metadatas, collection_name=LIVE_COLLECTION)
+    total = n + lineup_count
     log.info(
-        "Ingested %d YouTube chunk(s) from %r (channel=%r, force=%s, summarize=%s)",
+        "Ingested %d YouTube + %d lineup chunk(s) from %r (channel=%r, force=%s, summarize=%s)",
         n,
+        lineup_count,
         title,
         channel,
         force,
         summarize,
     )
-    return n
+    return total  # includes both youtube and lineup chunks
 
 
 __all__ = [

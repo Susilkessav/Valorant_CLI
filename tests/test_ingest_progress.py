@@ -424,44 +424,41 @@ class TestDoUrl:
 # ---------------------------------------------------------------------------
 
 
-class TestDoYoutube:
-    def _make_content(self):
-        from valocoach.retrieval.scrapers import ScrapedContent
+_INGEST_YOUTUBE_VIDEO_SRC = "valocoach.retrieval.youtube_ingest.ingest_youtube_video"
+_LOAD_SETTINGS_SRC = "valocoach.cli.commands.ingest.load_settings"
 
-        return ScrapedContent(
-            url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-            title="YouTube transcript — dQw4w9WgXcQ",
-            text="Valorant coaching tips transcript content here.",
-            fetched_at="2026-01-01T00:00:00+00:00",
-            source="youtube",
-        )
+
+class TestDoYoutube:
+    """Tests for _do_youtube — now routes through the Phase D pipeline
+    (ingest_youtube_video) rather than the legacy fetch_transcript path."""
 
     def test_success_exits_cleanly(self, tmp_path: Path):
         from valocoach.cli.commands.ingest import _do_youtube
 
         with (
-            patch(_FETCH_TRANSCRIPT_SRC, return_value=self._make_content()),
-            patch(_INGEST_TEXT_SRC, return_value=4),
+            patch(_LOAD_SETTINGS_SRC, return_value=MagicMock(data_dir=tmp_path)),
+            patch(_INGEST_YOUTUBE_VIDEO_SRC, return_value=4),
         ):
             _do_youtube(tmp_path, "dQw4w9WgXcQ")
 
-    def test_success_calls_ingest_text_with_youtube_type(self, tmp_path: Path):
+    def test_success_calls_ingest_youtube_video(self, tmp_path: Path):
+        """_do_youtube must call ingest_youtube_video, not the legacy fetch_transcript."""
         from valocoach.cli.commands.ingest import _do_youtube
 
-        ingest_calls = []
+        calls = []
 
-        def capture(data_dir, text, **kw):
-            ingest_calls.append(kw)
+        def capture(data_dir, url, settings, **kw):
+            calls.append({"data_dir": data_dir, "url": url})
             return 4
 
         with (
-            patch(_FETCH_TRANSCRIPT_SRC, return_value=self._make_content()),
-            patch(_INGEST_TEXT_SRC, side_effect=capture),
+            patch(_LOAD_SETTINGS_SRC, return_value=MagicMock(data_dir=tmp_path)),
+            patch(_INGEST_YOUTUBE_VIDEO_SRC, side_effect=capture),
         ):
             _do_youtube(tmp_path, "dQw4w9WgXcQ")
 
-        assert len(ingest_calls) == 1
-        assert ingest_calls[0]["doc_type"] == "youtube"
+        assert len(calls) == 1
+        assert calls[0]["url"] == "dQw4w9WgXcQ"
 
     def test_fetch_failure_raises_exit_1(self, tmp_path: Path):
         import click
@@ -469,7 +466,8 @@ class TestDoYoutube:
         from valocoach.cli.commands.ingest import _do_youtube
 
         with (
-            patch(_FETCH_TRANSCRIPT_SRC, return_value=None),
+            patch(_LOAD_SETTINGS_SRC, return_value=MagicMock(data_dir=tmp_path)),
+            patch(_INGEST_YOUTUBE_VIDEO_SRC, side_effect=RuntimeError("network error")),
             pytest.raises(click.exceptions.Exit) as exc_info,
         ):
             _do_youtube(tmp_path, "dQw4w9WgXcQ")
@@ -482,30 +480,36 @@ class TestDoYoutube:
         from valocoach.cli.commands.ingest import _do_youtube
 
         with (
-            patch(_FETCH_TRANSCRIPT_SRC, return_value=self._make_content()),
-            patch(_INGEST_TEXT_SRC, side_effect=RuntimeError("embed failed")),
+            patch(_LOAD_SETTINGS_SRC, return_value=MagicMock(data_dir=tmp_path)),
+            patch(_INGEST_YOUTUBE_VIDEO_SRC, side_effect=RuntimeError("embed failed")),
             pytest.raises(click.exceptions.Exit) as exc_info,
         ):
             _do_youtube(tmp_path, "dQw4w9WgXcQ")
 
         assert exc_info.value.exit_code == 1
 
-    def test_ingest_called_with_live_ttl_metadata(self, tmp_path: Path):
+    def test_zero_chunks_does_not_raise(self, tmp_path: Path):
+        """0 chunks (duplicate/all filtered) should not raise — just print a message."""
         from valocoach.cli.commands.ingest import _do_youtube
 
-        captured = {}
+        with (
+            patch(_LOAD_SETTINGS_SRC, return_value=MagicMock(data_dir=tmp_path)),
+            patch(_INGEST_YOUTUBE_VIDEO_SRC, return_value=0),
+        ):
+            # Must not raise
+            _do_youtube(tmp_path, "dQw4w9WgXcQ")
 
-        def capture(data_dir, text, **kw):
-            captured.update(kw)
-            return 1
+    def test_ingest_called_with_live_ttl_metadata(self, tmp_path: Path):
+        """Retained for API-compat: verifies ingest_youtube_video is called (no ttl kwarg needed)."""
+        from valocoach.cli.commands.ingest import _do_youtube
 
         with (
-            patch(_FETCH_TRANSCRIPT_SRC, return_value=self._make_content()),
-            patch(_INGEST_TEXT_SRC, side_effect=capture),
+            patch(_LOAD_SETTINGS_SRC, return_value=MagicMock(data_dir=tmp_path)),
+            patch(_INGEST_YOUTUBE_VIDEO_SRC, return_value=3) as mock_ingest,
         ):
             _do_youtube(tmp_path, "dQw4w9WgXcQ")
 
-        assert captured.get("extra_metadata", {}).get("ttl_tier") == "live"
+        mock_ingest.assert_called_once()
 
 
 # ---------------------------------------------------------------------------

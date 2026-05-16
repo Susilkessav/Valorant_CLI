@@ -70,13 +70,34 @@ def call_llm(
 ) -> str:
     """Non-streaming LLM call — returns the full response as a string.
 
-    Convenience wrapper around ``stream_completion`` for cases where
-    streaming is not needed (e.g. structured metadata extraction).
+    Convenience wrapper for cases where streaming is not needed (e.g. structured
+    metadata extraction).  Pass ``max_tokens`` to cap the response length — useful
+    for structured extraction calls that should never produce more than a short JSON.
 
     Returns empty string on any error.
     """
     try:
-        tokens = list(stream_completion(settings, system, user))
-        return "".join(tokens)
+        model = settings.ollama_model
+        is_ollama_model = model.startswith("ollama/")
+        if not model.startswith(("ollama/", "anthropic/", "openai/")):
+            model = f"ollama/{model}"
+            is_ollama_model = True
+
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ]
+        completion_kwargs: dict = {
+            "model": model,
+            "messages": messages,
+            "temperature": settings.llm_temperature,
+            "max_tokens": max_tokens if max_tokens is not None else settings.llm_max_tokens,
+            "stream": False,
+        }
+        if is_ollama_model:
+            completion_kwargs["api_base"] = settings.ollama_host
+
+        response = litellm.completion(**completion_kwargs)
+        return response.choices[0].message.content or ""
     except Exception:
         return ""

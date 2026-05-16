@@ -22,7 +22,7 @@ import json
 import logging
 import re
 from urllib.error import URLError
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 from valocoach.retrieval.scrapers import ScrapedContent
 from valocoach.retrieval.scrapers.web import scrape_url
@@ -104,10 +104,24 @@ def _fetch_playvalorant(major: str, minor: str) -> ScrapedContent | None:
 
 
 def _fetch_liquipedia(major: str, minor: str) -> ScrapedContent | None:
+    """Fetch from Liquipedia.
+
+    Liquipedia pages render some content server-side but rely on JavaScript for
+    full table content.  We accept the result only when at least 500 characters
+    of text were extracted — short responses indicate a JS-rendered blank page
+    that would pollute the LLM with garbage rather than helping it.
+    """
     url = _LIQUIPEDIA_URL.format(major=major, minor=minor)
     log.info("Trying fallback source 2 (liquipedia.net): %s", url)
     try:
-        return scrape_url(url, source="patch_note")
+        result = scrape_url(url, source="patch_note")
+        if result is not None and len(result.text) < 500:
+            log.info(
+                "Source 2: Liquipedia returned only %d chars — likely JS-blocked, skipping",
+                len(result.text),
+            )
+            return None
+        return result
     except Exception as exc:
         log.info("Source 2 failed: %s", exc)
         return None
@@ -119,7 +133,6 @@ def _fetch_reddit(major: str, minor: str) -> ScrapedContent | None:
     log.info("Trying fallback source 3 (reddit r/VALORANT search): %s", search_url)
     try:
         req_headers = {"User-Agent": "valocoach/1.0 (patch notes scraper)"}
-        from urllib.request import Request
         req = Request(search_url, headers=req_headers)
         with urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read().decode())

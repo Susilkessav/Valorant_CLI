@@ -514,7 +514,8 @@ class TestFetchPatchNotesFallback:
         from valocoach.retrieval.scrapers.patch_notes import fetch_patch_notes
 
         liquipedia_content = MagicMock(spec=ScrapedContent)
-        liquipedia_content.text = "Liquipedia patch summary"
+        # Must be ≥500 chars to pass the JS-blank-page check in _fetch_liquipedia
+        liquipedia_content.text = "Liquipedia patch summary. " * 25
 
         def fake_scrape(url: str, **kw) -> MagicMock | None:
             if "playvalorant.com" in url:

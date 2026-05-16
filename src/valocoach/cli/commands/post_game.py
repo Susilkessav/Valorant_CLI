@@ -151,12 +151,25 @@ def _render_findings_panel(findings: list[Finding], match) -> None:
 
 
 def _match_won(match) -> bool | None:
-    """Return True/False/None for the match result (None = unknown)."""
-    # winning_team is "Red" or "Blue"; we need to check if it matches any player's team
-    wt = match.winning_team
-    if not wt or not match.players:
-        return None
-    return bool(match.players)  # fallback — will be overridden by player check
+    """Return True/False/None for the match result displayed in the panel header.
+
+    Derives win/loss from the score columns rather than from winning_team
+    (which is a team colour, not a player outcome).  Falls back to checking
+    any player's ``won`` flag when scores are tied or unavailable.
+    """
+    red = getattr(match, "red_score", 0) or 0
+    blue = getattr(match, "blue_score", 0) or 0
+    wt = getattr(match, "winning_team", None)
+    if wt == "Red":
+        return red > blue
+    if wt == "Blue":
+        return blue > red
+    # Fallback: read won flag from any player
+    for p in getattr(match, "players", []):
+        won = getattr(p, "won", None)
+        if won is not None:
+            return won
+    return None
 
 
 def _match_won_for_player(match, puuid: str) -> bool | None:

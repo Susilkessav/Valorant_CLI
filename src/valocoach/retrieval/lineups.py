@@ -265,6 +265,10 @@ def search_lineups(
     from valocoach.retrieval.vector_store import get_collection
 
     # Build the where clause — ChromaDB requires $and for multiple conditions.
+    # Note: ChromaDB only includes documents that have the filtered field present
+    # in their metadata.  Lineup chunks whose LLM extraction returned None for
+    # agent/map/site will not appear in filtered queries — they are still
+    # reachable via unfiltered text-similarity search (omit agent/map_name/site).
     conditions: list[dict] = [{"type": {"$eq": "lineup"}}]
     if agent:
         conditions.append({"agent": {"$eq": agent}})
@@ -338,3 +342,12 @@ def format_lineup_results(hits: list[dict]) -> str:
         lines.append("")
 
     return "\n".join(lines).rstrip()
+
+
+__all__ = [
+    "extract_lineup_metadata",
+    "ingest_lineup_chunk",
+    "ingest_seed_lineups",
+    "search_lineups",
+    "format_lineup_results",
+]

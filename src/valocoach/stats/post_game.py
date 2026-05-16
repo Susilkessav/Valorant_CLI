@@ -563,12 +563,8 @@ def analyze_side_split(match: Match, puuid: str) -> list[Finding]:
     def_rounds_won = 0
     def_rounds_played = 0
 
-    atk_kills = 0
-    def_kills = 0
-    atk_deaths = 0
-    def_deaths = 0
-
     # Determine attacker team from round_players.team field (set per-round by mapper)
+    is_attack = False  # BUG-1 fix: initialise before loop to prevent UnboundLocalError
     for rnd in match.rounds:
         # Find my round_player entry to know my side this round
         rp = _round_player(rnd, puuid)
@@ -576,38 +572,29 @@ def analyze_side_split(match: Match, puuid: str) -> list[Finding]:
             continue
 
         won = _round_won(rnd, my_team)
-        r_kills = len(_my_kills_in_round(rnd, puuid))
-        r_deaths = len(_my_deaths_in_round(rnd, puuid))
 
-        # round_players.team reflects the side for that round in the mapper
-        if rp.team == my_team:
-            # We need to know attack vs defense — derive from plant events
-            # Simple heuristic: if round has bomb_planted and planter is on my team, attack
-            # Otherwise use round number (0-11 = first half, which team attacks first?)
-            # Best available: check if I'm on the side that plants
-            if rnd.bomb_planted:
-                # Planter team attacked this round
-                is_attack = (rnd.planter_puuid is not None and
-                             any(p.puuid == rnd.planter_puuid and p.team_id == my_team
-                                 for p in match.players))
-            else:
-                # No plant — use round number: rounds 0-11 are first half
-                # attacker_team is the team that plants most in first half
-                # Simplified: round < 12 → first half, ≥ 12 → sides swapped
-                is_attack = rnd.round_number < 12
+        # Derive attack/defense side from plant events or round number heuristic.
+        # The check is unconditional (not gated on rp.team == my_team) so
+        # is_attack is always assigned before use below.
+        if rnd.bomb_planted:
+            # Planter team attacked this round — check if the planter is on my team.
+            # Use `p.team` (the ORM column name) not `p.team_id` (doesn't exist).
+            is_attack = (rnd.planter_puuid is not None and
+                         any(p.puuid == rnd.planter_puuid and p.team == my_team
+                             for p in match.players))
+        else:
+            # No plant — fall back to round-number heuristic:
+            # rounds 0–11 = first half; sides swap at round 12.
+            is_attack = rnd.round_number < 12
 
         if is_attack:
             atk_rounds_played += 1
             if won:
                 atk_rounds_won += 1
-            atk_kills += r_kills
-            atk_deaths += r_deaths
         else:
             def_rounds_played += 1
             if won:
                 def_rounds_won += 1
-            def_kills += r_kills
-            def_deaths += r_deaths
 
     if atk_rounds_played < 3 or def_rounds_played < 3:
         return []
@@ -640,8 +627,6 @@ def analyze_side_split(match: Match, puuid: str) -> list[Finding]:
             "defense_win_rate": round(def_wr, 3),
             "attack_rounds": atk_rounds_played,
             "defense_rounds": def_rounds_played,
-            "attack_kills": atk_kills,
-            "defense_kills": def_kills,
             "weak_side": weak_side,
         },
         root_cause_tag="side_imbalance",
