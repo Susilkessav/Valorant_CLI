@@ -129,6 +129,10 @@ def format_player_alignment(top_agents: list[str]) -> str | None:
 
     lines = ["YOUR AGENT ALIGNMENT WITH CURRENT META:"]
     for name in top_agents:
+        # Skip empty / None entries — match-data corruption occasionally
+        # leaves NULL agent_name values that bubble up here.
+        if not name or not isinstance(name, str):
+            continue
         tier = agent_to_tier.get(name.casefold())
         if tier:
             lines.append(f"  • {name} → {tier}-tier this patch")
@@ -215,8 +219,10 @@ def format_personalised_takeaway(settings) -> str | None:
 
     # 1. Agent-pool tier alignment summary.  We include every agent the
     #    player has played — including agents released after the bundled
-    #    ``agents.json`` was last refreshed (they'll show as "new").
+    #    ``agents.json`` was last refreshed (they'll show as "new"). Drop
+    #    rows with empty/None agent names (match-data corruption).
     canonical_set = {n.casefold() for n in list_agent_names()}
+    per_agent = [a for a in per_agent if a.agent and isinstance(a.agent, str)]
     pool_top = [a for a in per_agent if a.stats.matches >= 1][:5]
     if pool_top:
         aligned: list[str] = []
