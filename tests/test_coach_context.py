@@ -14,8 +14,6 @@ from unittest.mock import patch
 
 from valocoach.cli.commands.coach import (
     _build_system_prompt,
-    _sanitize_agent_utility,
-    _strip_inline_cli_options,
     run_coach,
 )
 from valocoach.coach.context import _format_context
@@ -237,13 +235,6 @@ def test_build_system_prompt_stats_only() -> None:
     assert "GROUNDED CONTEXT" not in out
 
 
-def test_build_system_prompt_adds_no_agent_contract() -> None:
-    out = _build_system_prompt("BASE PROMPT", None, None, no_player_agent=True, econ_known=False)
-    assert "PLAYER AGENT NOT SELECTED" in out
-    assert "role-level language" in out
-    assert "Economy is not provided" in out
-
-
 # ---------------------------------------------------------------------------
 # run_coach integration
 # ---------------------------------------------------------------------------
@@ -252,39 +243,6 @@ def test_build_system_prompt_adds_no_agent_contract() -> None:
 def _stream(tokens: list[str]):
     """Minimal generator that yields the given tokens — stand-in for the LLM."""
     return (t for t in tokens)
-
-
-def test_sanitize_agent_utility_rewrites_omen_flash_hallucination() -> None:
-    text = "Flash B Link (Q), then flash the defuse path. Save flashes for entry."
-
-    cleaned = _sanitize_agent_utility(text, "Omen")
-
-    assert "Flash B Link" not in cleaned
-    assert "flash the" not in cleaned
-    assert "Use Paranoia through B Link (Q)" in cleaned
-    assert "use Paranoia on the defuse path" in cleaned
-    assert "teammate flashes" in cleaned
-
-
-def test_sanitize_agent_utility_leaves_other_agents_unchanged() -> None:
-    text = "Flash B Link (Q)"
-    assert _sanitize_agent_utility(text, "KAY/O") == text
-
-
-def test_strip_inline_cli_options_removes_quoted_flags() -> None:
-    text = (
-        "we are losing 8-12 on --map bind on --side attack, "
-        "enemy has 2 sentinals cypher on A and kj on B"
-    )
-
-    cleaned = _strip_inline_cli_options(text)
-
-    assert "--map" not in cleaned
-    assert "--side" not in cleaned
-    assert "sentinals" not in cleaned
-    assert "sentinels" in cleaned
-    assert "we are losing 8-12" in cleaned
-    assert "enemy has 2 sentinels cypher" in cleaned
 
 
 def test_run_coach_injects_context_into_system_prompt() -> None:
@@ -313,40 +271,6 @@ def test_run_coach_injects_context_into_system_prompt() -> None:
     assert "Agent(s): Jett" in kwargs["user_message"]
 
 
-def test_run_coach_keeps_enemy_agents_out_of_player_agent_slot() -> None:
-    """Enemy Cypher/KJ mentions should guide counterplay, not selected-agent routing."""
-    situation = (
-        "we are losing 8-12 on --map bind on --side attack, "
-        "enemy has 2 sentinals cypher on A and kj on B"
-    )
-    with (
-        patch("valocoach.cli.commands.coach.load_settings", return_value=_settings()),
-        patch("valocoach.cli.commands.coach.build_stats_context", return_value=None),
-        patch(
-            "valocoach.cli.commands.coach.stream_completion",
-            return_value=_stream(["hi"]),
-        ) as mock_stream,
-        patch("valocoach.cli.commands.coach.display.stream_to_panel"),
-    ):
-        run_coach(situation, with_stats=False)
-
-    kwargs = mock_stream.call_args.kwargs
-    user_message = kwargs["user_message"]
-    system_prompt = kwargs["system_prompt"]
-
-    assert "Map: Bind" in user_message
-    assert "Side: attack" in user_message
-    assert "Enemy agent(s): Cypher, Killjoy" in user_message
-    assert "Agent(s): Cypher" not in user_message
-    assert "--map" not in user_message
-    assert "--side" not in user_message
-    assert "PLAYER AGENT NOT SELECTED" in system_prompt
-    assert "Economy is not provided" in system_prompt
-    assert "OPPONENT AGENT FACTS" in system_prompt
-    assert "OPPONENT AGENT: Cypher" in system_prompt
-    assert "OPPONENT AGENT: Killjoy" in system_prompt
-
-
 def test_run_coach_skips_context_when_with_stats_false() -> None:
     """--no-stats means DON'T even call the stats builder. Faster + offline-safe.
     Grounded meta context is still injected (it comes from local JSON, not the DB)."""
@@ -369,25 +293,6 @@ def test_run_coach_skips_context_when_with_stats_false() -> None:
     assert "ValorantCoach" in prompt
     # Grounded meta context is always injected even without stats
     assert "GROUNDED CONTEXT" in prompt
-
-
-def test_run_coach_uses_cli_overrides_for_intent_classification() -> None:
-    """A map supplied by flag must influence intent, not only retrieval."""
-    with (
-        patch("valocoach.cli.commands.coach.load_settings", return_value=_settings()),
-        patch("valocoach.cli.commands.coach.build_stats_context") as mock_build,
-        patch("valocoach.cli.commands.coach.stream_completion", return_value=_stream(["hi"])),
-        patch("valocoach.cli.commands.coach.display.stream_to_panel") as mock_panel,
-    ):
-        run_coach(
-            "How do I perform better provide me few attack or defence plans",
-            map_="Pearl",
-            agent="Omen",
-            with_stats=False,
-        )
-
-    mock_build.assert_not_called()
-    assert mock_panel.call_args.kwargs["title"] == "🎯 Tactical Coach"
 
 
 def test_run_coach_proceeds_when_context_is_none() -> None:

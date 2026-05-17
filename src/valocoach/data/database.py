@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.pool import NullPool
 
 
 class Base(DeclarativeBase):
@@ -23,12 +24,18 @@ _SessionLocal: async_sessionmaker[AsyncSession] | None = None
 
 
 def init_engine(db_path: Path) -> AsyncEngine:
-    """Initialise the async SQLite engine. Call once at startup."""
+    """Initialise the async SQLite engine. Call once at startup.
+
+    Uses ``NullPool`` so each ``asyncio.run()`` boundary doesn't leak
+    aiosqlite worker threads bound to a now-closed event loop — which would
+    otherwise spam ``RuntimeError: Event loop is closed`` between turns in
+    interactive sessions.
+    """
     global _engine, _SessionLocal
 
     db_path.parent.mkdir(parents=True, exist_ok=True)
     url = f"sqlite+aiosqlite:///{db_path}"
-    _engine = create_async_engine(url, echo=False, future=True)
+    _engine = create_async_engine(url, echo=False, future=True, poolclass=NullPool)
 
     # Enable WAL + foreign keys on every connection
     @event.listens_for(_engine.sync_engine, "connect")

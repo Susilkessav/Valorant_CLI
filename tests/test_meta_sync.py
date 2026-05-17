@@ -229,7 +229,11 @@ class TestRunMetaSync:
             patch("valocoach.retrieval.scrapers.meta_stats.scrape_url", return_value=notes),
             patch("valocoach.retrieval.cache.store_cached", AsyncMock()),
             patch("valocoach.retrieval.ingester.ingest_text", return_value=0),
-            patch("valocoach.llm.provider.stream_completion", return_value=iter(meta_json)),
+            patch("valocoach.retrieval.patch_diff.extract_patch_changes"),
+            patch(
+                "valocoach.llm.provider.stream_completion",
+                side_effect=lambda *a, **k: iter(meta_json),
+            ),
             patch("builtins.open", self._mock_open(json.dumps(_VALID_NEW_META))),
             patch("valocoach.retrieval.ingester.ingest_knowledge_base", return_value={"total": 5}),
         ):
@@ -360,7 +364,11 @@ class TestRunMetaSync:
             patch("valocoach.retrieval.patch_tracker.check_patch_update", check_mock),
             patch("valocoach.retrieval.scrapers.patch_notes.scrape_url", return_value=notes),
             patch("valocoach.retrieval.scrapers.meta_stats.scrape_url", return_value=None),
-            patch("valocoach.llm.provider.stream_completion", return_value=iter(meta_json)),
+            patch("valocoach.retrieval.patch_diff.extract_patch_changes"),
+            patch(
+                "valocoach.llm.provider.stream_completion",
+                side_effect=lambda *a, **k: iter(meta_json),
+            ),
             patch("builtins.open", self._mock_open(json.dumps(_VALID_NEW_META))),
             patch("valocoach.retrieval.ingester.ingest_knowledge_base", ingest_mock),
         ):
@@ -397,31 +405,23 @@ class TestRunMetaSync:
     async def test_youtube_videos_ingest(self):
         """YouTube video URLs/IDs are processed and chunk count is recorded."""
         from valocoach.retrieval.meta_sync import run_meta_sync
-        from valocoach.retrieval.scrapers import ScrapedContent
 
         settings = _make_settings()
         check_mock = AsyncMock(return_value=("10.09", False))  # no new patch — stop at youtube step
 
-        transcript = MagicMock(spec=ScrapedContent)
-        transcript.text = "Valorant coaching content " * 50
-        transcript.title = "Pro Tips Video"
-        transcript.url = "https://youtube.com/watch?v=abc123"
+        # Patch the full ingest helper — meta_sync just sums its return value.
+        ingest_mock = MagicMock(return_value=7)
 
-        ingest_text_mock = MagicMock(return_value=7)
-
-        # force=True to pass the early-exit check, but mock scrape to give empty text
-        # so we reach the youtube step without hitting LLM
         with (
             patch("valocoach.retrieval.patch_tracker.check_patch_update", check_mock),
             patch("valocoach.retrieval.scrapers.patch_notes.scrape_url", return_value=None),
             patch("valocoach.retrieval.scrapers.meta_stats.scrape_url", return_value=None),
-            patch("valocoach.retrieval.scrapers.youtube.fetch_transcript", return_value=transcript),
-            patch("valocoach.retrieval.ingester.ingest_text", ingest_text_mock),
+            patch("valocoach.retrieval.youtube_ingest.ingest_youtube_video", ingest_mock),
         ):
             result = await run_meta_sync(
                 settings,
                 force=True,
-                youtube_videos=["https://youtube.com/watch?v=abc123"],
+                youtube_videos=["https://youtube.com/watch?v=dQw4w9WgXcQ"],
             )
 
         assert result.youtube_chunks_ingested == 7
@@ -435,9 +435,10 @@ class TestRunMetaSync:
 
         with (
             patch("valocoach.retrieval.patch_tracker.check_patch_update", check_mock),
-            # patch_notes.scrape_url raises so fetch_patch_notes raises
+            # fetch_patch_notes itself raises (scrape_url errors are otherwise
+            # swallowed internally by the multi-source fetcher).
             patch(
-                "valocoach.retrieval.scrapers.patch_notes.scrape_url",
+                "valocoach.retrieval.scrapers.patch_notes.fetch_patch_notes",
                 side_effect=RuntimeError("connection refused"),
             ),
             patch("valocoach.retrieval.scrapers.meta_stats.scrape_url", return_value=None),
@@ -494,30 +495,23 @@ class TestRunMetaSync:
     async def test_youtube_ingest_exception_recorded(self):
         """Exception during transcript ingest is appended to errors."""
         from valocoach.retrieval.meta_sync import run_meta_sync
-        from valocoach.retrieval.scrapers import ScrapedContent
 
         settings = _make_settings()
         check_mock = AsyncMock(return_value=("10.09", True))
-
-        transcript = MagicMock(spec=ScrapedContent)
-        transcript.text = "long transcript " * 30
-        transcript.title = "Video"
-        transcript.url = "https://youtube.com/watch?v=abc"
 
         with (
             patch("valocoach.retrieval.patch_tracker.check_patch_update", check_mock),
             patch("valocoach.retrieval.scrapers.patch_notes.scrape_url", return_value=None),
             patch("valocoach.retrieval.scrapers.meta_stats.scrape_url", return_value=None),
-            patch("valocoach.retrieval.scrapers.youtube.fetch_transcript", return_value=transcript),
             patch(
-                "valocoach.retrieval.ingester.ingest_text",
+                "valocoach.retrieval.youtube_ingest.ingest_youtube_video",
                 side_effect=RuntimeError("chroma error"),
             ),
         ):
             result = await run_meta_sync(
                 settings,
                 force=True,
-                youtube_videos=["https://youtube.com/watch?v=abc"],
+                youtube_videos=["https://youtube.com/watch?v=dQw4w9WgXcQ"],
             )
 
         assert any("YouTube ingest error" in e for e in result.errors)
@@ -555,7 +549,11 @@ class TestRunMetaSync:
             patch("valocoach.retrieval.patch_tracker.check_patch_update", check_mock),
             patch("valocoach.retrieval.scrapers.patch_notes.scrape_url", return_value=notes),
             patch("valocoach.retrieval.scrapers.meta_stats.scrape_url", return_value=None),
-            patch("valocoach.llm.provider.stream_completion", return_value=iter(meta_json)),
+            patch("valocoach.retrieval.patch_diff.extract_patch_changes"),
+            patch(
+                "valocoach.llm.provider.stream_completion",
+                side_effect=lambda *a, **k: iter(meta_json),
+            ),
             patch("builtins.open", self._mock_open(json.dumps(_VALID_NEW_META))),
             patch(
                 "valocoach.retrieval.ingester.ingest_knowledge_base",

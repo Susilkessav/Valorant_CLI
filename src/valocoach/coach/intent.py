@@ -78,7 +78,13 @@ _STAT_KW = re.compile(
     r"(?:my\s+stats?|my\s+kd|my\s+kda|my\s+hs|headshot\s+%|my\s+(?:win\s+)?rate"
     r"|how\s+am\s+i\s+doing|my\s+performance|my\s+average|my\s+rank"
     r"|compare\s+(?:my|me)|am\s+i\s+improving|my\s+form"
-    r"|my\s+recent\s+matches?|my\s+history)"
+    r"|my\s+recent\s+matches?|my\s+history"
+    # First-person agent/map performance — "which agent do I play better"
+    r"|(?:which|what)\s+agent\s+(?:do\s+|should\s+)?i\s+play\s+(?:best|better|well|most|the\s+most)"
+    r"|(?:which|what)\s+map\s+(?:do\s+|should\s+)?i\s+play\s+(?:best|better|well|most|the\s+most)"
+    r"|my\s+best\s+(?:agent|map|role)"
+    r"|i\s+play\s+better\s+(?:on|with|as)"
+    r"|am\s+i\s+better\s+(?:on|with|as))"
     r"(?!\w)",
     re.IGNORECASE,
 )
