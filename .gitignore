@@ -28,3 +28,7 @@ validate_api_output.txt
 
 # Leaked MagicMock file artifacts from asyncio.run() in unit tests
 "<MagicMock*"
+
+# macOS Finder metadata
+.DS_Store
+**/.DS_Store
