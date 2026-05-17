@@ -158,6 +158,66 @@ def test_format_hallucination() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Real-world regression: a frozen qwen3:14b response (2026-05-17)
+# ---------------------------------------------------------------------------
+#
+# Captured from a `valocoach coach "what's the current meta"` run during the
+# session that produced the deterministic-meta refactor. This was the exact
+# hallucination pattern that motivated the sanitizer: fabricated "Riftwalk"
+# / "Venomous Bite" / "Warden" ultimates and weapon names treated as
+# abilities (e.g. "Fade's Ghost"). The sanitizer's job is to surface enough
+# of these that the user knows to verify.
+
+_QWEN3_HALLUCINATED_PARAGRAPH = """\
+Current Meta (Patch 10.08) & Your Context
+
+S-Tier Agents:
+
+1 Omen (Controller)
+   - Key Abilities: Ghost (stealth), Smoke (area control), Flash (disables)
+   - Maps: Split, Ascent, Bind.
+2 Viper (Controller)
+   - Key Abilities: Nerve Gas (slow + damage), Smoke (vision control).
+3 Killjoy (Sentinel)
+   - Key Abilities: Disruptor (area denial), Smoke (vision control).
+4 Jett (Duelist)
+   - Key Abilities: Dash (positioning), Blitz (burst damage), Smoke (control).
+
+Use Fade's Ghost or Jett's Dash to reposition and avoid deaths.
+"""
+
+
+def test_real_qwen3_hallucination_catches_multiple_categories() -> None:
+    """The sanitizer must flag a substantial portion of a real
+    qwen3:14b hallucinated response across all four categories."""
+    warnings = validate_ability_claims(_QWEN3_HALLUCINATED_PARAGRAPH)
+
+    # We don't pin the exact count (set heuristics evolve) but the sanitizer
+    # must catch at least one of each category that's present in the fixture.
+    categories = {w.category for w in warnings}
+    assert "weapon" in categories, "Ghost as ability for Omen/Fade should flag as weapon"
+    assert "generic" in categories, "Smoke/Flash/Dash/Blitz should flag as generic"
+    assert "hallucination" in categories, "Nerve Gas / Disruptor should flag as hallucination"
+
+    # Specific high-stakes claims that we explicitly want surfaced:
+    flagged_claims = {w.claimed_ability.lower() for w in warnings}
+    assert "ghost" in flagged_claims
+    assert "smoke" in flagged_claims
+    assert "nerve gas" in flagged_claims
+    assert "disruptor" in flagged_claims
+
+
+def test_real_qwen3_hallucination_does_not_flood() -> None:
+    """A response with ~10 hallucinations should produce a manageable number
+    of warnings (not 50+).  Dedup must work."""
+    warnings = validate_ability_claims(_QWEN3_HALLUCINATED_PARAGRAPH)
+    assert 5 <= len(warnings) <= 25, (
+        f"Sanitizer returned {len(warnings)} warnings for a 10-claim fixture; "
+        "either dedup is broken or detection is too aggressive."
+    )
+
+
+# ---------------------------------------------------------------------------
 # Section-scoped scan — catches "Key Abilities: <fake>, <fake>" bullets
 # ---------------------------------------------------------------------------
 
