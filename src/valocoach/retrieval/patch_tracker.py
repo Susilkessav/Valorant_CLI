@@ -33,6 +33,12 @@ def _extract_patch_number(data: dict) -> str:
 
     Tries the X.YY-yielding fields in priority order; returns the raw
     "version" field (or "unknown") if none of them parse.
+
+    Regional variants (e.g. Korean/JP "10.08-kr", "10.08.0-rc") match the
+    leading numeric portion and intentionally drop any suffix — downstream
+    consumers (patch-notes URL builder, meta_sync) only need the X.YY
+    canonical form, and stripping the regional tag lets us share scraped
+    notes across regions.
     """
     for key in ("riotClientVersion", "build_ver", "branch"):
         v = data.get(key)

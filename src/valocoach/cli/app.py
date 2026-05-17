@@ -386,7 +386,7 @@ def meta_refresh(
         force=force,
         dry_run=dry_run,
         install_cron=install_cron,
-        youtube=list(youtube) or None,
+        youtube=youtube or None,
     )
 
 
