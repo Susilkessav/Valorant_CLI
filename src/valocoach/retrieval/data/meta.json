@@ -225,6 +225,66 @@
       "win_rate": "~49%",
       "reason": "ZERO/point suppression is strongest on utility-heavy defenders (Killjoy, Cypher). Underused: R-click FLASH is the fastest pop flash available."
     },
+    "Astra": {
+      "tier": "A",
+      "pick_rate": "~12%",
+      "win_rate": "~50%",
+      "reason": "Global control kit makes her exceptional on Lotus, Bind, Haven where map-wide presence matters. Cosmic Divide can deny entire site retakes. High skill ceiling — falls off in solo queue."
+    },
+    "Clove": {
+      "tier": "B",
+      "pick_rate": "~15%",
+      "win_rate": "~49%",
+      "reason": "Self-heal Pick-Me-Up enables aggressive solo-flanks no other controller can attempt. Not Dead Yet is the only post-death ability in the game. Smoke kit is weaker than Omen/Viper for raw map control."
+    },
+    "Skye": {
+      "tier": "B",
+      "pick_rate": "~12%",
+      "win_rate": "~50%",
+      "reason": "The most versatile initiator: flash + recon + heal in one kit. Guiding Light dog flash bounces into uncleared corners. Slightly behind Sova/Fade in raw information density but stronger team utility."
+    },
+    "Gekko": {
+      "tier": "B",
+      "pick_rate": "~12%",
+      "win_rate": "~50%",
+      "reason": "Only initiator whose utility is recoverable (Wingman, Dizzy). Strong on attack-sided maps where repeat-flash matters. Mosh Pit is the most reliable area-denial post-plant for non-controllers."
+    },
+    "Harbor": {
+      "tier": "C",
+      "pick_rate": "~6%",
+      "win_rate": "~48%",
+      "reason": "Walls block vision AND bullets, which is unique. Lacks the pressure-smoke utility that defines Omen/Viper/Brimstone in the current meta. Niche pick on Pearl and Lotus."
+    },
+    "Neon": {
+      "tier": "C",
+      "pick_rate": "~6%",
+      "win_rate": "~47%",
+      "reason": "Highest map-speed of any agent, but Fast Lane is vision-only (no bullet block) and her kit lacks an escape. Updated in mid-2025 with Overdrive nerfs — pick rate has fallen since."
+    },
+    "Yoru": {
+      "tier": "C",
+      "pick_rate": "~7%",
+      "win_rate": "~48%",
+      "reason": "Highest skill-expression duelist in the game. Strong in coordinated five-stacks via Dimensional Drift flanks. Weak in pug play where teammates don't read the Fakeout."
+    },
+    "Phoenix": {
+      "tier": "C",
+      "pick_rate": "~5%",
+      "win_rate": "~46%",
+      "reason": "Self-sustain (Blaze, Hot Hands) and a resurrection ult are unique, but Jett and Reyna outscale at all ELOs. Strong in scrappy pistol-round play, weaker in structured attacks."
+    },
+    "Deadlock": {
+      "tier": "C",
+      "pick_rate": "~5%",
+      "win_rate": "~47%",
+      "reason": "GravNet is the only AOE root on a sentinel, but the rest of the kit doesn't scale into retakes. Annihilation ult is reliably broken by a single barrier or wall."
+    },
+    "Vyse": {
+      "tier": "C",
+      "pick_rate": "~4%",
+      "win_rate": "~47%",
+      "reason": "Newest sentinel — Steel Garden + Arc Rose combo can lock down a full retake but requires extensive setup. Underexplored at pro level; expect tier shift after the next major patch."
+    },
     "Miks": {
       "tier": "C",
       "pick_rate": "—",
