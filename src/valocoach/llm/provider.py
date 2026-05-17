@@ -18,6 +18,8 @@ def stream_completion(
     system_prompt: str,
     user_message: str,
     conversation_history: list[dict[str, str]] | None = None,
+    stop: list[str] | None = None,
+    max_tokens: int | None = None,
 ) -> Iterator[str]:
     """Yield content tokens from the LLM as they stream in.
 
@@ -50,11 +52,13 @@ def stream_completion(
         "model": model,
         "messages": messages,
         "temperature": settings.llm_temperature,
-        "max_tokens": settings.llm_max_tokens,
+        "max_tokens": max_tokens if max_tokens is not None else settings.llm_max_tokens,
         "stream": True,
     }
     if is_ollama_model:
         completion_kwargs["api_base"] = settings.ollama_host
+    if stop:
+        completion_kwargs["stop"] = stop
 
     response = litellm.completion(**completion_kwargs)
 

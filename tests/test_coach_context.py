@@ -947,7 +947,7 @@ def _run_coach_meta(situation: str = "what is the current meta tier list?", **kw
         ),
         patch("valocoach.cli.commands.coach.display.console") as mock_con,
     ):
-        mock_con.print = lambda msg, **_kw: console_prints.append(str(msg))
+        mock_con.print = lambda msg="", **_kw: console_prints.append(str(msg))
         response = run_coach(situation, with_stats=False, **kwargs)
 
     return console_prints, response
@@ -1035,8 +1035,11 @@ def test_staleness_warning_non_fatal_on_exception() -> None:
     ):
         result = run_coach("what's the current meta?", with_stats=False)
 
-    # Coach must still return a result despite the staleness error
-    assert result == "ok"
+    # Coach must still complete despite the staleness error.  Meta intent
+    # short-circuits the LLM (deterministic tier list + takeaway), so the
+    # return is None — what we're verifying is that the staleness exception
+    # didn't bubble out.
+    assert result is None
 
 
 def test_staleness_warning_shows_days_since_last_check() -> None:

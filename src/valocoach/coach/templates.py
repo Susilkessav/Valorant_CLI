@@ -86,6 +86,36 @@ agent's kit" is always better than a confident wrong answer."""
 # Templates
 # ---------------------------------------------------------------------------
 
+# Specialised prompt for the meta-intent code path.  The agent listing + role
+# labels + ability rosters are printed deterministically before the LLM is
+# called, so this template only asks for a short personalised takeaway and
+# explicitly forbids any agent/ability/tier recitation.
+META_TAKEAWAY_PROMPT: str = f"""{_IDENTITY}
+
+The current meta tier list, every agent's role label, every agent's full
+ability roster, and the player's tier alignment have ALREADY been printed
+to the user in a deterministic panel above yours.  You do NOT need to
+re-state any of that.
+
+Your job is ONLY to write a 2–3 sentence personalised takeaway based on:
+  - the player's PLAYER CONTEXT (stats, top agents, top maps), and
+  - the YOUR AGENT ALIGNMENT block injected into PLAYER CONTEXT.
+
+ABSOLUTE PROHIBITIONS (highest-priority constraints — violating any of them
+is a worse outcome than producing no output at all):
+- Do NOT list agents, tiers, or abilities — those were already shown.
+- Do NOT name ANY agent's abilities, ultimates, kits, or signatures. Not
+  even the real ones.  Refer to agents by name only.
+- Do NOT speculate on the meta beyond what PLAYER CONTEXT and YOUR AGENT
+  ALIGNMENT explicitly stated.
+- Do NOT use generic ability nouns ("smokes", "flashes", "molly", "wall").
+- Do NOT invent stats not present in PLAYER CONTEXT.
+
+Output format:
+  ONE short paragraph, ≤ 60 words.  No headers, no bullets, no emojis.
+  Lead with what the player should do next — concrete and personal.""".strip()
+
+
 PROMPT_TEMPLATES: dict[IntentType, str] = {
     # ------------------------------------------------------------------
     "clutch": f"""{_IDENTITY}
@@ -235,6 +265,16 @@ maps — use them to make the practical takeaway personally relevant.
   A-Tier rows) inside GROUNDED CONTEXT. Do NOT name an agent who isn't in those
   rows. Do NOT name an ability for an agent unless that agent has an AGENT block
   in GROUNDED CONTEXT.
+- The META tier-list block lists each agent with their role in parentheses
+  (e.g. "Breach (Initiator)"). When you write that agent's row in your output,
+  use that EXACT role label verbatim. Never re-classify an agent's role.
+- The META tier-list block lists each agent under their EXACT tier (S/A/B/C).
+  When you mention an agent's tier in prose, it must match that row. Do NOT
+  promote or demote an agent.
+- Avoid generic ability nouns ("smokes", "wall", "flash", "molly") even when
+  describing why an agent is strong. Either name a specific ability from that
+  agent's AGENT block or describe the strategic effect without naming kit
+  ("strong vision denial", "high site-take pressure", "long-range info").
 - If you only have an agent's name (no AGENT block, no role row), say WHY they
   are strong using the patch-note text in GROUNDED CONTEXT, NOT invented kit details.
 - If GROUNDED CONTEXT has no patch-change rows and no AGENT block for a tier-list

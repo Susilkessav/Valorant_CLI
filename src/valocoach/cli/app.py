@@ -303,6 +303,45 @@ def patch(
     run_patch(check=check)
 
 
+@app.command("agents-refresh", rich_help_panel="Game Info")
+def agents_refresh(
+    auto_stub_meta: bool = typer.Option(
+        False,
+        "--auto-stub-meta",
+        help="Append C-tier placeholders to meta.json for agents that exist in "
+        "agents.json but are missing from the tier list.",
+    ),
+    extract_kits: bool = typer.Option(
+        False,
+        "--extract-kits",
+        help="Deterministically parse new agents' kit data from Liquipedia's "
+        "wikitext templates and write to agents.json. No LLM is used.",
+    ),
+) -> None:
+    """Sync the agent knowledge base with Riot's current roster.
+
+    Compares ``agents.json`` against the Liquipedia agents portal. New
+    agents can be auto-imported by deterministically parsing Liquipedia's
+    ``{{Infobox agent}}`` and ``{{AbilityCard}}`` wikitext templates — no
+    LLM involved, so no hallucination risk. ``meta.json`` tier-list gaps
+    can be auto-stubbed as clearly-labelled C-tier placeholders.
+
+    \b
+    Examples:
+      valocoach agents-refresh                                  # discovery only
+      valocoach agents-refresh --extract-kits                   # auto-import new agents
+      valocoach agents-refresh --auto-stub-meta                 # patch tier-list gaps
+      valocoach agents-refresh --extract-kits --auto-stub-meta  # both in one pass
+
+    If Liquipedia's templates are malformed (or a brand-new agent isn't
+    in their category index yet), the command falls back to the printed
+    JSON skeleton + wiki URL for manual entry.
+    """
+    from valocoach.cli.commands.agents_refresh import run_agents_refresh
+
+    run_agents_refresh(auto_stub_meta=auto_stub_meta, extract_kits=extract_kits)
+
+
 @app.command("meta-refresh", rich_help_panel="Game Info")
 def meta_refresh(
     force: bool = typer.Option(

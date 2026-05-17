@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 
 from valocoach.cli import display
 
@@ -16,6 +17,80 @@ from valocoach.retrieval import format_agent_context, format_map_context
 
 _META_SENSITIVE_INTENTS: frozenset[str] = frozenset({"meta", "agent_info"})
 _PATCH_STALE_THRESHOLD_DAYS: int = 21
+
+
+def _maybe_warn_stale_meta(settings) -> None:
+    """Print a one-liner if the cached patch is older than the threshold.
+
+    Used by both the LLM path (post-stream warning) and the deterministic
+    meta path (printed before the early return) so the warning fires on
+    every meta-sensitive answer regardless of which code path produced it.
+    """
+    try:
+        from valocoach.retrieval.patch_tracker import get_patch_staleness_days
+
+        stale_days = get_patch_staleness_days(settings.data_dir)
+        if stale_days is None or stale_days > _PATCH_STALE_THRESHOLD_DAYS:
+            age_str = (
+                "never checked" if stale_days is None else f"{stale_days:.0f}d since last check"
+            )
+            display.console.print(
+                f"[muted]⚠ Meta info may be outdated ({age_str}) — "
+                "run [info]valocoach patch --check[/info] to refresh.[/muted]"
+            )
+    except Exception:
+        log.debug("patch staleness check failed", exc_info=True)
+
+# Team-roster questions ("who was in my team", "list teammates") — the schema
+# stores teammate puuids but not their display names, so the LLM has no source
+# of truth.  Detecting these queries lets us inject an explicit data-availability
+# contract so the model stops conflating "your top-played agents" with
+# "teammates in recent matches".
+_TEAM_ROSTER_KW = re.compile(
+    r"(?<!\w)"
+    r"(?:who(?:\s+all)?\s+(?:was|were|are|is)\s+(?:in\s+)?my\s+team"
+    r"|my\s+teammates?(?:'?\s+names?)?"
+    r"|list\s+(?:my\s+)?teammates?"
+    r"|teammate\s+names?"
+    r"|players?\s+in\s+my\s+team"
+    r"|team\s+roster)"
+    r"(?!\w)",
+    re.IGNORECASE,
+)
+
+_TEAM_ROSTER_CONTRACT = (
+    "DATA AVAILABILITY — TEAM ROSTER (hard contract, overrides any inference):\n"
+    "1. The match database does NOT track teammate display names — only puuids "
+    "and the agent each teammate played.\n"
+    "2. Your FIRST sentence MUST be exactly: \"I don't have teammate names "
+    "stored — only the agents they played in each match.\"\n"
+    "3. You MAY offer to list the agent composition of recent matches if such "
+    "data is provided in the user message; otherwise say it isn't available "
+    "in the prompt this turn.\n"
+    "4. DO NOT list the user's own top-played agents (from PLAYER CONTEXT) "
+    "as their teammates. Those are agents the USER plays.\n"
+    "5. DO NOT invent enemy agents, names, or compositions."
+)
+
+# Post-game LLM occasionally echoes chat-template scaffolding ("User:",
+# "Response:", "Final Answer\n") inside the panel.  These stops cut the stream
+# before that garbage appears.  Only applied to post_game where the section
+# template is rigid enough that no legitimate output starts with those tokens.
+_POST_GAME_STOP_TOKENS: list[str] = [
+    "\nUser:",
+    "\n\nUser:",
+    "\nResponse:",
+    "\n\nResponse:",
+    "\nFinal Answer",
+    "\n\nFinal Answer",
+]
+
+# Per-intent output caps.  Most intents inherit ``settings.llm_max_tokens``.
+# We don't cap meta/agent_info because qwen3:8b emits ~hundreds of internal
+# "thinking" tokens before any visible output, so an aggressive cap silently
+# eats the entire answer.  The sanitizer audits hallucinations after the fact
+# regardless of length, so output-length isn't worth fighting at this layer.
+_INTENT_MAX_TOKENS: dict[str, int] = {}
 
 
 def _build_system_prompt(
@@ -148,6 +223,45 @@ def run_coach(
     system_prompt_base = PROMPT_TEMPLATES[intent]
     panel_title = PANEL_TITLES[intent]
 
+    # Meta intent: print BOTH the deterministic tier list AND a deterministic
+    # personalised takeaway, then return without calling the LLM at all.
+    # We tried prompting the LLM to only write a short takeaway, but even
+    # qwen3:14b ignores the prohibitions and re-emits a full breakdown with
+    # fabricated abilities.  At this model scale, the only reliable answer
+    # is no model — every word in the meta panel now comes from agents.json,
+    # meta.json, and the player's stats DB.
+    if intent == "meta":
+        from valocoach.coach.meta_response import (
+            format_full_meta_block,
+            format_personalised_takeaway,
+        )
+
+        top_played: list[str] = []
+        if with_stats:
+            try:
+                from valocoach.coach import get_top_played_agents
+
+                top_played = get_top_played_agents(settings)
+            except Exception:
+                log.debug("top-played agents lookup failed (meta intent)", exc_info=True)
+
+        with display.command_frame("Meta — Current Tier List"):
+            display.console.print(format_full_meta_block(top_played))
+
+        if with_stats:
+            takeaway = format_personalised_takeaway(settings)
+            if takeaway:
+                with display.command_frame("Personalised Takeaway"):
+                    display.console.print(takeaway)
+            else:
+                display.info(
+                    "Personalised takeaway skipped — no synced match history. "
+                    "Run [info]valocoach sync[/info] first."
+                )
+
+        _maybe_warn_stale_meta(settings)
+        return None  # Skip the LLM call entirely.
+
     # Auto-inject AGENT blocks for the player's most-played agents.  Without
     # this, agent-less questions like "how do I rank up?" produce a
     # context-free prompt and small models hallucinate abilities for
@@ -251,7 +365,13 @@ def run_coach(
         system_prompt_base, grounded_context, stats_context, notes_context
     )
 
+    if _TEAM_ROSTER_KW.search(situation):
+        system_prompt = f"{system_prompt}\n\n---\n\n{_TEAM_ROSTER_CONTRACT}"
+
     display.info(f"Using model: [heading]{settings.ollama_model}[/heading] [muted][{intent}][/muted]")
+
+    stop_tokens = _POST_GAME_STOP_TOKENS if intent == "post_game" else None
+    max_tokens_override = _INTENT_MAX_TOKENS.get(intent)
 
     try:
         token_stream = stream_completion(
@@ -259,6 +379,8 @@ def run_coach(
             system_prompt=system_prompt,
             user_message=user_msg,
             conversation_history=conversation_history,
+            stop=stop_tokens,
+            max_tokens=max_tokens_override,
         )
         response_text = display.stream_to_panel(
             token_stream,
@@ -272,22 +394,48 @@ def run_coach(
         )
         raise
 
-    if intent in _META_SENSITIVE_INTENTS:
+    if response_text:
         try:
-            from valocoach.retrieval.patch_tracker import get_patch_staleness_days
+            from valocoach.coach.sanitizer import validate_ability_claims
 
-            stale_days = get_patch_staleness_days(settings.data_dir)
-            if stale_days is None or stale_days > _PATCH_STALE_THRESHOLD_DAYS:
-                age_str = (
-                    "never checked"
-                    if stale_days is None
-                    else f"{stale_days:.0f}d since last check"
+            ability_warnings = validate_ability_claims(response_text)
+            if ability_warnings:
+                # Bucket by category so the user sees the failure mode at a glance.
+                by_cat: dict[str, list] = {}
+                for w in ability_warnings:
+                    by_cat.setdefault(w.category, []).append(w)
+
+                category_labels = {
+                    "hallucination": "fabricated abilities (don't exist in Valorant)",
+                    "cross_attribution": "wrong-agent attributions",
+                    "weapon": "weapons mis-cast as abilities",
+                    "generic": "generic descriptors used as ability names",
+                }
+
+                lines = [
+                    "",
+                    f"[warning]⚠ Ability fact-check — {len(ability_warnings)} "
+                    "claim(s) don't match the canonical agent kit:[/warning]",
+                ]
+                for cat in ("hallucination", "cross_attribution", "weapon", "generic"):
+                    items = by_cat.get(cat, [])
+                    if not items:
+                        continue
+                    label = category_labels.get(cat, cat)
+                    lines.append(f"  [heading]{label}:[/heading]")
+                    for w in items[:8]:
+                        lines.append(f"    • {w.format()}")
+                    if len(items) > 8:
+                        lines.append(f"    …and {len(items) - 8} more.")
+                lines.append(
+                    "  [muted]This is a model limitation, not a bug — "
+                    "always verify ability names / costs against in-game tooltips.[/muted]"
                 )
-                display.console.print(
-                    f"[muted]⚠ Meta info may be outdated ({age_str}) — "
-                    "run [info]valocoach patch --check[/info] to refresh.[/muted]"
-                )
+                display.console.print("\n".join(lines))
         except Exception:
-            log.debug("patch staleness check failed", exc_info=True)
+            log.debug("ability claim sanitizer failed", exc_info=True)
+
+    if intent in _META_SENSITIVE_INTENTS:
+        _maybe_warn_stale_meta(settings)
 
     return response_text or None

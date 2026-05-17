@@ -38,6 +38,33 @@ def get_agent(name: str) -> dict | None:
     return None
 
 
+def format_ability_roster(names: list[str] | None = None) -> str:
+    """Return a compact, scan-friendly roster of agents → ability names.
+
+    Each line is ``<agent> (<role>): <Q>, <W>, <E>, <X>`` so the LLM can
+    cross-check ability attributions at a glance. Used to combat
+    cross-attribution hallucinations (e.g. "Fade's blink") that survive
+    full AGENT-block injection because small models skim long context.
+
+    Args:
+        names: Restrict to these agents (case-insensitive). ``None`` returns
+               the full roster.
+    """
+    agents = _load()
+    if names:
+        wanted = {n.lower() for n in names}
+        agents = [a for a in agents if a["name"].lower() in wanted]
+
+    lines = [
+        "ABILITY ROSTER (authoritative — every ability belongs to EXACTLY the agent on its row;"
+        " never attribute a row's abilities to a different agent):"
+    ]
+    for a in agents:
+        ability_names = [ab["name"] for ab in a["abilities"].values()]
+        lines.append(f"  {a['name']} ({a['role']}): {', '.join(ability_names)}")
+    return "\n".join(lines)
+
+
 def format_agent_context(name: str) -> str | None:
     """Return a compact LLM-injectable block for the given agent.
 
