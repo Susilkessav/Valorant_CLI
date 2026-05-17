@@ -123,6 +123,40 @@ async def invalidate_volatile(data_dir: Path | None = None) -> int:
     return count
 
 
+def _purge_live_orphans(data_dir: Path) -> int:
+    """Delete LIVE-collection docs that have no ``expires_at_unix`` stamp.
+
+    These are chunks ingested before the TTL change landed — they're already
+    filtered out of every retrieval (``retrieve_static`` requires
+    ``expires_at_unix > now``), but they linger in storage forever.  Cleanup
+    is opportunistic and best-effort: ChromaDB has no "field is absent"
+    operator, so we list IDs + metadata client-side and batch-delete.
+
+    Returns the number of orphan documents removed.
+    """
+    try:
+        from valocoach.retrieval.vector_store import LIVE_COLLECTION, get_collection
+
+        coll = get_collection(data_dir, LIVE_COLLECTION)
+        # ``get(include=["metadatas"])`` returns *all* docs in the collection.
+        # This is expensive only when the collection is very large, but
+        # purge_expired is periodic housekeeping so a one-time scan is fine.
+        result = coll.get(include=["metadatas"])
+        ids = result.get("ids", []) or []
+        metas = result.get("metadatas", []) or []
+        orphan_ids = [
+            doc_id
+            for doc_id, meta in zip(ids, metas)
+            if not isinstance(meta, dict) or "expires_at_unix" not in meta
+        ]
+        if orphan_ids:
+            coll.delete(ids=orphan_ids)
+        return len(orphan_ids)
+    except Exception as exc:
+        log.warning("Live-collection orphan cleanup failed (non-fatal): %s", exc)
+        return 0
+
+
 async def purge_expired(data_dir: Path | None = None) -> int:
     """Delete all entries whose expires_at has passed, from both halves of the cache.
 
@@ -131,10 +165,10 @@ async def purge_expired(data_dir: Path | None = None) -> int:
 
     Args:
         data_dir: When provided, also deletes live ChromaDB documents
-                  whose stored ``expires_at`` is in the past.  Without
-                  it, the SQLite rows are evicted but the embeddings
-                  remain (still filtered out of search by
-                  ``retrieve_static``'s ``expires_at > now`` clause).
+                  whose stored ``expires_at`` is in the past *and* legacy
+                  documents that lack ``expires_at_unix`` entirely (those
+                  were already invisible to retrieval, but kept growing
+                  the on-disk index).
     """
     now = _now_iso()
     async with session_scope() as s:
@@ -147,5 +181,9 @@ async def purge_expired(data_dir: Path | None = None) -> int:
         # ``expires_at_unix`` as int seconds.
         now_unix = int(datetime.now(UTC).timestamp())
         _delete_from_live_collection(data_dir, {"expires_at_unix": {"$lt": now_unix}})
+        # Also reap pre-TTL orphan documents.
+        orphans = _purge_live_orphans(data_dir)
+        if orphans:
+            log.info("Purged %d orphan LIVE docs (no expires_at_unix).", orphans)
     log.info("Purged %d expired cache entries.", count)
     return count
