@@ -15,6 +15,19 @@ def _load() -> dict:
     if _cache is None:
         with open(_DATA_FILE) as f:
             _cache = json.load(f)
+        # ``meta_sync`` stamps ``sync_in_progress: true`` before writing the
+        # new tier list and clears it on successful re-ingest.  If we see
+        # the flag here, a previous sync crashed between the meta.json
+        # write and the vector-store re-ingest — the JSON is fresh but the
+        # RAG chunks are stale.  Warn once per cache-miss so the user
+        # knows to re-run ``valocoach meta-refresh --force``.
+        if _cache.get("sync_in_progress"):
+            log.warning(
+                "meta.json has sync_in_progress=True — the last "
+                "meta-refresh did not complete cleanly.  RAG chunks may "
+                "be stale relative to the tier list.  Re-run "
+                "`valocoach meta-refresh --force`."
+            )
     return _cache
 
 

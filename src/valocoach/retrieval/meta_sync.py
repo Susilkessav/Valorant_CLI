@@ -294,6 +294,15 @@ async def run_meta_sync(
         # ── 6. Write meta.json ─────────────────────────────────────────────
         _step("meta_write")
         if not dry_run:
+            # Stamp ``sync_in_progress: true`` BEFORE writing the new tier
+            # list so downstream consumers (``get_meta``, the deterministic
+            # meta panel) can detect the half-baked state if step 7 fails.
+            # The flag is cleared on successful re-ingest at the bottom of
+            # this function.  Without this, a re_ingest failure would leave
+            # the new meta.json live alongside a stale vector index — the
+            # coach prompt would read fresh tier data but pull old RAG
+            # chunks for the agent blocks.
+            new_meta_data["sync_in_progress"] = True
             with open(_META_FILE, "w") as f:
                 json.dump(new_meta_data, f, indent=2)
                 f.write("\n")
@@ -330,6 +339,23 @@ async def run_meta_sync(
             counts = ingest_knowledge_base(settings.data_dir)
             result.meta_ingested = True
             _step("re_ingest", f"ok ({counts['total']} docs)")
+
+            # Re-ingest succeeded — clear the in-progress flag.  We re-read
+            # the file we just wrote (rather than trusting in-memory state)
+            # so the flag is removed even if some other writer touched the
+            # file between our write and this clear.
+            try:
+                with open(_META_FILE) as f:
+                    final_meta = json.load(f)
+                final_meta.pop("sync_in_progress", None)
+                with open(_META_FILE, "w") as f:
+                    json.dump(final_meta, f, indent=2)
+                    f.write("\n")
+                import valocoach.retrieval.meta as _meta_mod
+
+                _meta_mod._cache = None
+            except Exception as exc:
+                log.warning("Could not clear sync_in_progress flag: %s", exc)
         except Exception as exc:
             result.errors.append(f"Re-ingest error: {exc}")
             _step("re_ingest", f"error: {exc}")

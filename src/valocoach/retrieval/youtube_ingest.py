@@ -299,14 +299,22 @@ def ingest_youtube_video(
     classifier = get_classifier()
     kept: list[tuple] = []
     dropped = 0
+    degraded = 0  # chunks the classifier couldn't categorise at all
 
     for chunk in chunks:
         category, score = classifier.classify(chunk.text)
         is_off_topic = category == "off_topic"
-        below_threshold = category != "unknown" and score < RELEVANCE_THRESHOLD
+        # ``unknown`` with score 0 means the classifier couldn't make a
+        # decision — typically an embedding-service failure or no anchor
+        # matched.  Either way we drop the chunk: passing it through would
+        # let degraded-mode runs flood the LIVE collection with noise.
+        is_degraded = category == "unknown"
+        below_threshold = not is_degraded and score < RELEVANCE_THRESHOLD
 
-        if is_off_topic or below_threshold:
+        if is_off_topic or below_threshold or is_degraded:
             dropped += 1
+            if is_degraded:
+                degraded += 1
             log.debug(
                 "D4 drop — start=%ds category=%s score=%.3f",
                 chunk.start_seconds,
@@ -317,12 +325,21 @@ def ingest_youtube_video(
         kept.append((chunk, category, score))
 
     log.info(
-        "D4 anchor filter: %d kept / %d dropped from %s (%r)",
+        "D4 anchor filter: %d kept / %d dropped (%d degraded) from %s (%r)",
         len(kept),
         dropped,
+        degraded,
         video_id,
         title,
     )
+    if degraded:
+        log.warning(
+            "D4: %d/%d chunks classifier returned 'unknown' for %s — "
+            "embedding service may be degraded.",
+            degraded,
+            len(chunks),
+            video_id,
+        )
 
     if not kept:
         log.warning("All chunks filtered for %s — nothing to ingest", video_id)
