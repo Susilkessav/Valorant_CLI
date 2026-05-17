@@ -33,6 +33,8 @@ valocoach coach "we keep losing 8-12 on Ascent attack as Jett, they stack A"
   - [sync](#sync)
   - [profile](#profile)
   - [meta](#meta)
+  - [meta-refresh](#meta-refresh)
+  - [agents-refresh](#agents-refresh)
   - [ingest](#ingest)
   - [config](#config)
 - [Shell completion](#shell-completion)
@@ -181,6 +183,20 @@ valocoach coach "I'm playing Sage on Split defense, A site gets hit every round 
 # Skip stats for a quick one-off
 valocoach coach "best Jett dash angles on Ascent A site" --no-stats
 ```
+
+**Meta questions skip the LLM entirely.** Asking `"what's the current meta"` /
+`"best agent this patch"` produces a deterministic **Meta — Current Tier List**
+panel (built straight from `agents.json` + `meta.json`) followed by a
+**Personalised Takeaway** panel computed from your local stats. No LLM, no
+hallucinated ability names. Every word in those panels comes from JSON files
+or your synced match DB.
+
+**Ability fact-check panel** — for non-meta intents (tactical, post-game,
+clutch, agent-info) the LLM IS used. After the answer streams, a deterministic
+post-pass scans the output against `agents.json` and prints a categorised
+warning if it finds fabricated abilities, wrong-agent attributions, weapons
+mis-cast as abilities, or generic descriptors used as ability names. The
+answer itself isn't rewritten — you see which claims to verify in-game.
 
 ---
 
@@ -390,6 +406,79 @@ valocoach meta --map Ascent
 
 ---
 
+### meta-refresh
+
+Automated meta-sync pipeline. Detects the current patch via HenrikDev, scrapes
+patch notes + Diamond+/pro stats, optionally ingests YouTube transcripts,
+regenerates `meta.json`'s tier list via the local LLM, and re-embeds everything
+into ChromaDB.
+
+```bash
+valocoach meta-refresh
+```
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `--force`, `-f` | Run the full sync even when no new patch is detected |
+| `--dry-run` | Simulate all steps but do not write `meta.json` or re-ingest |
+| `--install-cron` | Add a daily crontab entry that runs `meta-refresh` automatically |
+| `--youtube`, `-y URL` | YouTube video ID/URL to ingest as supplemental context (repeatable) |
+
+**Examples:**
+
+```bash
+valocoach meta-refresh                                  # one-shot, only on new patch
+valocoach meta-refresh --force                          # force a full re-run
+valocoach meta-refresh --install-cron                   # schedule daily
+valocoach meta-refresh -y "https://youtu.be/VIDEO_ID"   # add a guide video
+```
+
+---
+
+### agents-refresh
+
+Keep `agents.json` in sync with Riot's roster. Where `meta-refresh` updates
+tier placements and pick/win rates, this command covers the kit data — names,
+costs, descriptions, and roles for new agents.
+
+```bash
+valocoach agents-refresh
+```
+
+It diffs your local `agents.json` against the Liquipedia `Category:Agents` API
+and reports any new agents plus any agents that are in `agents.json` but
+missing from `meta.json`'s tier list.
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `--extract-kits` | Deterministically parse Liquipedia's `{{Infobox agent}}` + `{{AbilityCard}}` wikitext templates with regex (no LLM) and write the kit data straight into `agents.json` |
+| `--auto-stub-meta` | Append C-tier placeholders to `meta.json` for known agents missing from the tier list. Re-run `meta-refresh --force` later to replace with real Diamond+/VCT-driven tier data |
+
+**Examples:**
+
+```bash
+# Discovery only — print new agents + tier-list gaps, no writes
+valocoach agents-refresh
+
+# Full automated import when a new agent drops
+valocoach agents-refresh --extract-kits --auto-stub-meta
+
+# Then refresh tier data from scraped patch notes + stats
+valocoach meta-refresh --force
+```
+
+Why is kit extraction deterministic (no LLM)? Liquipedia exposes structured
+wikitext templates with named fields. Regex-parsing those fields produces the
+same output every time — no hallucinated ability names. If Liquipedia's format
+ever drifts, the parser refuses to write a half-filled entry and falls back to
+printing a JSON skeleton + the wiki URL so you can fill it manually.
+
+---
+
 ### ingest
 
 Populate or update the vector store used for RAG retrieval during coaching.
@@ -521,6 +610,11 @@ export VALOCOACH_RIOT_NAME=MyName
 ---
 
 ## Troubleshooting
+
+For an architectural deep-dive on design trade-offs and known edge cases
+(why meta intent skips the LLM, how the sanitizer classifies hallucinations,
+which earlier review findings were verified as false positives), see
+[`docs/REVIEW.md`](docs/REVIEW.md).
 
 ### "LLM call failed" / coach produces no output
 
