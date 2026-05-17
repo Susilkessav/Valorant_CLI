@@ -79,28 +79,33 @@ _MAPS: frozenset[str] = frozenset(
 # ability claims at all.
 _DESCRIPTORS: frozenset[str] = frozenset(
     {
+        # Role / kit category labels — never an ability claim
         "duelist", "controller", "initiator", "sentinel",
         "ultimate", "ult", "abilities", "ability", "kit", "role",
+        # Game-state / strategy nouns
         "playstyle", "mobility", "damage", "vision", "control",
         "rotation", "site", "spike", "plant", "defuse",
         "high", "low", "mid", "long", "tier", "rank", "meta",
+        "burst", "lockdown", "anti-op", "denial",
+        # Section / pronoun / connective words
         "map", "maps", "key", "why", "your", "his", "her", "their",
         "use", "uses", "using", "prioritize", "consider",
-        "burst", "lockdown", "anti-op", "denial",
         "team", "teams", "teammate", "teammates",
         "good", "solid", "strong", "weak", "average",
-        "operator", "phantom", "vandal",  # weapons also appear here
-        # Single-word tier names like "S-Tier"
-        # Multi-word connectives that can leak through when bigrams partial-match
+        # Multi-word connectives that can leak through bigram partials
         "from", "the", "of", "and", "with", "for",
         # Generic English nouns that appear in qwen3:8b's "Area denial",
         # "Crowd control", "Final Tips", etc.
         "area", "crowd", "final", "tips", "tip", "fun", "easy",
         "great", "ideal", "synergy", "synergies", "split-push",
         "counter", "anti", "pro", "ranked",
-        # Section headers it tends to emit
-        "key", "maps", "agents", "summary", "context",
+        # Section headers the model tends to emit
+        "agents", "summary", "context",
         "recommendations", "strategies",
+        # NOTE: weapon names (Vandal, Phantom, Operator, Ghost, ...) used to
+        # be duplicated here, but they belong solely to ``_WEAPONS`` so we
+        # can correctly flag claims like "Key Abilities: Vandal" as
+        # weapon-mis-cast-as-ability rather than silently skipping them.
     }
 )
 

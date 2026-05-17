@@ -48,12 +48,22 @@ _MAP_NAMES: tuple[str, ...] = (
     "Sunset",
 )
 
-_AGENT_NAMES: tuple[str, ...] = (
-    "Astra", "Breach", "Brimstone", "Chamber", "Clove", "Cypher",
-    "Deadlock", "Fade", "Gekko", "Harbor", "Iso", "Jett", "KAY/O",
-    "Killjoy", "Miks", "Neon", "Omen", "Phoenix", "Raze", "Reyna",
-    "Sage", "Skye", "Sova", "Tejo", "Veto", "Viper", "Vyse", "Waylay", "Yoru",
-)
+def _agent_names() -> tuple[str, ...]:
+    """Return the canonical agent roster from ``agents.json``.
+
+    Sourced dynamically so new agents added via ``valocoach agents-refresh
+    --extract-kits`` are accepted in elicitation prompts immediately —
+    without this, the elicitation flow would reject the player's actual
+    agent until the hardcoded tuple was edited.
+    """
+    from valocoach.retrieval.agents import list_agent_names
+
+    return tuple(list_agent_names())
+
+
+# Kept as a module-level callable so existing references still resolve;
+# the call site reads ``_AGENT_NAMES()`` shape via the helper above.
+_AGENT_NAMES: tuple[str, ...] = _agent_names()
 
 _SCORE_PATTERN = re.compile(r"^(\d{1,2})\s*[-–:]\s*(\d{1,2})$")
 _CLUTCH_PATTERN = re.compile(r"^([1-5])\s*v\s*([1-5])$", re.IGNORECASE)
