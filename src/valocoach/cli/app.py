@@ -107,11 +107,16 @@ def stats(
         "-r",
         help="Filter by match outcome: 'win' or 'loss'. Omit for both.",
     ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit raw JSON instead of the Rich-rendered tables. Useful for scripting.",
+    ),
 ) -> None:
     """Show your performance stats (overall + win/loss split + per-agent + per-map)."""
     from valocoach.cli.commands.stats import run_stats
 
-    run_stats(agent=agent, map_=map_, period=period, result=result)
+    run_stats(agent=agent, map_=map_, period=period, result=result, json_output=json_output)
 
 
 @app.command(rich_help_panel="Data")
@@ -221,11 +226,16 @@ def profile(
         "-l",
         help="Number of recent matches to summarise.",
     ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit raw profile JSON instead of the Rich-rendered panel.",
+    ),
 ) -> None:
     """Show player identity + compact recent-performance card."""
     from valocoach.cli.commands.profile import run_profile
 
-    run_profile(name=name, tag=tag, limit=limit)
+    run_profile(name=name, tag=tag, limit=limit, json_output=json_output)
 
 
 @app.command(rich_help_panel="Game Info")
@@ -236,8 +246,35 @@ def meta(
     map_: str | None = typer.Option(
         None, "--map", "-m", help="Map name for callouts and meta info."
     ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit the raw meta.json contents instead of the Rich-rendered panel.",
+    ),
 ) -> None:
     """Show current meta: tier list, agent abilities, or map callouts."""
+    if json_output:
+        import json
+
+        from valocoach.retrieval.agents import get_agent
+        from valocoach.retrieval.maps import get_map
+        from valocoach.retrieval.meta import get_meta
+
+        meta_data = get_meta()
+        if agent:
+            ag = get_agent(agent)
+            print(json.dumps({"agent": ag, "meta": meta_data.get("agent_meta", {}).get(
+                next((k for k in meta_data.get("agent_meta", {})
+                      if k.casefold() == agent.casefold()), None))}, indent=2, default=str))
+        elif map_:
+            mp = get_map(map_)
+            print(json.dumps({"map": mp, "meta": meta_data.get("map_meta", {}).get(
+                next((k for k in meta_data.get("map_meta", {})
+                      if k.casefold() == map_.casefold()), None))}, indent=2, default=str))
+        else:
+            print(json.dumps(meta_data, indent=2, default=str))
+        return
+
     from valocoach.cli.commands.meta import run_meta
 
     run_meta(agent=agent, map_=map_)

@@ -76,6 +76,7 @@ def run_profile(
     tag: str | None = None,
     limit: int = DEFAULT_LIMIT,
     console: Console | None = None,
+    json_output: bool = False,
 ) -> None:
     con = console or display.console
 
@@ -85,12 +86,14 @@ def run_profile(
     settings = load_settings()
 
     # One-shot staleness warning — see stats.run_stats for rationale.
-    try:
-        from valocoach.cli.commands.coach import warn_stale_meta_once
+    # Suppressed for --json so machine-readable output stays clean.
+    if not json_output:
+        try:
+            from valocoach.cli.commands.coach import warn_stale_meta_once
 
-        warn_stale_meta_once(settings)
-    except Exception:
-        pass
+            warn_stale_meta_once(settings)
+        except Exception:
+            pass
 
     resolved_name, resolved_tag = _resolve_identity(
         name=name,
@@ -123,6 +126,33 @@ def run_profile(
         raise typer.Exit(1)
 
     player, rows = data.player, data.rows
+
+    if json_output:
+        import json
+        from dataclasses import asdict
+
+        from valocoach.stats.calculator import compute_player_stats
+
+        overall = compute_player_stats(rows[:limit])
+        per_agent = compute_per_agent(rows[:limit])
+        payload = {
+            "player": {
+                "riot_name": player.riot_name,
+                "riot_tag": player.riot_tag,
+                "tier": player.current_tier_patched,
+                "region": player.region,
+                "peak_tier": getattr(player, "peak_tier_patched", None),
+                "elo": getattr(player, "elo", None),
+                "level": getattr(player, "level", None),
+            },
+            "summary": asdict(overall),
+            "top_agents": [
+                {"agent": a.agent, "stats": asdict(a.stats)} for a in per_agent[:TOP_AGENTS]
+            ],
+            "limit": limit,
+        }
+        print(json.dumps(payload, indent=2, default=str))
+        return
 
     with display.command_frame("Player Profile", subtitle=f"{resolved_name}#{resolved_tag}", con=con):
         # Identity panel
