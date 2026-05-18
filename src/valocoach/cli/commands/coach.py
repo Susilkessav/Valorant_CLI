@@ -458,6 +458,31 @@ def run_coach(
         except Exception:
             log.debug("ability claim sanitizer failed", exc_info=True)
 
+        # Numeric stats sanitizer — symmetric to the ability one.  Pull
+        # ``stats_context`` (if present) and check the LLM didn't misquote
+        # the player's real K/D / ACS / ADR / HS% / Win-rate.
+        try:
+            from valocoach.coach.stats_sanitizer import validate_stat_claims
+
+            stat_warnings = validate_stat_claims(response_text, stats_context or "")
+            if stat_warnings:
+                stat_lines = [
+                    "",
+                    f"[warning]⚠ Stat fact-check — {len(stat_warnings)} "
+                    "numeric claim(s) don't match your real PLAYER CONTEXT:[/warning]",
+                ]
+                for w in stat_warnings[:8]:
+                    stat_lines.append(f"  • {w.format()}")
+                if len(stat_warnings) > 8:
+                    stat_lines.append(f"  …and {len(stat_warnings) - 8} more.")
+                stat_lines.append(
+                    "  [muted]The model occasionally misquotes the stats we "
+                    "give it.  Trust the numbers in `valocoach stats`.[/muted]"
+                )
+                display.console.print("\n".join(stat_lines))
+        except Exception:
+            log.debug("stat claim sanitizer failed", exc_info=True)
+
     if intent in _META_SENSITIVE_INTENTS:
         _maybe_warn_stale_meta(settings)
 
