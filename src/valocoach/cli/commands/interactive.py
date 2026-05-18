@@ -382,6 +382,17 @@ def run_interactive(
     puuid = get_player_puuid(settings)
     if puuid:
         coach_state.puuid = puuid
+        # Reap any orphan ``open`` rows from earlier crashes before opening
+        # a new one — keeps ``sessions list`` honest after a kill -9 / OOM.
+        try:
+            from valocoach.coach.session_manager import reap_stale_sessions
+
+            reaped = reap_stale_sessions(settings, puuid)
+            if reaped:
+                log.debug("Reaped %d stale open coaching session(s)", reaped)
+        except Exception:
+            log.debug("Stale-session reaper failed (non-fatal)", exc_info=True)
+
         session_id = open_coaching_session(settings, puuid)
         if session_id is not None:
             coach_state.coaching_session_id = session_id

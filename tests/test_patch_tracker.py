@@ -83,10 +83,20 @@ class TestCheckPatchUpdate:
         if invalidate_mock is None:
             invalidate_mock = AsyncMock(return_value=0)
 
+        # Mock ``get_meta`` so the "patch unchanged" branch's secondary
+        # check (meta.json::patch == current?) doesn't read the real
+        # bundled file — when an "unchanged" test passes
+        # current_version="10.09" against a meta.json pinned to "10.08",
+        # the real file would falsely surface as a meta-vs-patch drift
+        # and flip is_new back to True.  We mirror current_version so
+        # the secondary check reports "aligned".
+        from valocoach.retrieval import meta as _meta_mod
+
         with (
             patch(_HENRIK_CLIENT, _make_henrik_client(current_version)),
             patch(_SESSION_SCOPE, _make_session_scope(existing_row)),
             patch(_INVALIDATE, invalidate_mock),
+            patch.object(_meta_mod, "get_meta", return_value={"patch": current_version}),
         ):
             return await check_patch_update(settings)
 

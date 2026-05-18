@@ -47,6 +47,17 @@ def run_stats(
 ) -> None:
     con = console or display.console
 
+    # Fire the patch-staleness warning at most once per process so users on
+    # the stats / profile flow are still told their meta data is stale,
+    # without spamming the warning on every command.
+    try:
+        from valocoach.cli.commands.coach import warn_stale_meta_once
+        from valocoach.core.config import load_settings as _load
+
+        warn_stale_meta_once(_load())
+    except Exception:
+        pass
+
     won: bool | None
     if result is None:
         won = None
@@ -100,6 +111,13 @@ def run_stats(
             + (f", result={result}" if result else "")
             + ")."
         )
+        # Helpful hint when the window itself is the likely cause — point at
+        # the obvious wider window before they go looking through --help.
+        if period != "all" and not agent and not map_ and not result:
+            display.console.print(
+                "[muted]Tip: try [info]--period 365d[/info] or "
+                "[info]--period all[/info] for a wider window.[/muted]"
+            )
         raise typer.Exit(0)
 
     overall = compute_player_stats(filtered)

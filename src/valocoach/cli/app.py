@@ -96,7 +96,7 @@ def stats(
     agent: str | None = typer.Option(None, "--agent", "-a", help="Filter to a single agent."),
     map_: str | None = typer.Option(None, "--map", "-m", help="Filter to a single map."),
     period: str = typer.Option(
-        "30d",
+        "90d",
         "--period",
         "-p",
         help="Time window: 'Nd' for last N days (e.g. 7d, 30d) or 'all'.",
@@ -563,6 +563,8 @@ def config_init() -> None:
 @config_app.command("show")
 def config_show() -> None:
     """Display current effective settings (API keys are redacted)."""
+    from rich.table import Table
+
     from valocoach.core.config import load_settings
 
     s = load_settings()
@@ -570,8 +572,23 @@ def config_show() -> None:
     if data.get("henrikdev_api_key"):
         data["henrikdev_api_key"] = "***redacted***"
 
+    table = Table(show_header=True, header_style="bold", box=None, pad_edge=False)
+    table.add_column("Setting", style="heading")
+    table.add_column("Value")
+    for key in sorted(data.keys()):
+        value = data[key]
+        # Render Path / PosixPath etc. as plain strings so the user
+        # doesn't see ``PosixPath(...)`` leaking out of the CLI.
+        if value is None:
+            shown = "[muted]<unset>[/muted]"
+        elif isinstance(value, bool):
+            shown = "true" if value else "false"
+        else:
+            shown = str(value)
+        table.add_row(key, shown)
+
     with display.command_frame("Configuration"):
-        display.console.print(data)
+        display.console.print(table)
 
 
 if __name__ == "__main__":

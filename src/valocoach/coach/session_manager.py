@@ -268,6 +268,57 @@ def close_coaching_session(settings, session_id: int) -> None:
         logger.debug("close_coaching_session failed: %s", exc)
 
 
+def reap_stale_sessions(settings, puuid: str, max_age_minutes: int = 60) -> int:
+    """Close any ``open`` coaching sessions older than *max_age_minutes*.
+
+    The REPL closes sessions in a ``finally`` block on ``/quit`` or Ctrl-D
+    — but ``kill -9``, OOM, or any hard crash skips that and leaves the
+    row ``status="open"`` forever.  This reaper runs at REPL startup and
+    closes anything that's clearly abandoned, so ``sessions list`` stays
+    honest and a new REPL doesn't accumulate ghost entries.
+
+    Returns the number of sessions closed.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    cutoff = (datetime.now(UTC) - timedelta(minutes=max_age_minutes)).isoformat()
+
+    async def _run() -> int:
+        from sqlalchemy import select, update
+
+        from valocoach.data.database import ensure_db, session_scope
+        from valocoach.data.orm_models import CoachingSession
+
+        await ensure_db(_db_path(settings))
+        async with session_scope() as db:
+            # Find candidate rows so we can return an accurate count.  An
+            # UPDATE...RETURNING would be cleaner but SQLite support is
+            # spotty across our supported sqlalchemy versions.
+            rows = (
+                await db.scalars(
+                    select(CoachingSession.id).where(
+                        CoachingSession.puuid == puuid,
+                        CoachingSession.status == "open",
+                        CoachingSession.started_at < cutoff,
+                    )
+                )
+            ).all()
+            if not rows:
+                return 0
+            await db.execute(
+                update(CoachingSession)
+                .where(CoachingSession.id.in_(rows))
+                .values(status="closed", ended_at=datetime.now(UTC).isoformat())
+            )
+            return len(rows)
+
+    try:
+        return asyncio.run(_run())
+    except Exception as exc:
+        logger.debug("reap_stale_sessions failed: %s", exc)
+        return 0
+
+
 def add_coaching_note(
     settings,
     session_id: int,

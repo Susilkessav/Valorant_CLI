@@ -89,8 +89,29 @@ async def check_patch_update(settings: Settings) -> tuple[str, bool]:
             )
             is_new = True
         else:
-            log.debug("Patch unchanged: %s", current)
-            is_new = False
+            # The DB knows about ``current`` — but ``meta.json`` may still
+            # be pinned to a much older patch (e.g. user never ran
+            # meta-refresh after ``patch --check`` updated the DB).
+            # Treat that as "new patch" so meta-refresh actually runs
+            # instead of getting stuck behind --force.
+            try:
+                from valocoach.retrieval.meta import get_meta
+
+                meta_patch = (get_meta().get("patch") or "").strip()
+                is_new = bool(meta_patch and meta_patch != current)
+                if is_new:
+                    log.info(
+                        "Patch tracked at %s but meta.json still on %s — "
+                        "treating as new patch.",
+                        current,
+                        meta_patch,
+                    )
+                else:
+                    log.debug("Patch unchanged and meta.json aligned: %s", current)
+            except Exception as exc:
+                log.warning("Could not compare meta.json patch (%s); "
+                            "assuming aligned.", exc)
+                is_new = False
 
     # Invalidate volatile entries after the PatchVersion row is committed,
     # so the two writes don't share a transaction.  Passing ``data_dir``

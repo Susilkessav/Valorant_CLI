@@ -19,13 +19,26 @@ _META_SENSITIVE_INTENTS: frozenset[str] = frozenset({"meta", "agent_info"})
 _PATCH_STALE_THRESHOLD_DAYS: int = 21
 
 
-def _maybe_warn_stale_meta(settings) -> None:
+_STALE_META_WARNED: bool = False
+
+
+def _maybe_warn_stale_meta(settings, *, once: bool = False) -> None:
     """Print a one-liner if the cached patch is older than the threshold.
 
     Used by both the LLM path (post-stream warning) and the deterministic
     meta path (printed before the early return) so the warning fires on
     every meta-sensitive answer regardless of which code path produced it.
+
+    Args:
+        once: when True, suppresses the warning after it has fired once
+              in the current process.  Lets non-meta entrypoints
+              (``stats``, ``profile``, ``coach`` for non-meta intents)
+              show it without bombarding the user inside a single
+              interactive session.
     """
+    global _STALE_META_WARNED
+    if once and _STALE_META_WARNED:
+        return
     try:
         from valocoach.retrieval.patch_tracker import get_patch_staleness_days
 
@@ -38,8 +51,18 @@ def _maybe_warn_stale_meta(settings) -> None:
                 f"[muted]⚠ Meta info may be outdated ({age_str}) — "
                 "run [info]valocoach patch --check[/info] to refresh.[/muted]"
             )
+            _STALE_META_WARNED = True
     except Exception:
         log.debug("patch staleness check failed", exc_info=True)
+
+
+def warn_stale_meta_once(settings) -> None:
+    """Public entry: fire the staleness warning at most once per process.
+
+    Called by non-coach commands (``stats``, ``profile``) so the user sees
+    the staleness signal even on workflows that never touch the coach.
+    """
+    _maybe_warn_stale_meta(settings, once=True)
 
 # Team-roster questions ("who was in my team", "list teammates") — the schema
 # stores teammate puuids but not their display names, so the LLM has no source
