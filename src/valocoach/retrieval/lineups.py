@@ -201,11 +201,17 @@ def ingest_lineup_chunk(
     start_seconds: int,
     url: str,
     settings: Any,
+    expected_chunks: int | None = None,
 ) -> None:
     """Embed and upsert one lineup chunk into the LIVE collection.
 
     Runs the LLM metadata extraction pass (G2) then stores the chunk with
     full §8.2 metadata.  Extraction failure is non-blocking.
+
+    ``expected_chunks`` is the total chunk count the caller expects to
+    ingest for this video — stamped on every chunk so
+    ``is_video_ingested`` can detect partial-ingest crashes.  Optional
+    for backwards compatibility with direct callers.
     """
     from valocoach.retrieval.embedder import embed_one
     from valocoach.retrieval.vector_store import get_collection
@@ -225,6 +231,8 @@ def ingest_lineup_chunk(
         "expires_at_unix": int(time.time()) + _LINEUP_TTL_SECONDS,
         **{k: v for k, v in meta_fields.items() if v is not None},
     }
+    if expected_chunks is not None:
+        metadata["expected_chunks"] = expected_chunks
 
     try:
         vec = embed_one(text)

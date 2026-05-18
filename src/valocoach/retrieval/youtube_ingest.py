@@ -180,11 +180,18 @@ def get_classifier() -> AnchorClassifier:
 
 
 def is_video_ingested(data_dir: Path, video_id: str) -> bool:
-    """Return True if any chunk for *video_id* already exists in the LIVE collection.
+    """Return True iff *video_id* was ingested to completion.
 
-    Queries by ``video_id`` metadata field so even a partial previous ingest
-    (e.g. one that crashed mid-batch) registers as "already ingested" and is
-    not re-processed unless ``force=True``.
+    The completeness check compares the count of chunks currently in the
+    LIVE collection for *video_id* against ``expected_chunks`` stamped on
+    each chunk at write time.  This lets a re-run recover from a partial
+    crash (50 of 200 chunks made it before the process died) by
+    re-ingesting the rest instead of treating the half-finished video as
+    "done" forever.
+
+    Backwards compatibility: chunks ingested before ``expected_chunks``
+    was added carry no field at all.  We treat those as complete to avoid
+    re-scraping every legacy video on the next run.
     """
     try:
         from valocoach.retrieval.vector_store import LIVE_COLLECTION, get_collection
@@ -192,10 +199,34 @@ def is_video_ingested(data_dir: Path, video_id: str) -> bool:
         coll = get_collection(data_dir, LIVE_COLLECTION)
         results = coll.get(
             where={"video_id": {"$eq": video_id}},
-            limit=1,
-            include=[],
+            include=["metadatas"],
         )
-        return len(results.get("ids", [])) > 0
+        ids = results.get("ids", []) or []
+        if not ids:
+            return False
+
+        # Any chunk's metadata tells us how many were expected — they all
+        # carry the same ``expected_chunks`` value.
+        metas = results.get("metadatas", []) or []
+        expected: int | None = None
+        for meta in metas:
+            if isinstance(meta, dict) and "expected_chunks" in meta:
+                expected = int(meta["expected_chunks"])
+                break
+
+        if expected is None:
+            # Legacy chunk with no completeness stamp — treat as complete.
+            return True
+
+        complete = len(ids) >= expected
+        if not complete:
+            log.warning(
+                "YouTube %s ingest is partial (%d/%d chunks) — re-ingesting.",
+                video_id,
+                len(ids),
+                expected,
+            )
+        return complete
     except Exception as exc:
         # If the check itself fails, treat as not ingested so we don't silently
         # skip content due to a transient ChromaDB error.
@@ -372,6 +403,7 @@ def ingest_youtube_video(
                     start_seconds=chunk.start_seconds,
                     url=chunk.url,
                     settings=settings,
+                    expected_chunks=len(kept),
                 )
                 lineup_count += 1
             except Exception as exc:
@@ -395,6 +427,9 @@ def ingest_youtube_video(
                 # Always store raw text so D6 citations can display it
                 "raw_text": chunk.text[:500],
                 "expires_at_unix": expires_at_unix,
+                # Total chunks this video is supposed to have, so
+                # ``is_video_ingested`` can detect partial-ingest crashes.
+                "expected_chunks": len(kept),
             }
         )
 
