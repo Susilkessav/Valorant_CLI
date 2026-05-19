@@ -19,13 +19,15 @@ from valocoach.core.config import load_settings
 
 def run_ingest(
     url: str | None,
-    youtube: str | None,
+    youtube: list[str],
     corpus: bool,
     seed: bool,
     clear: bool,
     show_stats: bool,
     force: bool = False,
     preview: bool = False,
+    youtube_list: str | None = None,
+    add_lineup: bool = False,
 ) -> None:
     settings = load_settings()
     data_dir = settings.data_dir
@@ -53,7 +55,22 @@ def run_ingest(
         display.success("Vector store cleared (static + live collections).")
         return
 
-    nothing_specified = not corpus and url is None and youtube is None
+    if add_lineup:
+        _do_add_lineup(data_dir, settings)
+        return
+
+    # Collect all YouTube URLs (--youtube flags + --youtube-list file)
+    all_youtube: list[str] = list(youtube or [])
+    if youtube_list:
+        from pathlib import Path as _Path
+        list_path = _Path(youtube_list)
+        if not list_path.exists():
+            display.error(f"File not found: {youtube_list}")
+            raise typer.Exit(1)
+        lines = [ln.strip() for ln in list_path.read_text().splitlines() if ln.strip() and not ln.startswith("#")]
+        all_youtube.extend(lines)
+
+    nothing_specified = not corpus and url is None and not all_youtube
 
     with display.command_frame("Knowledge Base"):
         if seed or nothing_specified:
@@ -65,8 +82,8 @@ def run_ingest(
         if url:
             _do_url(data_dir, url)
 
-        if youtube:
-            _do_youtube(data_dir, youtube, settings=settings, force=force, preview=preview)
+        if all_youtube:
+            _do_youtube_batch(all_youtube, data_dir, settings=settings, force=force, preview=preview)
 
 
 def _do_seed(data_dir: Path) -> None:
@@ -344,3 +361,130 @@ def _print_youtube_plan(plan: object) -> None:
             c.print(f"  [stat.value]{i}.[/stat.value]  [muted]{mins}:{secs:02d}[/muted]  {label}{purpose_str}")
             c.print(f'       [muted]"{snippet}"[/muted]')
             c.print()
+
+
+def _do_youtube_batch(
+    urls: list[str],
+    data_dir: Path,
+    *,
+    settings: object,
+    force: bool = False,
+    preview: bool = False,
+) -> None:
+    """Process a list of YouTube URLs — shows a counter header then delegates each to _do_youtube."""
+    import time as _time
+
+    total = len(urls)
+    if total > 1:
+        display.console.print(f"[stat.label]Batch:[/stat.label] {total} video(s) to process")
+        display.console.print()
+
+    for i, url in enumerate(urls, 1):
+        if total > 1:
+            display.console.rule(f"[muted]{i}/{total}[/muted]")
+        _do_youtube(data_dir, url, settings=settings, force=force, preview=preview)
+        # Avoid hammering YouTube's transcript API between successive requests
+        if i < total:
+            _time.sleep(2)
+
+    if total > 1:
+        display.console.rule()
+
+
+def _do_add_lineup(data_dir: Path, settings: object) -> None:
+    """Interactively prompt the user for a lineup entry and write it to ChromaDB."""
+    from valocoach.cli import display
+    from valocoach.retrieval.lineups import (
+        _canon_agent,
+        _canon_map,
+        _canon_site,
+        _CANONICAL_AGENTS,
+        _CANONICAL_MAPS,
+    )
+
+    c = display.console
+    c.print("[val.red]Add lineup[/val.red]  [muted]— hand-curate a lineup entry[/muted]")
+    c.print()
+
+    # ── Collect fields ─────────────────────────────────────────────────────
+    agents_hint = ", ".join(sorted(_CANONICAL_AGENTS.values())[:8]) + " …"
+    maps_hint   = ", ".join(sorted(_CANONICAL_MAPS.values()))
+
+    agent_raw   = typer.prompt(f"Agent  ({agents_hint})")
+    ability     = typer.prompt("Ability (e.g. Recon Bolt, Snake Bite)")
+    map_raw     = typer.prompt(f"Map  ({maps_hint})")
+    site_raw    = typer.prompt("Site  (A / B / C / D / Mid)", default="")
+    side        = typer.prompt("Side  (attack / defense)", default="")
+    purpose     = typer.prompt(
+        "Purpose  (post-plant deny / pre-round info / site clear / retake)", default=""
+    )
+    description = typer.prompt(
+        "\nDescribe the lineup (where to stand, where to aim, what it does)"
+    )
+
+    # ── Canonicalise ──────────────────────────────────────────────────────
+    agent   = _canon_agent(agent_raw) or agent_raw.strip().title()
+    map_val = _canon_map(map_raw)     or map_raw.strip().title()
+    site    = _canon_site(site_raw)   if site_raw.strip() else None
+
+    # ── Build embed text ──────────────────────────────────────────────────
+    parts = [description.strip()]
+    meta_line_parts = [f"{agent} {ability} on {map_val}"]
+    if site:
+        meta_line_parts.append(f"{site} site")
+    if side.strip():
+        meta_line_parts.append(side.strip())
+    parts.append(" — ".join(meta_line_parts))
+    embed_text = "\n".join(parts)
+
+    # ── Preview ────────────────────────────────────────────────────────────
+    c.print()
+    c.print("[stat.label]Preview:[/stat.label]")
+    c.print(f"  Agent:   [val.red]{agent}[/val.red]  ·  {ability}")
+    c.print(f"  Map:     {map_val}" + (f"  ·  {site} site" if site else ""))
+    if side.strip():
+        c.print(f"  Side:    {side.strip()}")
+    if purpose.strip():
+        c.print(f"  Purpose: {purpose.strip()}")
+    c.print(f"  Text:    [muted]{embed_text[:200]}[/muted]")
+    c.print()
+
+    confirmed = typer.confirm("Save this lineup?", default=True)
+    if not confirmed:
+        c.print("[muted]Cancelled — nothing written.[/muted]")
+        return
+
+    # ── Write to ChromaDB ─────────────────────────────────────────────────
+    import time as _time
+
+    from valocoach.retrieval.embedder import embed_one
+    from valocoach.retrieval.vector_store import get_collection
+
+    doc_id = f"lineup:manual:{int(_time.time())}"
+    metadata: dict = {
+        "type":    "lineup",
+        "agent":   agent,
+        "ability": ability.strip(),
+        "map":     map_val,
+        "video_id": "manual",
+        "title":   "Manual entry",
+        "channel": "manual",
+        "start_seconds": 0,
+        "source":  "manual",
+        "expires_at_unix": int(_time.time()) + 365 * 24 * 3600,  # 1-year TTL for hand-curated
+    }
+    if site:
+        metadata["side"] = site
+    if side.strip():
+        metadata["side"] = side.strip()
+    if purpose.strip():
+        metadata["purpose"] = purpose.strip()
+
+    try:
+        vec  = embed_one(embed_text)
+        coll = get_collection(data_dir, "valocoach_live")
+        coll.upsert(ids=[doc_id], documents=[embed_text], embeddings=[vec], metadatas=[metadata])
+        display.success(f"Lineup saved — {agent} {ability} on {map_val}" + (f" ({site} site)" if site else ""))
+    except Exception as exc:
+        display.error(f"Failed to save lineup: {exc}")
+        raise typer.Exit(1) from exc

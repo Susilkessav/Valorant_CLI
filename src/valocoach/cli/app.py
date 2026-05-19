@@ -285,8 +285,16 @@ def ingest(
     url: str | None = typer.Option(
         None, "--url", "-u", help="Scrape and ingest a URL (patch notes, blog post, etc.)."
     ),
-    youtube: str | None = typer.Option(
-        None, "--youtube", "-y", help="Fetch and ingest a YouTube video transcript."
+    youtube: list[str] = typer.Option(  # noqa: B008
+        [],
+        "--youtube",
+        "-y",
+        help="YouTube URL or video ID to ingest. Repeatable: --youtube url1 --youtube url2.",
+    ),
+    youtube_list: str | None = typer.Option(
+        None,
+        "--youtube-list",
+        help="Path to a text file with one YouTube URL per line (batch ingest).",
     ),
     corpus: bool = typer.Option(
         False,
@@ -309,19 +317,36 @@ def ingest(
         "--preview",
         help="Analyse a YouTube video and show what would be ingested, without writing anything.",
     ),
+    add_lineup: bool = typer.Option(
+        False,
+        "--add-lineup",
+        help="Interactively add a hand-curated lineup entry to the database.",
+    ),
 ) -> None:
-    """Populate the vector store (run once, then augmented by --url / --youtube / --corpus)."""
+    """Populate the vector store (run once, then augmented by --url / --youtube / --corpus).
+
+    \b
+    Batch YouTube ingest:
+      valocoach ingest --youtube url1 --youtube url2
+      valocoach ingest --youtube-list urls.txt
+
+    \b
+    Hand-curate a lineup:
+      valocoach ingest --add-lineup
+    """
     from valocoach.cli.commands.ingest import run_ingest
 
     run_ingest(
         url=url,
-        youtube=youtube,
+        youtube=youtube or [],
+        youtube_list=youtube_list,
         corpus=corpus,
         seed=seed,
         clear=clear,
         show_stats=show_stats,
         force=force,
         preview=preview,
+        add_lineup=add_lineup,
     )
 
 

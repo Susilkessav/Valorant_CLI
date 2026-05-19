@@ -103,6 +103,21 @@ _PURPOSE_HINTS: list[tuple[list[str], str]] = [
     (["revealing", "reveal", "scanning ahead", "scan", "pre round", "pre-round", "before round"], "pre-round info"),
 ]
 
+# Site keyword hints — checked in order per word-boundary patterns.
+# Map-specific entries first so they don't get eclipsed by generic ones.
+_SITE_HINTS: list[tuple[list[str], str]] = [
+    # Haven D-short (Haven-unique)
+    (["d site", "d short", "long hall", "d main"], "D"),
+    # A site variants
+    (["a site", "a short", "a main", "a heaven", "a link", "a lobby", "a bath", "a court", "onto a"], "A"),
+    # B site variants
+    (["b site", "b main", "b long", "b box", "b hall", "b lobby", "onto b"], "B"),
+    # C site variants (Haven, Lotus, Fracture)
+    (["c site", "c long", "c short", "c lobby", "c link", "onto c"], "C"),
+    # Mid — last so specific sites take priority
+    (["mid site", "mid-lane", " mid ", "through mid", "from mid"], "Mid"),
+]
+
 
 def _canon_agent(value: str | None) -> str | None:
     if not isinstance(value, str) or not value.strip():
@@ -207,9 +222,17 @@ def _apply_fallbacks(result: dict[str, str | None], text: str) -> None:
         if default_ability:
             result["ability"] = default_ability
 
+    text_lower = text.lower()
+
+    # Site: keyword scan — only fires when LLM returned null
+    if not result.get("site"):
+        for keywords, site in _SITE_HINTS:
+            if any(kw in text_lower for kw in keywords):
+                result["site"] = site
+                break
+
     # Purpose: keyword scan over the transcript text
     if not result.get("purpose"):
-        text_lower = text.lower()
         for keywords, purpose in _PURPOSE_HINTS:
             if any(kw in text_lower for kw in keywords):
                 result["purpose"] = purpose
