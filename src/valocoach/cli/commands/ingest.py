@@ -147,11 +147,13 @@ def _print_web_result(result: object) -> None:
     c = display.console
 
     if result.skipped_reason == "scrape_failed":
-        display.error(f"Could not extract content from {result.url}")
+        display.error(f"Could not fetch or extract content from: {result.url}")
+        c.print("[muted]Check the URL is correct and the page is publicly accessible.[/muted]")
         return
 
     if result.skipped_reason == "no_chunks":
-        display.warn(f"No usable content found at {result.url}")
+        display.warn(f"No usable tactical content found at {result.url}")
+        c.print("[muted]The page may be mostly images/video — try a text-based guide.[/muted]")
         return
 
     # ── Header ────────────────────────────────────────────────────────────

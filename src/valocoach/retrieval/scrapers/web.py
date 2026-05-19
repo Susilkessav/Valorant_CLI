@@ -30,7 +30,7 @@ def scrape_url(url: str, source: str = "web", timeout: int = 20) -> ScrapedConte
         )
         resp.raise_for_status()
     except httpx.HTTPError as exc:
-        log.warning("HTTP error fetching %s: %s", url, exc)
+        log.debug("HTTP error fetching %s: %s", url, exc)
         return None
 
     html = resp.text
@@ -49,7 +49,7 @@ def scrape_url(url: str, source: str = "web", timeout: int = 20) -> ScrapedConte
         text = soup.get_text(separator="\n", strip=True)
 
     if not text or len(text) < 100:
-        log.warning("Could not extract meaningful content from %s", url)
+        log.debug("Could not extract meaningful content from %s", url)
         return None
 
     meta = trafilatura.extract_metadata(html)

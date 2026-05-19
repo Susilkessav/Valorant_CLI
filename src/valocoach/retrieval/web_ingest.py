@@ -91,11 +91,11 @@ def ingest_web_url(
     try:
         content = scrape_url(url, source="web")
     except Exception as exc:
-        log.warning("web_ingest: scrape failed for %s: %s", url, exc)
+        log.debug("web_ingest: scrape failed for %s: %s", url, exc)
         return WebIngestResult(url=url, title="", domain=_domain(url), skipped_reason="scrape_failed")
 
     if content is None:
-        log.warning("web_ingest: no content extracted from %s", url)
+        log.debug("web_ingest: no content extracted from %s", url)
         return WebIngestResult(url=url, title="", domain=_domain(url), skipped_reason="scrape_failed")
 
     title = content.title or url
