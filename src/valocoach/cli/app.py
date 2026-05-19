@@ -299,12 +299,29 @@ def ingest(
     show_stats: bool = typer.Option(
         False, "--stats", help="Show what's currently in the vector store."
     ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Re-ingest a YouTube video even if it is already stored (bypasses dedup check).",
+    ),
+    preview: bool = typer.Option(
+        False,
+        "--preview",
+        help="Analyse a YouTube video and show what would be ingested, without writing anything.",
+    ),
 ) -> None:
     """Populate the vector store (run once, then augmented by --url / --youtube / --corpus)."""
     from valocoach.cli.commands.ingest import run_ingest
 
     run_ingest(
-        url=url, youtube=youtube, corpus=corpus, seed=seed, clear=clear, show_stats=show_stats
+        url=url,
+        youtube=youtube,
+        corpus=corpus,
+        seed=seed,
+        clear=clear,
+        show_stats=show_stats,
+        force=force,
+        preview=preview,
     )
 
 

@@ -36,6 +36,10 @@ valocoach coach "we keep losing 8-12 on Ascent attack as Jett, they stack A"
   - [meta-refresh](#meta-refresh)
   - [agents-refresh](#agents-refresh)
   - [ingest](#ingest)
+  - [index](#index)
+  - [patch](#patch)
+  - [notes](#notes)
+  - [sessions](#sessions)
   - [config](#config)
 - [Shell completion](#shell-completion)
 - [Configuration file](#configuration-file)
@@ -296,10 +300,11 @@ valocoach stats
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--period`, `-p` | `30d` | Time window: `7d`, `30d`, `90d`, or `all` |
+| `--period`, `-p` | `90d` | Time window: `7d`, `30d`, `90d`, or `all` |
 | `--agent`, `-a` | all | Filter to one agent (e.g. `Jett`) |
 | `--map`, `-m` | all | Filter to one map (e.g. `Ascent`) |
 | `--result`, `-r` | both | `win` or `loss` only |
+| `--json` | off | Emit raw JSON instead of the rendered tables. Useful for scripting. |
 
 **Examples:**
 
@@ -371,6 +376,7 @@ valocoach profile
 | `--name`, `-n` | configured | Riot username (defaults to config value) |
 | `--tag`, `-t` | configured | Riot tag (must be paired with `--name`) |
 | `--limit`, `-l` | `20` | Number of recent matches to summarise |
+| `--json` | off | Emit raw profile JSON instead of the rendered panel. |
 
 **Examples:**
 
@@ -403,6 +409,7 @@ valocoach meta --map Ascent
 |------|---------|-------------|
 | `--agent`, `-a` | — | Show ability and meta info for one agent |
 | `--map`, `-m` | — | Show callouts and meta info for one map |
+| `--json` | off | Emit the raw `meta.json` contents (or the relevant slice) as JSON. |
 
 ---
 
@@ -423,6 +430,7 @@ valocoach meta-refresh
 |------|-------------|
 | `--force`, `-f` | Run the full sync even when no new patch is detected |
 | `--dry-run` | Simulate all steps but do not write `meta.json` or re-ingest |
+| `--watch` | Run continuously: check daily, run a full sync when a new patch is detected |
 | `--install-cron` | Add a daily crontab entry that runs `meta-refresh` automatically |
 | `--youtube`, `-y URL` | YouTube video ID/URL to ingest as supplemental context (repeatable) |
 
@@ -431,7 +439,8 @@ valocoach meta-refresh
 ```bash
 valocoach meta-refresh                                  # one-shot, only on new patch
 valocoach meta-refresh --force                          # force a full re-run
-valocoach meta-refresh --install-cron                   # schedule daily
+valocoach meta-refresh --watch                          # keep running, sync on each new patch
+valocoach meta-refresh --install-cron                   # schedule daily via crontab
 valocoach meta-refresh -y "https://youtu.be/VIDEO_ID"   # add a guide video
 ```
 
@@ -494,9 +503,32 @@ valocoach ingest [flags]
 | `--seed` | Embed the built-in JSON knowledge base (agents, maps, economy) |
 | `--corpus`, `-c` | Embed markdown files from `corpus/` (built by `scripts/build_corpus.py`) |
 | `--url`, `-u URL` | Scrape and embed a URL (patch notes, blog post, etc.) |
-| `--youtube`, `-y URL` | Fetch and embed a YouTube video transcript |
+| `--youtube`, `-y URL` | Fetch, classify, preview, and ingest a YouTube video transcript |
+| `--preview` | Analyse a YouTube video and show what would be ingested — no writes |
+| `--force` | Re-ingest a YouTube video even if already stored (bypasses dedup) |
 | `--clear` | Wipe the vector store before ingesting |
 | `--stats` | Show what is currently in the vector store |
+
+**YouTube ingest flow** — when `--youtube` is provided, the pipeline shows a summary before writing:
+
+```
+Video:    Sova Haven Lineups — Complete Guide
+Channel:  ProGuideChannel
+
+Chunks fetched:   42
+Chunks kept:      18  (lineup: 6 · regular: 12)
+Dropped:          24  (off-topic: 5 · low-relevance: 14 · no-embedding: 5)
+
+Lineup candidates — 6
+────────────────────────────────────────────
+  1.  03:20  Sova · Recon Bolt · Haven · A site  [pre-round info]
+             "stand here at the corner aim at the box..."
+  ...
+
+Ingest these 18 chunks? [y/N]
+```
+
+Use `--preview` to inspect a video without being prompted. Use `--force` to refresh a video already in the database.
 
 **Examples:**
 
@@ -507,8 +539,14 @@ valocoach ingest --seed
 # Ingest today's patch notes
 valocoach ingest --url "https://playvalorant.com/en-us/news/game-updates/valorant-patch-notes-9-04/"
 
-# Ingest a pro-play breakdown from YouTube
+# Preview what a YouTube video contains before committing
+valocoach ingest --youtube "https://www.youtube.com/watch?v=..." --preview
+
+# Ingest a pro-play / lineup guide from YouTube (shows summary + asks y/N)
 valocoach ingest --youtube "https://www.youtube.com/watch?v=..."
+
+# Re-ingest a video you already have (picks up metadata fixes)
+valocoach ingest --youtube "https://www.youtube.com/watch?v=..." --force
 
 # Check what's in the store
 valocoach ingest --stats
@@ -516,6 +554,80 @@ valocoach ingest --stats
 # Wipe and re-seed from scratch
 valocoach ingest --clear --seed
 ```
+
+---
+
+### index
+
+Embed static markdown corpus files from `corpus/` into the vector store. Shorthand for `ingest --corpus` without the other flags.
+
+```bash
+valocoach index
+```
+
+---
+
+### patch
+
+Show the latest patch version stored locally.
+
+```bash
+valocoach patch
+```
+
+Use `--check` to fetch the current version from the HenrikDev API and compare it against the locally stored value:
+
+```bash
+valocoach patch --check
+```
+
+`--check` requires `henrikdev_api_key` in config.
+
+---
+
+### notes
+
+Capture and track action items from coaching sessions.
+
+```bash
+valocoach notes list
+valocoach notes add "practice smoke timings on Ascent A"
+valocoach notes resolve 3
+```
+
+**Sub-commands:**
+
+| Sub-command | Description |
+|-------------|-------------|
+| `notes list` | Show all open (unresolved) coaching notes. |
+| `notes add <text>` | Create a new note. |
+| `notes resolve <id>` | Mark note `<id>` as resolved. |
+
+Notes are also accessible from `interactive` mode with the `/note <text>`, `/notes`, and `/resolve <id>` slash commands.
+
+---
+
+### sessions
+
+Manage saved conversation histories from `interactive` mode.
+
+```bash
+valocoach sessions list
+valocoach sessions close <id>
+```
+
+**Sub-commands:**
+
+| Sub-command | Description |
+|-------------|-------------|
+| `sessions list` | List saved sessions with date, turn count, and topic. |
+| `sessions close <id>` | Archive a session so it no longer appears in the list. |
+
+**Options for `sessions list`:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--limit`, `-l` | `20` | Number of recent sessions to show (newest first). |
 
 ---
 

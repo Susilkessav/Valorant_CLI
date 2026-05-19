@@ -230,7 +230,7 @@ async def run_meta_sync(
                         settings.data_dir,
                         video,
                         settings,
-                        force=False,
+                        force=force,
                         summarize=False,
                     )
                     total_chunks += n

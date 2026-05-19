@@ -420,96 +420,164 @@ class TestDoUrl:
 
 
 # ---------------------------------------------------------------------------
-# _do_youtube — fetch a YouTube transcript and ingest it
+# _do_youtube — analyse + preview + confirm + ingest
 # ---------------------------------------------------------------------------
 
+_ANALYZE_SRC = "valocoach.retrieval.youtube_ingest.analyze_youtube_video"
+_APPLY_SRC = "valocoach.retrieval.youtube_ingest.apply_youtube_ingest_plan"
+_TYPER_CONFIRM_SRC = "valocoach.cli.commands.ingest.typer.confirm"
 
-_INGEST_YOUTUBE_VIDEO_SRC = "valocoach.retrieval.youtube_ingest.ingest_youtube_video"
-_LOAD_SETTINGS_SRC = "valocoach.cli.commands.ingest.load_settings"
+
+def _make_plan(*, kept_count=4, lineup_count=1, youtube_count=3, skipped_reason=None):
+    from valocoach.retrieval.youtube_ingest import YouTubeIngestPlan
+
+    return YouTubeIngestPlan(
+        video_id="dQw4w9WgXcQ",
+        title="Test Sova Lineup Guide",
+        channel="ProGuide",
+        fetched_count=10,
+        kept_count=kept_count,
+        lineup_count=lineup_count,
+        youtube_count=youtube_count,
+        skipped_reason=skipped_reason,
+        dropped_counts={"off_topic": 2, "low_score": 4},
+    )
 
 
 class TestDoYoutube:
-    """Tests for _do_youtube — now routes through the Phase D pipeline
-    (ingest_youtube_video) rather than the legacy fetch_transcript path."""
+    """Tests for _do_youtube — analyse → preview → confirm → apply pipeline."""
 
     def test_success_exits_cleanly(self, tmp_path: Path):
         from valocoach.cli.commands.ingest import _do_youtube
 
         with (
-            patch(_LOAD_SETTINGS_SRC, return_value=MagicMock(data_dir=tmp_path)),
-            patch(_INGEST_YOUTUBE_VIDEO_SRC, return_value=4),
+            patch(_ANALYZE_SRC, return_value=_make_plan()),
+            patch(_APPLY_SRC, return_value=4),
+            patch(_TYPER_CONFIRM_SRC, return_value=True),
         ):
-            _do_youtube(tmp_path, "dQw4w9WgXcQ")
+            _do_youtube(tmp_path, "dQw4w9WgXcQ", settings=MagicMock())
 
-    def test_success_calls_ingest_youtube_video(self, tmp_path: Path):
-        """_do_youtube must call ingest_youtube_video, not the legacy fetch_transcript."""
+    def test_success_calls_apply_after_confirm(self, tmp_path: Path):
+        """Confirming ingest must call apply_youtube_ingest_plan."""
         from valocoach.cli.commands.ingest import _do_youtube
 
-        calls = []
+        apply_calls = []
 
-        def capture(data_dir, url, settings, **kw):
-            calls.append({"data_dir": data_dir, "url": url})
+        def capture_apply(plan, data_dir, settings):
+            apply_calls.append({"plan": plan, "data_dir": data_dir})
             return 4
 
         with (
-            patch(_LOAD_SETTINGS_SRC, return_value=MagicMock(data_dir=tmp_path)),
-            patch(_INGEST_YOUTUBE_VIDEO_SRC, side_effect=capture),
+            patch(_ANALYZE_SRC, return_value=_make_plan()),
+            patch(_APPLY_SRC, side_effect=capture_apply),
+            patch(_TYPER_CONFIRM_SRC, return_value=True),
         ):
-            _do_youtube(tmp_path, "dQw4w9WgXcQ")
+            _do_youtube(tmp_path, "dQw4w9WgXcQ", settings=MagicMock())
 
-        assert len(calls) == 1
-        assert calls[0]["url"] == "dQw4w9WgXcQ"
+        assert len(apply_calls) == 1
+        assert apply_calls[0]["data_dir"] == tmp_path
 
-    def test_fetch_failure_raises_exit_1(self, tmp_path: Path):
+    def test_decline_does_not_call_apply(self, tmp_path: Path):
+        """Declining the confirmation prompt must not write anything."""
+        from valocoach.cli.commands.ingest import _do_youtube
+
+        with (
+            patch(_ANALYZE_SRC, return_value=_make_plan()),
+            patch(_APPLY_SRC) as mock_apply,
+            patch(_TYPER_CONFIRM_SRC, return_value=False),
+        ):
+            _do_youtube(tmp_path, "dQw4w9WgXcQ", settings=MagicMock())
+
+        mock_apply.assert_not_called()
+
+    def test_analyze_failure_raises_exit_1(self, tmp_path: Path):
         import click
 
         from valocoach.cli.commands.ingest import _do_youtube
 
         with (
-            patch(_LOAD_SETTINGS_SRC, return_value=MagicMock(data_dir=tmp_path)),
-            patch(_INGEST_YOUTUBE_VIDEO_SRC, side_effect=RuntimeError("network error")),
+            patch(_ANALYZE_SRC, side_effect=RuntimeError("network error")),
             pytest.raises(click.exceptions.Exit) as exc_info,
         ):
-            _do_youtube(tmp_path, "dQw4w9WgXcQ")
+            _do_youtube(tmp_path, "dQw4w9WgXcQ", settings=MagicMock())
 
         assert exc_info.value.exit_code == 1
 
-    def test_ingest_error_raises_exit_1(self, tmp_path: Path):
+    def test_apply_failure_raises_exit_1(self, tmp_path: Path):
         import click
 
         from valocoach.cli.commands.ingest import _do_youtube
 
         with (
-            patch(_LOAD_SETTINGS_SRC, return_value=MagicMock(data_dir=tmp_path)),
-            patch(_INGEST_YOUTUBE_VIDEO_SRC, side_effect=RuntimeError("embed failed")),
+            patch(_ANALYZE_SRC, return_value=_make_plan()),
+            patch(_APPLY_SRC, side_effect=RuntimeError("embed failed")),
+            patch(_TYPER_CONFIRM_SRC, return_value=True),
             pytest.raises(click.exceptions.Exit) as exc_info,
         ):
-            _do_youtube(tmp_path, "dQw4w9WgXcQ")
+            _do_youtube(tmp_path, "dQw4w9WgXcQ", settings=MagicMock())
 
         assert exc_info.value.exit_code == 1
 
-    def test_zero_chunks_does_not_raise(self, tmp_path: Path):
-        """0 chunks (duplicate/all filtered) should not raise — just print a message."""
+    def test_already_ingested_does_not_call_apply(self, tmp_path: Path):
+        """Video already in DB → display message, do not prompt, do not apply."""
         from valocoach.cli.commands.ingest import _do_youtube
 
         with (
-            patch(_LOAD_SETTINGS_SRC, return_value=MagicMock(data_dir=tmp_path)),
-            patch(_INGEST_YOUTUBE_VIDEO_SRC, return_value=0),
+            patch(_ANALYZE_SRC, return_value=_make_plan(skipped_reason="already_ingested", kept_count=0)),
+            patch(_APPLY_SRC) as mock_apply,
+            patch(_TYPER_CONFIRM_SRC) as mock_confirm,
         ):
-            # Must not raise
-            _do_youtube(tmp_path, "dQw4w9WgXcQ")
+            _do_youtube(tmp_path, "dQw4w9WgXcQ", settings=MagicMock())
 
-    def test_ingest_called_with_live_ttl_metadata(self, tmp_path: Path):
-        """Retained for API-compat: verifies ingest_youtube_video is called (no ttl kwarg needed)."""
+        mock_apply.assert_not_called()
+        mock_confirm.assert_not_called()
+
+    def test_zero_chunks_does_not_prompt_or_apply(self, tmp_path: Path):
+        """All chunks filtered → no prompt, no apply."""
         from valocoach.cli.commands.ingest import _do_youtube
 
         with (
-            patch(_LOAD_SETTINGS_SRC, return_value=MagicMock(data_dir=tmp_path)),
-            patch(_INGEST_YOUTUBE_VIDEO_SRC, return_value=3) as mock_ingest,
+            patch(_ANALYZE_SRC, return_value=_make_plan(kept_count=0, lineup_count=0, youtube_count=0)),
+            patch(_APPLY_SRC) as mock_apply,
+            patch(_TYPER_CONFIRM_SRC) as mock_confirm,
         ):
-            _do_youtube(tmp_path, "dQw4w9WgXcQ")
+            _do_youtube(tmp_path, "dQw4w9WgXcQ", settings=MagicMock())
 
-        mock_ingest.assert_called_once()
+        mock_apply.assert_not_called()
+        mock_confirm.assert_not_called()
+
+    def test_preview_skips_confirm_and_apply(self, tmp_path: Path):
+        """--preview must show the plan but not prompt and not write."""
+        from valocoach.cli.commands.ingest import _do_youtube
+
+        with (
+            patch(_ANALYZE_SRC, return_value=_make_plan()),
+            patch(_APPLY_SRC) as mock_apply,
+            patch(_TYPER_CONFIRM_SRC) as mock_confirm,
+        ):
+            _do_youtube(tmp_path, "dQw4w9WgXcQ", settings=MagicMock(), preview=True)
+
+        mock_apply.assert_not_called()
+        mock_confirm.assert_not_called()
+
+    def test_force_passed_to_analyze(self, tmp_path: Path):
+        """--force must be forwarded to analyze_youtube_video."""
+        from valocoach.cli.commands.ingest import _do_youtube
+
+        analyze_calls = []
+
+        def capture_analyze(data_dir, url, settings, *, force=False):
+            analyze_calls.append({"force": force})
+            return _make_plan()
+
+        with (
+            patch(_ANALYZE_SRC, side_effect=capture_analyze),
+            patch(_APPLY_SRC, return_value=4),
+            patch(_TYPER_CONFIRM_SRC, return_value=True),
+        ):
+            _do_youtube(tmp_path, "dQw4w9WgXcQ", settings=MagicMock(), force=True)
+
+        assert analyze_calls[0]["force"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -575,20 +643,12 @@ class TestRunIngestBranches:
             )
 
     def test_youtube_flag_calls_do_youtube(self, tmp_path: Path):
-        """youtube='dQw4w...' → _do_youtube(data_dir, youtube) is called (line 66)."""
-        from valocoach.retrieval.scrapers import ScrapedContent
-
-        fake_content = ScrapedContent(
-            url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-            title="Best Valorant Tips",
-            text="Great tips for playing Valorant.",
-            fetched_at="2026-01-01T00:00:00",
-            source="youtube",
-        )
+        """youtube='dQw4w...' → _do_youtube is called and analyse+apply run."""
         with (
             patch(_LOAD_SETTINGS, return_value=self._fake_settings(tmp_path)),
-            patch(_FETCH_TRANSCRIPT_SRC, return_value=fake_content),
-            patch(_INGEST_TEXT_SRC, return_value=3),
+            patch(_ANALYZE_SRC, return_value=_make_plan()),
+            patch(_APPLY_SRC, return_value=3),
+            patch(_TYPER_CONFIRM_SRC, return_value=True),
         ):
             from valocoach.cli.commands.ingest import run_ingest
 
