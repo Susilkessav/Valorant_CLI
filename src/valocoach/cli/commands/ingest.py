@@ -80,7 +80,7 @@ def run_ingest(
             _do_corpus(data_dir)
 
         if url:
-            _do_url(data_dir, url)
+            _do_url(data_dir, url, settings=settings)
 
         if all_youtube:
             _do_youtube_batch(all_youtube, data_dir, settings=settings, force=force, preview=preview)
@@ -126,27 +126,96 @@ def _do_seed(data_dir: Path) -> None:
         display.console.print(f"[muted]Lineup seed skipped: {exc}[/muted]")
 
 
-def _do_url(data_dir: Path, url: str) -> None:
-    from valocoach.retrieval.ingester import ingest_text
-    from valocoach.retrieval.scrapers.web import scrape_url
+def _do_url(data_dir: Path, url: str, *, settings: object) -> None:
+    from valocoach.retrieval.web_ingest import WebIngestResult, ingest_web_url
 
-    with display.console.status(f"[info]Scraping {url} …[/info]"):
-        content = scrape_url(url, source="patch_note")
+    with display.console.status(f"[info]Scraping + classifying {url} …[/info]"):
+        try:
+            result: WebIngestResult = ingest_web_url(data_dir, url, settings)
+        except Exception as e:
+            display.error(f"URL ingest failed: {e}")
+            raise typer.Exit(1) from e
 
-    if content is None:
-        display.error(f"Could not extract content from {url}")
-        raise typer.Exit(1)
+    _print_web_result(result)
 
-    with display.console.status("[info]Embedding and indexing…[/info]"):
-        n = ingest_text(
-            data_dir,
-            content.text,
-            doc_type="patch_note",
-            name=content.title,
-            source=content.url,
-            extra_metadata={"fetched_at": content.fetched_at, "ttl_tier": "live"},
-        )
-    display.success(f"Ingested {n} chunk(s) from URL.")
+
+def _print_web_result(result: object) -> None:
+    """Display a summary of what web_ingest ingested from a URL."""
+    from valocoach.retrieval.web_ingest import WebIngestResult
+
+    assert isinstance(result, WebIngestResult)
+    c = display.console
+
+    if result.skipped_reason == "scrape_failed":
+        display.error(f"Could not extract content from {result.url}")
+        return
+
+    if result.skipped_reason == "no_chunks":
+        display.warn(f"No usable content found at {result.url}")
+        return
+
+    # ── Header ────────────────────────────────────────────────────────────
+    c.print(f"[bold]{result.title}[/bold]")
+    c.print(f"[stat.label]Source:[/stat.label]  {result.domain}")
+    c.print()
+
+    # ── Counts ────────────────────────────────────────────────────────────
+    c.print(f"[stat.label]Chunks fetched:[/stat.label]  [stat.value]{result.fetched_count}[/stat.value]")
+
+    kept_parts = []
+    if result.lineup_count:
+        kept_parts.append(f"lineup: {result.lineup_count}")
+    if result.web_count:
+        kept_parts.append(f"tactical: {result.web_count}")
+    kept_detail = f"  [muted]({' · '.join(kept_parts)})[/muted]" if kept_parts else ""
+    c.print(f"[stat.label]Chunks kept:[/stat.label]     [stat.value]{result.kept_count}[/stat.value]{kept_detail}")
+
+    if result.dropped_counts:
+        total_dropped = sum(result.dropped_counts.values())
+        drop_parts = []
+        if result.dropped_counts.get("off_topic"):
+            drop_parts.append(f"off-topic: {result.dropped_counts['off_topic']}")
+        if result.dropped_counts.get("low_score"):
+            drop_parts.append(f"low-relevance: {result.dropped_counts['low_score']}")
+        c.print(f"[stat.label]Dropped:[/stat.label]         [muted]{total_dropped}  ({' · '.join(drop_parts)})[/muted]")
+
+    # ── Lineup entries extracted ───────────────────────────────────────────
+    lineup_chunks = [
+        r for r in result.chunks
+        if r["category"] == "lineups" and not r["drop_reason"]
+    ]
+    if lineup_chunks:
+        c.print()
+        c.print(f"[val.red]Lineup entries extracted[/val.red] — {len(lineup_chunks)}")
+        c.print("[muted]" + "─" * 44 + "[/muted]")
+        for i, rec in enumerate(lineup_chunks, 1):
+            meta = rec.get("lineup_metadata") or {}
+            id_parts = []
+            if meta.get("agent"):
+                id_parts.append(meta["agent"])
+            if meta.get("ability"):
+                id_parts.append(meta["ability"])
+            if meta.get("map"):
+                id_parts.append(meta["map"])
+            if meta.get("site"):
+                id_parts.append(f"{meta['site']} site")
+            label = " · ".join(id_parts) if id_parts else "[muted]metadata incomplete[/muted]"
+            purpose = meta.get("purpose", "")
+            purpose_str = f"  [muted][{purpose}][/muted]" if purpose else ""
+            snippet = rec["text"][:110].replace("\n", " ").strip()
+            if len(rec["text"]) > 110:
+                snippet += "…"
+            c.print(f"  [stat.value]{i}.[/stat.value]  {label}{purpose_str}")
+            c.print(f'       [muted]"{snippet}"[/muted]')
+            c.print()
+
+    if result.kept_count:
+        msg = f"Ingested {result.kept_count} chunk(s) from [bold]{result.title}[/bold]"
+        if result.lineup_count:
+            msg += f" — {result.lineup_count} lineup entries now searchable via [bold]valocoach lineup[/bold]"
+        display.success(msg)
+    else:
+        display.warn("No relevant chunks found — nothing written.")
 
 
 def _do_corpus(data_dir: Path, corpus_root: Path | None = None) -> None:

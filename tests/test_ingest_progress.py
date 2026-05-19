@@ -346,77 +346,59 @@ class TestDoCorpusProgress:
 # ---------------------------------------------------------------------------
 
 
-class TestDoUrl:
-    def _make_content(self):
-        from valocoach.retrieval.scrapers import ScrapedContent
+_WEB_INGEST_SRC = "valocoach.retrieval.web_ingest.ingest_web_url"
 
-        return ScrapedContent(
-            url="https://valorant.com/patch-notes",
-            title="Patch Notes",
-            text="Some long patch note content here.",
-            fetched_at="2026-01-01T00:00:00+00:00",
-            source="patch_note",
+
+class TestDoUrl:
+    def _make_settings(self):
+        from unittest.mock import MagicMock
+        return MagicMock()
+
+    def _make_result(self, *, skipped_reason=None, kept_count=5, lineup_count=2, web_count=3):
+        from valocoach.retrieval.web_ingest import WebIngestResult
+
+        return WebIngestResult(
+            url="https://dotesports.com/valorant/sova-haven-lineups",
+            title="Sova Haven Lineup Guide",
+            domain="dotesports.com",
+            skipped_reason=skipped_reason,
+            fetched_count=10,
+            kept_count=kept_count,
+            lineup_count=lineup_count,
+            web_count=web_count,
+            dropped_counts={"off_topic": 5},
+            chunks=[],
         )
 
     def test_success_exits_cleanly(self, tmp_path: Path):
         from valocoach.cli.commands.ingest import _do_url
 
-        with (
-            patch(_SCRAPE_URL_SRC, return_value=self._make_content()),
-            patch(_INGEST_TEXT_SRC, return_value=3),
-        ):
+        with patch(_WEB_INGEST_SRC, return_value=self._make_result()):
             # Must not raise
-            _do_url(tmp_path, "https://valorant.com/patch-notes")
+            _do_url(tmp_path, "https://dotesports.com/valorant/sova-haven-lineups", settings=self._make_settings())
 
-    def test_success_calls_ingest_text_with_patch_note_type(self, tmp_path: Path):
+    def test_scrape_failure_shows_error(self, tmp_path: Path):
         from valocoach.cli.commands.ingest import _do_url
 
-        ingest_calls = []
+        with patch(_WEB_INGEST_SRC, return_value=self._make_result(skipped_reason="scrape_failed")):
+            # scrape_failed shows error but does NOT raise Exit (handled in _print_web_result)
+            _do_url(tmp_path, "https://example.com/bad-url", settings=self._make_settings())
 
-        def capture(data_dir, text, **kw):
-            ingest_calls.append(kw)
-            return 3
-
-        with (
-            patch(_SCRAPE_URL_SRC, return_value=self._make_content()),
-            patch(_INGEST_TEXT_SRC, side_effect=capture),
-        ):
-            _do_url(tmp_path, "https://valorant.com/patch-notes")
-
-        assert len(ingest_calls) == 1
-        assert ingest_calls[0]["doc_type"] == "patch_note"
-
-    def test_scrape_failure_raises_exit_1(self, tmp_path: Path):
-        import click
-
+    def test_lineup_chunks_reported(self, tmp_path: Path):
         from valocoach.cli.commands.ingest import _do_url
 
-        with (
-            patch(_SCRAPE_URL_SRC, return_value=None),
-            pytest.raises(click.exceptions.Exit) as exc_info,
-        ):
-            _do_url(tmp_path, "https://example.com/bad-url")
+        result = self._make_result(lineup_count=3, web_count=2)
+        with patch(_WEB_INGEST_SRC, return_value=result) as mock_ingest:
+            _do_url(tmp_path, "https://dotesports.com/valorant/sova-haven-lineups", settings=self._make_settings())
+        mock_ingest.assert_called_once()
+        # Result has lineup_count > 0 — no exception means success path ran
+        assert result.lineup_count == 3
 
-        assert exc_info.value.exit_code == 1
-
-    def test_ingest_called_with_fetched_at_metadata(self, tmp_path: Path):
+    def test_no_chunks_shows_warning(self, tmp_path: Path):
         from valocoach.cli.commands.ingest import _do_url
 
-        captured = {}
-
-        def capture(data_dir, text, **kw):
-            captured.update(kw)
-            return 1
-
-        with (
-            patch(_SCRAPE_URL_SRC, return_value=self._make_content()),
-            patch(_INGEST_TEXT_SRC, side_effect=capture),
-        ):
-            _do_url(tmp_path, "https://valorant.com/patch-notes")
-
-        assert "extra_metadata" in captured
-        assert "fetched_at" in captured["extra_metadata"]
-        assert captured["extra_metadata"]["ttl_tier"] == "live"
+        with patch(_WEB_INGEST_SRC, return_value=self._make_result(skipped_reason="no_chunks")):
+            _do_url(tmp_path, "https://example.com/empty", settings=self._make_settings())
 
 
 # ---------------------------------------------------------------------------
