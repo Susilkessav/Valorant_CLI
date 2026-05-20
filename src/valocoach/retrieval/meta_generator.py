@@ -306,10 +306,11 @@ def generate_meta_update(
     """
     from valocoach.llm.provider import stream_completion
 
-    # Truncate inputs so we stay within the model's context window.
-    # 6 000 chars ≈ ~1 500 tokens each; the system prompt is ~400 tokens.
-    notes_snippet = (patch_notes_text or "No patch notes available.")[:6_000]
-    stats_snippet = (stats_text or "No stats data available.")[:6_000]
+    # Truncate inputs to stay well within typical local-model context budgets.
+    # ~3 000 chars ≈ 750 tokens each; system prompt ≈ 500 tokens; leaves
+    # ~14 000 tokens of headroom for the response in a 16 384-token window.
+    notes_snippet = (patch_notes_text or "No patch notes available.")[:3_000]
+    stats_snippet = (stats_text or "No stats data available.")[:3_000]
 
     user_message = (
         f"CURRENT PATCH: {patch_version}\n\n"
@@ -331,6 +332,13 @@ def generate_meta_update(
             settings,
             system_prompt=_SYSTEM_PROMPT,
             user_message=user_message,
+            # Meta generation needs a large output — the full agent+map JSON
+            # for 28 agents easily exceeds the default 3 000-token cap.
+            max_tokens=6_000,
+            # Tell Ollama to use a 16 384-token context window so the input
+            # prompt (system + notes + stats ≈ 2 000 tokens) doesn't crowd
+            # out the model's output budget.
+            num_ctx=16_384,
         ):
             tokens.append(token)
     except Exception as exc:
@@ -339,6 +347,15 @@ def generate_meta_update(
 
     raw = "".join(tokens)
     log.debug("LLM raw output: %d chars", len(raw))
+
+    if not raw.strip():
+        log.error(
+            "LLM returned an empty response for meta generation "
+            "(model=%s) — context window may be too small or the model "
+            "timed out.  Keeping existing meta.json unchanged.",
+            settings.ollama_model,
+        )
+        return None
 
     # Try to extract and parse JSON.
     cleaned = _strip_fences(raw)
