@@ -219,6 +219,56 @@ def _compute_tiers(agent_meta_raw: dict, existing_agent_meta: dict) -> tuple[dic
     return tier_list, formatted
 
 
+def _coerce_agent_meta(raw: object) -> dict:
+    """Normalise LLM agent_meta to ``{AgentName: {...}}`` regardless of output format.
+
+    The LLM occasionally returns a list of objects instead of a keyed dict,
+    e.g. ``[{"name": "Sova", "pick_rate_pct": 32.0, ...}, ...]``.
+    We detect this and re-key by the name/agent field so the rest of the
+    pipeline always receives a plain dict.
+    """
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, list):
+        coerced: dict = {}
+        for i, item in enumerate(raw):
+            if not isinstance(item, dict):
+                continue
+            key = (
+                item.get("name")
+                or item.get("agent")
+                or item.get("agent_name")
+                or str(i)
+            )
+            entry = {k: v for k, v in item.items() if k not in ("name", "agent", "agent_name")}
+            coerced[str(key)] = entry
+        log.warning(
+            "LLM returned agent_meta as a list (%d entries) — coerced to dict", len(raw)
+        )
+        return coerced
+    log.warning("LLM returned agent_meta of unexpected type %s — ignoring", type(raw).__name__)
+    return {}
+
+
+def _coerce_map_meta(raw: object) -> dict:
+    """Normalise LLM map_meta to ``{MapName: {...}}`` regardless of output format."""
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, list):
+        coerced: dict = {}
+        for i, item in enumerate(raw):
+            if not isinstance(item, dict):
+                continue
+            key = item.get("map") or item.get("name") or item.get("map_name") or str(i)
+            entry = {k: v for k, v in item.items() if k not in ("map", "name", "map_name")}
+            coerced[str(key)] = entry
+        log.warning(
+            "LLM returned map_meta as a list (%d entries) — coerced to dict", len(raw)
+        )
+        return coerced
+    return {}
+
+
 def _validate(data: dict, existing: dict) -> dict:
     """Merge LLM output with existing meta, computing deterministic tiers (C2).
 
@@ -228,7 +278,8 @@ def _validate(data: dict, existing: dict) -> dict:
     back to existing tier_list so old responses never corrupt the file.
     """
     existing_agent_meta = existing.get("agent_meta", {})
-    raw_agent_meta = data.get("agent_meta", {})
+    # Normalise before touching .values() — LLM sometimes returns a list
+    raw_agent_meta = _coerce_agent_meta(data.get("agent_meta", {}))
 
     if raw_agent_meta:
         # Detect whether ANY agent has numeric rate data.
@@ -268,10 +319,11 @@ def _validate(data: dict, existing: dict) -> dict:
         if tier not in tier_list:
             tier_list[tier] = existing.get("tier_list", {}).get(tier, [])
 
+    raw_map_meta = _coerce_map_meta(data.get("map_meta"))
     return {
         "tier_list": tier_list,
         "agent_meta": agent_meta,
-        "map_meta": data.get("map_meta") or existing.get("map_meta", {}),
+        "map_meta": raw_map_meta or existing.get("map_meta", {}),
     }
 
 
