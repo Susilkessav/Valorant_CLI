@@ -466,7 +466,6 @@ def run_interactive(
                 response = run_coach(
                     situation=user_input,
                     conversation_history=prior_history,
-                    no_elicit=True,       # REPL uses slash commands for context
                     match_context=match_ctx,
                 )
             except Exception as exc:

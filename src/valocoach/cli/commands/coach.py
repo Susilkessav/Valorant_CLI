@@ -229,11 +229,25 @@ def run_coach(
 
     parsed, agent, map_, side = _resolve_fields(situation, agent, map_, side)
 
+    # Classify intent BEFORE elicitation so we only ask relevant questions.
+    intent = force_intent if force_intent is not None else classify_intent(parsed, situation)
+
     if not no_elicit:
         from valocoach.coach.elicitation import run_elicitation, should_elicit
 
-        if should_elicit(parsed, situation):
-            parsed, agent, map_, side = run_elicitation(parsed, agent, map_, side)
+        if should_elicit(parsed, situation, intent):
+            parsed, agent, map_, side = run_elicitation(
+                parsed, agent, map_, side, intent=intent
+            )
+            # Persist elicited values into match_context so the REPL doesn't
+            # re-ask the same fields on the next turn.
+            if match_context is not None:
+                if agent and not match_context.agent:
+                    match_context.agent = agent
+                if map_ and not match_context.map:
+                    match_context.map = map_
+                if side and not match_context.side:
+                    match_context.side = side
 
     # Merge persistent match context — per-turn values take precedence
     match_context_block: str | None = None
@@ -241,8 +255,6 @@ def run_coach(
     if match_context is not None and not match_context.is_empty:
         agent, map_, side, extra_enemies = match_context.resolve_coach_kwargs(agent, map_, side)
         match_context_block = match_context.to_context_block()
-
-    intent = force_intent if force_intent is not None else classify_intent(parsed, situation)
     system_prompt_base = PROMPT_TEMPLATES[intent]
     panel_title = PANEL_TITLES[intent]
 
