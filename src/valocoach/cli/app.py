@@ -57,16 +57,19 @@ def main(
         display.console.print("  [info]valocoach config init[/info]    [muted]Set up your Riot ID and API key[/muted]")
         display.console.print("  [info]valocoach sync[/info]           [muted]Pull your match history[/muted]")
         display.console.print("  [info]valocoach stats[/info]          [muted]View your performance dashboard[/muted]")
-        display.console.print("  [info]valocoach coach[/info] [muted]\"...\"    Get tactical advice[/muted]")
+        display.console.print("  [info]valocoach coach[/info]          [muted]Start an interactive coaching session[/muted]")
+        display.console.print('  [info]valocoach coach[/info] [muted]"..."    One-shot advice for a specific situation[/muted]')
         display.console.print("  [info]valocoach post-game[/info]      [muted]Debrief your last match[/muted]")
-        display.console.print("  [info]valocoach interactive[/info]    [muted]Start a coaching session[/muted]")
         display.console.print()
         display.console.print("[muted]Run valocoach --help for all commands.[/muted]")
 
 
 @app.command(rich_help_panel="Coaching")
 def coach(
-    situation: str = typer.Argument(..., help="Describe the match situation"),
+    situation: str | None = typer.Argument(
+        None,
+        help="Describe the match situation.  Omit to open the interactive REPL.",
+    ),
     agent: str | None = typer.Option(None, "--agent", "-a"),
     map_: str | None = typer.Option(None, "--map", "-m", help="Map name"),
     side: str | None = typer.Option(None, "--side", "-s", help="attack or defense"),
@@ -78,13 +81,32 @@ def coach(
     no_elicit: bool = typer.Option(
         False,
         "--no-elicit",
-        help="Skip the interactive context questions and go straight to coaching.",
+        help="Skip the context questions and go straight to coaching.",
     ),
 ) -> None:
-    """Get tactical coaching for a match situation."""
-    from valocoach.cli.commands.coach import run_coach
+    """Get tactical coaching.
+
+    With a situation argument:  one-shot advice for a specific scenario.
+    Without arguments (on a terminal):  opens the interactive coaching REPL.
+    """
+    import sys
 
     _require_llm()
+
+    if situation is None:
+        # No situation provided — launch the REPL on TTY, show help on pipes.
+        if sys.stdin.isatty():
+            from valocoach.cli.commands.interactive import run_interactive
+            run_interactive()
+        else:
+            display.console.print(
+                "[muted]Usage: valocoach coach \"<situation>\"[/muted]\n"
+                "[muted]Example: valocoach coach \"1v2 post-plant B site Haven attack\"[/muted]"
+            )
+        return
+
+    from valocoach.cli.commands.coach import run_coach
+
     run_coach(
         situation=situation,
         agent=agent,
@@ -495,14 +517,6 @@ def post_game(
     from valocoach.cli.commands.post_game import run_post_game
 
     run_post_game(match_id=match_id, no_notes=no_notes, no_repl=no_repl)
-
-
-@app.command(rich_help_panel="Coaching")
-def interactive() -> None:
-    """Start an interactive multi-turn coaching session (REPL)."""
-    from valocoach.cli.commands.interactive import run_interactive
-
-    run_interactive()
 
 
 notes_app = typer.Typer(help="Manage coaching notes (list, add, resolve).")
