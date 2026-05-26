@@ -50,18 +50,18 @@ def main(
     ),
 ) -> None:
     """Valorant tactical coaching CLI."""
+    import sys
+
     if ctx.invoked_subcommand is None:
-        display.render_banner()
-        display.console.print()
-        display.console.print("[heading]Quick start:[/heading]")
-        display.console.print("  [info]valocoach config init[/info]    [muted]Set up your Riot ID and API key[/muted]")
-        display.console.print("  [info]valocoach sync[/info]           [muted]Pull your match history[/muted]")
-        display.console.print("  [info]valocoach stats[/info]          [muted]View your performance dashboard[/muted]")
-        display.console.print("  [info]valocoach coach[/info]          [muted]Start an interactive coaching session[/muted]")
-        display.console.print('  [info]valocoach coach[/info] [muted]"..."    One-shot advice for a specific situation[/muted]')
-        display.console.print("  [info]valocoach post-game[/info]      [muted]Debrief your last match[/muted]")
-        display.console.print()
-        display.console.print("[muted]Run valocoach --help for all commands.[/muted]")
+        if sys.stdin.isatty():
+            from valocoach.cli.hub import show_hub
+            show_hub()
+        else:
+            # Non-interactive context (pipe/CI) — emit plain help text
+            display.render_banner()
+            display.console.print()
+            display.console.print("[muted]Usage: valocoach <command> [args][/muted]")
+            display.console.print("[muted]Run valocoach --help for all commands.[/muted]")
 
 
 @app.command(rich_help_panel="Coaching")
