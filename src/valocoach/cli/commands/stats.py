@@ -44,8 +44,22 @@ def run_stats(
     period: str = "30d",
     result: str | None = None,
     console: Console | None = None,
+    json_output: bool = False,
 ) -> None:
     con = console or display.console
+
+    # Fire the patch-staleness warning at most once per process so users on
+    # the stats / profile flow are still told their meta data is stale,
+    # without spamming the warning on every command.  Suppress for
+    # ``--json`` so machine-readable output stays clean.
+    if not json_output:
+        try:
+            from valocoach.cli.commands.coach import warn_stale_meta_once
+            from valocoach.core.config import load_settings as _load
+
+            warn_stale_meta_once(_load())
+        except Exception:
+            pass
 
     won: bool | None
     if result is None:
@@ -100,11 +114,49 @@ def run_stats(
             + (f", result={result}" if result else "")
             + ")."
         )
+        # Helpful hint when the window itself is the likely cause — point at
+        # the obvious wider window before they go looking through --help.
+        if period != "all" and not agent and not map_ and not result:
+            display.console.print(
+                "[muted]Tip: try [info]--period 365d[/info] or "
+                "[info]--period all[/info] for a wider window.[/muted]"
+            )
         raise typer.Exit(0)
 
     overall = compute_player_stats(filtered)
     per_agent = compute_per_agent(filtered)
     per_map = compute_per_map(filtered)
+
+    if json_output:
+        import json
+        from dataclasses import asdict
+
+        def _stats_dict(s) -> dict:
+            return asdict(s)
+
+        payload = {
+            "player": {
+                "riot_name": player.riot_name,
+                "riot_tag": player.riot_tag,
+                "tier": player.current_tier_patched,
+                "region": player.region,
+            },
+            "filters": {
+                "period": period,
+                "agent": agent,
+                "map": map_,
+                "result": result,
+            },
+            "overall": _stats_dict(overall),
+            "by_agent": [
+                {"agent": a.agent, "stats": _stats_dict(a.stats)} for a in per_agent
+            ],
+            "by_map": [
+                {"map": m.map_name, "stats": _stats_dict(m.stats)} for m in per_map
+            ],
+        }
+        print(json.dumps(payload, indent=2, default=str))
+        return
 
     # Build subtitle from active filters
     filter_parts = [f"period={period}"]

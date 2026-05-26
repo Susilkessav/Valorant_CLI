@@ -18,6 +18,9 @@ def stream_completion(
     system_prompt: str,
     user_message: str,
     conversation_history: list[dict[str, str]] | None = None,
+    stop: list[str] | None = None,
+    max_tokens: int | None = None,
+    num_ctx: int | None = None,
 ) -> Iterator[str]:
     """Yield content tokens from the LLM as they stream in.
 
@@ -50,11 +53,18 @@ def stream_completion(
         "model": model,
         "messages": messages,
         "temperature": settings.llm_temperature,
-        "max_tokens": settings.llm_max_tokens,
+        "max_tokens": max_tokens if max_tokens is not None else settings.llm_max_tokens,
         "stream": True,
     }
     if is_ollama_model:
         completion_kwargs["api_base"] = settings.ollama_host
+        # num_ctx controls Ollama's KV-cache / context window.  The default
+        # (often 2048) is too small for large prompts like meta generation.
+        # Pass through when the caller explicitly requests a larger window.
+        if num_ctx is not None:
+            completion_kwargs["options"] = {"num_ctx": num_ctx}
+    if stop:
+        completion_kwargs["stop"] = stop
 
     response = litellm.completion(**completion_kwargs)
 

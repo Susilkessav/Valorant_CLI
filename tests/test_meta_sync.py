@@ -467,20 +467,19 @@ class TestRunMetaSync:
         assert any("Stats scrape error" in e for e in result.errors)
 
     async def test_youtube_fetch_transcript_returns_none_skips_ingest(self):
-        """When fetch_transcript returns None, the transcript is skipped (no ingest)."""
+        """When ingest_youtube_video returns 0 (no transcript / all filtered), chunks=0."""
         from valocoach.retrieval.meta_sync import run_meta_sync
 
         settings = _make_settings()
         check_mock = AsyncMock(return_value=("10.09", True))
 
-        ingest_text_mock = MagicMock(return_value=0)
+        ingest_mock = MagicMock(return_value=0)
 
         with (
             patch("valocoach.retrieval.patch_tracker.check_patch_update", check_mock),
             patch("valocoach.retrieval.scrapers.patch_notes.scrape_url", return_value=None),
             patch("valocoach.retrieval.scrapers.meta_stats.scrape_url", return_value=None),
-            patch("valocoach.retrieval.scrapers.youtube.fetch_transcript", return_value=None),
-            patch("valocoach.retrieval.ingester.ingest_text", ingest_text_mock),
+            patch("valocoach.retrieval.youtube_ingest.ingest_youtube_video", ingest_mock),
         ):
             result = await run_meta_sync(
                 settings,
@@ -488,8 +487,7 @@ class TestRunMetaSync:
                 youtube_videos=["https://youtube.com/watch?v=abc"],
             )
 
-        # transcript=None → ingest not called, chunks=0
-        ingest_text_mock.assert_not_called()
+        ingest_mock.assert_called_once()
         assert result.youtube_chunks_ingested == 0
 
     async def test_youtube_ingest_exception_recorded(self):

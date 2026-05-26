@@ -92,7 +92,7 @@ Commands are organized into four groups visible in `--help`:
 | **Coaching** | `coach`, `interactive`, `notes`, `sessions`, `lineup` |
 | **Performance** | `stats`, `profile`, `post-game` |
 | **Data** | `sync`, `ingest`, `index` |
-| **Game Info** | `meta`, `meta-refresh`, `patch` |
+| **Game Info** | `meta`, `meta-refresh`, `agents-refresh`, `patch` |
 
 ## Configuration
 
@@ -186,6 +186,45 @@ uv run valocoach coach "lost pistol and bonus, eco next, should I force on 3k?"
 uv run valocoach coach "Sage on Split defense, A site gets hit every round"
 uv run valocoach coach "best Jett dash angles on Ascent A site" --no-stats
 ```
+
+#### How meta questions are answered
+
+Asking the coach a meta question (e.g. `"what's the current meta"`, `"best agent
+this patch"`, anything that classifies as `meta` intent) takes a deterministic
+path that **does not call the LLM at all**:
+
+1. The CLI prints a **Meta — Current Tier List** frame built straight from
+   `agents.json` + `meta.json`: every agent's S/A/B/C tier, role, four real
+   ability names, and the meta-reasoning prose from `meta.json::agent_meta`.
+2. If you have synced match data, a second **Personalised Takeaway** frame
+   follows, computed deterministically from your local stats (top agent
+   pool with tier alignment, best/worst maps, biggest weakness, concrete
+   next step).
+
+Small open-weight models hallucinate ability names reliably enough that
+prompt engineering can't fully prevent it. Skipping the LLM for meta intent
+is the structural fix — every word in those panels comes from JSON files
+and your own DB.
+
+#### Ability fact-check panel
+
+For non-meta intents (tactical, post-game, clutch, agent-info, etc.) the
+LLM IS used. After the answer streams, a deterministic post-pass scans
+the output against `agents.json` and prints a categorised warning panel
+if it finds any of:
+
+- **Fabricated abilities** — names that don't exist in Valorant at all
+  (e.g. `Omen's Riftwalk`).
+- **Wrong-agent attributions** — a real ability assigned to the wrong
+  agent (e.g. `Fade's Paranoia` — Paranoia is Omen's).
+- **Weapons mis-cast as abilities** — `Fade's Ghost` (Ghost is a sidearm).
+- **Generic descriptors** — `Omen's Smoke`, `Jett's Dash` (not specific
+  ability names).
+
+The panel is informational. The coach answer itself isn't rewritten —
+streaming would break that — but you see exactly which claims the model
+got wrong so you can verify in-game. A clean coach turn produces no
+fact-check panel.
 
 ### Interactive mode
 
@@ -392,10 +431,11 @@ Options:
 
 | Option | Meaning |
 |---|---|
-| `--period`, `-p` | Time window: `7d`, `30d`, `90d`, or `all`. Default is `30d`. |
+| `--period`, `-p` | Time window: `7d`, `30d`, `90d`, or `all`. Default is `90d`. |
 | `--agent`, `-a` | Filter to a single agent. |
 | `--map`, `-m` | Filter to a single map. |
 | `--result`, `-r` | Filter by `win` or `loss`. Omit for both. |
+| `--json` | Emit raw JSON instead of the Rich-rendered tables. Useful for scripting. |
 
 Examples:
 
@@ -430,6 +470,7 @@ Options:
 | `--name`, `-n` | Riot username. Defaults to configured `riot_name`. |
 | `--tag`, `-t` | Riot tag. Must be paired with `--name`. |
 | `--limit`, `-l` | Number of recent matches to summarize. Default is `20`. |
+| `--json` | Emit raw profile JSON instead of the Rich-rendered panel. |
 
 Examples:
 
@@ -467,6 +508,7 @@ Options:
 |---|---|
 | `--agent`, `-a` | Show ability and meta info for one agent. |
 | `--map`, `-m` | Show callouts and meta info for one map. |
+| `--json` | Emit the raw `meta.json` contents (or the relevant agent/map slice) as JSON. |
 
 ### Meta refresh
 
@@ -500,6 +542,53 @@ uv run valocoach meta-refresh --install-cron
 uv run valocoach meta-refresh --youtube "https://www.youtube.com/watch?v=VIDEO_ID"
 ```
 
+### Agents refresh
+
+Use `agents-refresh` to keep `agents.json` in sync with Riot's current roster.
+Where `meta-refresh` updates tier placements and pick/win rates, this command
+covers the kit data — names, costs, descriptions, and roles for new agents.
+
+```bash
+uv run valocoach agents-refresh
+```
+
+It does three things:
+
+1. **Discover** — fetches the canonical roster from the Liquipedia
+   `Category:Agents` API and diffs it against your local `agents.json`.
+2. **Report tier-list gaps** — any agent present in `agents.json` but
+   missing from `meta.json::tier_list` (would render as "unranked /
+   niche this patch" in the Meta panel).
+3. **Optionally fill the gaps** automatically — see flags below.
+
+Options:
+
+| Option | Meaning |
+|---|---|
+| `--extract-kits` | Deterministically parse Liquipedia's `{{Infobox agent}}` + `{{AbilityCard}}` wikitext templates with regex (no LLM) and write the kit data straight to `agents.json`. |
+| `--auto-stub-meta` | Append C-tier placeholders to `meta.json` for known agents that are missing from the tier list. Re-run `meta-refresh --force` afterwards to replace placeholders with real Diamond+/VCT-driven tier data. |
+
+Examples:
+
+```bash
+# Just diff — print new agents and tier-list gaps, no writes
+uv run valocoach agents-refresh
+
+# Full automated import after a new agent drops
+uv run valocoach agents-refresh --extract-kits --auto-stub-meta
+
+# Then refresh tier data from scraped patch notes + ranked stats
+uv run valocoach meta-refresh --force
+```
+
+Why no LLM in the kit extractor? Liquipedia exposes structured wikitext
+templates with named fields (`name=`, `cost=`, `hotkey=`, `description=`).
+Regex-parsing those fields is deterministic — same input always produces
+the same output, no hallucinated ability names. If Liquipedia's template
+format ever drifts, the parser refuses to write a half-filled entry and
+falls back to printing a JSON skeleton + the wiki URL so you can fill
+manually.
+
 ### Ingest
 
 Use `ingest` to populate or inspect the vector store used for RAG retrieval.
@@ -515,9 +604,23 @@ Options:
 | `--seed` | Re-embed the built-in JSON knowledge base. |
 | `--corpus`, `-c` | Embed markdown files from `corpus/`. |
 | `--url`, `-u URL` | Scrape and ingest a URL. |
-| `--youtube`, `-y URL` | Fetch and ingest a YouTube transcript. |
+| `--youtube`, `-y URL` | Fetch, classify, and ingest a YouTube video transcript. |
+| `--preview` | Analyse a YouTube video and show what would be ingested without writing anything. |
+| `--force` | Re-ingest a YouTube video even if it is already stored (bypasses dedup check). |
 | `--clear` | Wipe the vector store. |
 | `--stats` | Show current vector store document counts. |
+
+#### YouTube ingest flow
+
+When `--youtube` is provided, the pipeline runs before writing anything:
+
+1. Fetches the transcript and chunks it into 2-minute windows.
+2. Classifies each chunk (lineups, map tactics, agent strategy, economy, etc.) via embedding similarity.
+3. For chunks classified as `lineups`, runs an LLM metadata extraction pass to fill agent / map / site fields.
+4. Displays a summary panel showing chunk counts, drop reasons, and lineup candidates with extracted metadata.
+5. Prompts **Ingest these N chunks? [y/N]** — type `y` to confirm, `N` to abort without writing.
+
+Use `--preview` to see the summary and exit without being prompted. Use `--force` if the video was already ingested and you want to refresh it.
 
 Examples:
 
@@ -525,7 +628,16 @@ Examples:
 uv run valocoach ingest --seed
 uv run valocoach ingest --corpus
 uv run valocoach ingest --url "https://playvalorant.com/en-us/news/game-updates/valorant-patch-notes-9-04/"
+
+# Preview what a video contains before committing
+uv run valocoach ingest --youtube "https://www.youtube.com/watch?v=VIDEO_ID" --preview
+
+# Full ingest with confirmation prompt
 uv run valocoach ingest --youtube "https://www.youtube.com/watch?v=VIDEO_ID"
+
+# Re-ingest a video you have already ingested (e.g. to pick up metadata fixes)
+uv run valocoach ingest --youtube "https://www.youtube.com/watch?v=VIDEO_ID" --force
+
 uv run valocoach ingest --stats
 uv run valocoach ingest --clear
 ```
@@ -579,6 +691,8 @@ uv run valocoach patch --check
 | Inspect Ascent callouts | `uv run valocoach meta --map Ascent` |
 | Update meta after patch | `uv run valocoach meta-refresh` |
 | Refresh patch info | `uv run valocoach patch --check` |
+| Find new agents on Liquipedia | `uv run valocoach agents-refresh` |
+| Auto-import new agent kits | `uv run valocoach agents-refresh --extract-kits --auto-stub-meta` |
 | Check vector store contents | `uv run valocoach ingest --stats` |
 | Reset vector store | `uv run valocoach ingest --clear` |
 | Re-seed knowledge after reset | `uv run valocoach ingest --seed` |
@@ -600,6 +714,12 @@ directory.
 
 When something goes wrong, the CLI shows a plain-language error with an actionable
 hint directly below it. The hint tells you exactly what to run next.
+
+For an architectural deep-dive on known design trade-offs and edge cases (e.g.
+why the meta panel skips the LLM, how the sanitizer categorises hallucinations,
+which review items were verified as false positives), see
+[REVIEW.md](REVIEW.md) — the full project audit produced during the
+deterministic-meta refactor.
 
 ### `Ollama is not reachable`
 

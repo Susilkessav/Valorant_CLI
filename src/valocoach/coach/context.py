@@ -77,7 +77,11 @@ def _detect_tilt(rows: list[MatchPlayer]) -> str | None:
         [r for r in rows if _row_started_at(r) >= cutoff],
         key=_row_started_at,
     )
-    if len(today_rows) < 6:
+    # Threshold lowered from 6 to 4 because most casual ranked sessions are
+    # 3–5 matches.  At ≥6 the detector basically never fired for non-pro
+    # play.  Four is the minimum that still gives a 2 / 2 split with
+    # meaningful per-half win-rate signal.
+    if len(today_rows) < 4:
         return None
 
     mid = len(today_rows) // 2

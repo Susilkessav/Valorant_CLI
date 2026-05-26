@@ -109,9 +109,20 @@ class ConversationMemory:
         oldest pair cannot be evicted cleanly (e.g. the first message is
         an assistant reply with no preceding user message), the oldest
         single message is dropped instead.
+
+        Maintains a running token tally so we don't recompute
+        ``token_count`` on every loop iteration — previously O(n²) on the
+        message list, now O(n).
         """
+        running_tokens = self.token_count
+
+        def _pop_front() -> None:
+            nonlocal running_tokens
+            popped = self._turns.pop(0)
+            running_tokens -= count_tokens(popped["content"])
+
         while self._turns and (
-            len(self._turns) > self._max_turns or self.token_count > self._max_tokens
+            len(self._turns) > self._max_turns or running_tokens > self._max_tokens
         ):
             # Try to drop a complete user+assistant exchange from the front.
             if (
@@ -119,8 +130,8 @@ class ConversationMemory:
                 and self._turns[0]["role"] == "user"
                 and self._turns[1]["role"] == "assistant"
             ):
-                self._turns.pop(0)
-                self._turns.pop(0)
+                _pop_front()
+                _pop_front()
             else:
                 # Partial exchange — drop just the oldest message.
-                self._turns.pop(0)
+                _pop_front()

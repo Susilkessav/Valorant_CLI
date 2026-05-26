@@ -87,10 +87,28 @@ async def upsert_player(
     Uses session.merge() — safe to call repeatedly; the second call updates
     rank/level without creating a duplicate row.
 
+    Wrapped in a SAVEPOINT + IntegrityError guard for concurrency safety:
+    if two simultaneous sync jobs hit the same puuid both can read NULL on
+    the SELECT phase and try to INSERT — the second INSERT fails with an
+    IntegrityError that we catch and translate into a merge-into-existing
+    by re-running ``session.merge`` on the now-present row.  Same pattern
+    as ``upsert_match_details`` below.
+
     Mapping from API shapes to the ORM row is handled by mapper.player_from_account_mmr.
     """
     player = player_from_account_mmr(account, mmr)
-    merged = await session.merge(player)
+    try:
+        async with session.begin_nested():  # SAVEPOINT
+            merged = await session.merge(player)
+    except IntegrityError:
+        # The row was inserted by a concurrent worker between our SELECT
+        # and INSERT.  Re-merge cleanly outside the failed savepoint.
+        logger.debug(
+            "upsert_player %s#%s lost a race — re-merging",
+            account.name,
+            account.tag,
+        )
+        merged = await session.merge(player)
     logger.debug(
         "upsert_player %s#%s tier=%s elo=%d",
         account.name,

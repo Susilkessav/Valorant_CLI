@@ -37,8 +37,9 @@ OVERTIME_ROUNDS_PER_HALF: Final[int] = 1
 """Each OT mini-half is one round; first to win both (or lead by 2) wins."""
 
 # Round index boundaries — used by side-assignment logic elsewhere.
-FIRST_HALF_END: Final[int] = ROUNDS_PER_HALF - 1  # 11  (0-indexed)
-SECOND_HALF_END: Final[int] = MAX_REGULATION_ROUNDS - 1  # 24  (0-indexed)
+# All round indices are 0-based: the first round is index 0.
+FIRST_HALF_END: Final[int] = ROUNDS_PER_HALF - 1  # 11 — first half is rounds 0..11 (12 rounds)
+SECOND_HALF_END: Final[int] = MAX_REGULATION_ROUNDS - 1  # 24 — regulation ends at round 24
 
 # ---------------------------------------------------------------------------
 # 2. ACS formula weights

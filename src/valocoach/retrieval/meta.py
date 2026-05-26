@@ -15,6 +15,19 @@ def _load() -> dict:
     if _cache is None:
         with open(_DATA_FILE) as f:
             _cache = json.load(f)
+        # ``meta_sync`` stamps ``sync_in_progress: true`` before writing the
+        # new tier list and clears it on successful re-ingest.  If we see
+        # the flag here, a previous sync crashed between the meta.json
+        # write and the vector-store re-ingest — the JSON is fresh but the
+        # RAG chunks are stale.  Warn once per cache-miss so the user
+        # knows to re-run ``valocoach meta-refresh --force``.
+        if _cache.get("sync_in_progress"):
+            log.warning(
+                "meta.json has sync_in_progress=True — the last "
+                "meta-refresh did not complete cleanly.  RAG chunks may "
+                "be stale relative to the tier list.  Re-run "
+                "`valocoach meta-refresh --force`."
+            )
     return _cache
 
 
@@ -49,11 +62,25 @@ def format_meta_context(
     meta = _load()
     lines: list[str] = [f"META (Patch {meta['patch']}, updated {meta['updated']})"]
 
+    # Annotate tier-list entries with each agent's role so small models can't
+    # silently re-classify them (e.g. writing "Breach (Controller)" when
+    # Breach is an Initiator).  Roles come from the agents.json knowledge
+    # base; if lookup fails for any reason we fall back to the bare name.
+    try:
+        from valocoach.retrieval.agents import get_agent
+
+        def _label(name: str) -> str:
+            agent = get_agent(name)
+            return f"{name} ({agent['role']})" if agent else name
+    except Exception:
+        def _label(name: str) -> str:
+            return name
+
     tier = meta.get("tier_list", {})
     for rank in ("S", "A", "B", "C"):
         agents = tier.get(rank, [])
         if agents:
-            lines.append(f"  {rank}-Tier: {', '.join(agents)}")
+            lines.append(f"  {rank}-Tier: {', '.join(_label(a) for a in agents)}")
 
     eco = meta.get("economy", {})
     lines.append(

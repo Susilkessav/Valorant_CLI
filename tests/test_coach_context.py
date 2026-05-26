@@ -271,6 +271,35 @@ def test_run_coach_injects_context_into_system_prompt() -> None:
     assert "Agent(s): Jett" in kwargs["user_message"]
 
 
+def test_run_coach_meta_intent_skips_llm_entirely() -> None:
+    """Regression guard for the deterministic meta panel architecture.
+
+    When the user asks a ``meta`` question, ``run_coach`` must NOT call
+    ``stream_completion`` — the whole answer is built from agents.json,
+    meta.json, and the local stats DB.  qwen3:8b/14b reliably hallucinated
+    abilities when given even 21 KB of grounded context, so the only safe
+    answer is "no LLM in the loop for this intent".  If a future refactor
+    re-introduces an LLM call for meta, this test fails immediately.
+    """
+    with (
+        patch("valocoach.cli.commands.coach.load_settings", return_value=_settings()),
+        patch("valocoach.cli.commands.coach.build_stats_context", return_value=None),
+        patch(
+            "valocoach.cli.commands.coach.stream_completion",
+            return_value=_stream(["nope"]),
+        ) as mock_stream,
+        patch("valocoach.cli.commands.coach.display.stream_to_panel"),
+        patch("valocoach.cli.commands.coach.display.console"),
+    ):
+        result = run_coach("what's the current meta?", with_stats=False)
+
+    assert result is None, "Meta intent should short-circuit and return None"
+    assert mock_stream.call_count == 0, (
+        "stream_completion was called on meta intent — the deterministic "
+        "panel path is broken. Check the early return in run_coach."
+    )
+
+
 def test_run_coach_skips_context_when_with_stats_false() -> None:
     """--no-stats means DON'T even call the stats builder. Faster + offline-safe.
     Grounded meta context is still injected (it comes from local JSON, not the DB)."""
@@ -947,7 +976,7 @@ def _run_coach_meta(situation: str = "what is the current meta tier list?", **kw
         ),
         patch("valocoach.cli.commands.coach.display.console") as mock_con,
     ):
-        mock_con.print = lambda msg, **_kw: console_prints.append(str(msg))
+        mock_con.print = lambda msg="", **_kw: console_prints.append(str(msg))
         response = run_coach(situation, with_stats=False, **kwargs)
 
     return console_prints, response
@@ -1035,8 +1064,11 @@ def test_staleness_warning_non_fatal_on_exception() -> None:
     ):
         result = run_coach("what's the current meta?", with_stats=False)
 
-    # Coach must still return a result despite the staleness error
-    assert result == "ok"
+    # Coach must still complete despite the staleness error.  Meta intent
+    # short-circuits the LLM (deterministic tier list + takeaway), so the
+    # return is None — what we're verifying is that the staleness exception
+    # didn't bubble out.
+    assert result is None
 
 
 def test_staleness_warning_shows_days_since_last_check() -> None:

@@ -41,7 +41,10 @@ from valocoach.stats import compute_per_agent
 from valocoach.stats.round_analyzer import analyze_rounds
 
 DEFAULT_LIMIT = 20
-TOP_AGENTS = 3
+# Top-agent row count.  Kept in sync with ``stats.TOP_N`` so the user sees
+# the same number of agents in ``profile`` and ``stats`` — previously
+# ``profile`` showed 3 and ``stats`` showed 5, a confusing drift.
+from valocoach.cli.commands.stats import TOP_N as TOP_AGENTS  # noqa: E402
 
 
 def _resolve_identity(
@@ -73,6 +76,7 @@ def run_profile(
     tag: str | None = None,
     limit: int = DEFAULT_LIMIT,
     console: Console | None = None,
+    json_output: bool = False,
 ) -> None:
     con = console or display.console
 
@@ -80,6 +84,17 @@ def run_profile(
         raise typer.BadParameter(f"--limit must be positive; got {limit}")
 
     settings = load_settings()
+
+    # One-shot staleness warning — see stats.run_stats for rationale.
+    # Suppressed for --json so machine-readable output stays clean.
+    if not json_output:
+        try:
+            from valocoach.cli.commands.coach import warn_stale_meta_once
+
+            warn_stale_meta_once(settings)
+        except Exception:
+            pass
+
     resolved_name, resolved_tag = _resolve_identity(
         name=name,
         tag=tag,
@@ -112,13 +127,42 @@ def run_profile(
 
     player, rows = data.player, data.rows
 
+    if json_output:
+        import json
+        from dataclasses import asdict
+
+        from valocoach.stats.calculator import compute_player_stats
+
+        overall = compute_player_stats(rows[:limit])
+        per_agent = compute_per_agent(rows[:limit])
+        payload = {
+            "player": {
+                "riot_name": player.riot_name,
+                "riot_tag": player.riot_tag,
+                "tier": player.current_tier_patched,
+                "region": player.region,
+                "peak_tier": getattr(player, "peak_tier_patched", None),
+                "elo": getattr(player, "elo", None),
+                "level": getattr(player, "level", None),
+            },
+            "summary": asdict(overall),
+            "top_agents": [
+                {"agent": a.agent, "stats": asdict(a.stats)} for a in per_agent[:TOP_AGENTS]
+            ],
+            "limit": limit,
+        }
+        print(json.dumps(payload, indent=2, default=str))
+        return
+
     with display.command_frame("Player Profile", subtitle=f"{resolved_name}#{resolved_tag}", con=con):
         # Identity panel
         render_identity_panel(con, player)
 
-        # Rank trend
+        # Rank trend — only render the section heading when there's enough
+        # history for ``render_rank_trend`` to actually draw a chart
+        # (≥ 2 MMR entries).  Otherwise we drew an empty frame header.
         mmr_history = get_mmr_trend(settings, player.puuid, limit=20)
-        if mmr_history:
+        if mmr_history and len(mmr_history) >= 2:
             display.render_section(con, "Rank Progression")
             render_rank_trend(con, mmr_history)
 
@@ -236,8 +280,8 @@ def run_lookup(
         # Identity panel
         render_lookup_identity_panel(con, account, mmr)
 
-        # Rank trend
-        if rank_history:
+        # Rank trend — same guard as the main profile path.
+        if rank_history and len(rank_history) >= 2:
             display.render_section(con, "Rank Progression")
             render_rank_trend(con, rank_history)
 

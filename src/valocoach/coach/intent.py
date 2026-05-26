@@ -21,6 +21,13 @@ Priority order (highest to lowest)
 7. meta            — meta/tier-list/patch keyword
 8. tactical        — map **and** side both present (structured execute advice)
 9. general         — everything else
+
+Special case
+------------
+``post_game`` is also a valid ``IntentType`` but is NEVER produced by the
+classifier — it's set exclusively via ``force_intent="post_game"`` from
+the ``valocoach post-game`` command path, which has its own analyzer
+pipeline before calling ``run_coach``.
 """
 
 from __future__ import annotations

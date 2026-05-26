@@ -1,27 +1,25 @@
 """Interactive elicitation — fills missing Situation fields before coaching.
 
-When a user types a short or underspecified coaching query (e.g. "help on Haven"),
-this module intercepts *before* the LLM call and asks a short sequence of
-targeted questions.  The enriched Situation then flows through the normal
-context-building pipeline so the coach gets map, side, agent, and optional
-round details without the user needing to remember CLI flags.
+When a user types a short or underspecified coaching query, this module
+intercepts before the LLM call and asks a short sequence of targeted questions.
+The enriched Situation then flows through the normal context-building pipeline.
 
-Design principles
------------------
-- **Supplement, never replace** — the regex parser runs first; elicitation
-  only asks about fields that are still ``None`` after parsing.
-- **Fast and optional** — questions 1-3 are the critical group (map, side,
-  agent); questions 4-8 are soft-optional (Enter skips them).  Total wall
-  time < 1 s assuming the user types quickly.
-- **No LLM, no DB** — pure CLI prompts using ``input()``.  Gracefully no-ops
-  if stdin is not a TTY (non-interactive pipes).
-- **Matches existing parser output** — elicited values are normalized to the
-  same canonical forms the regex parser uses so downstream routing is identical.
+Phase 2 — Intent-aware clarification
+--------------------------------------
+Elicitation now only asks about fields that are *relevant for the classified
+intent*.  A "meta" question never triggers any prompts; an "economy" question
+only asks for side (and optionally score); a "tactical" question asks for map,
+side, and agent — but never score or phase.
+
+At most ``MAX_QUESTIONS = 3`` questions are asked per turn.  Fields already
+present in the parsed Situation or supplied via slash commands are never
+re-asked.
 
 Public API
 ----------
-    should_elicit(situation, raw_text)      -> bool
-    run_elicitation(parsed, agent, map_, side) -> tuple[Situation, str|None, str|None, str|None]
+    FIELDS_BY_INTENT               dict mapping intent → relevant field names
+    should_elicit(situation, raw, intent)  -> bool
+    run_elicitation(parsed, agent, map_, side, *, intent) -> (Situation, agent, map_, side)
 """
 
 from __future__ import annotations
@@ -31,6 +29,25 @@ import sys
 from difflib import get_close_matches
 
 from valocoach.core.parser import Situation
+
+# ---------------------------------------------------------------------------
+# Intent → relevant fields mapping
+# ---------------------------------------------------------------------------
+
+FIELDS_BY_INTENT: dict[str, tuple[str, ...]] = {
+    "tactical":      ("map", "side", "agent"),
+    "clutch":        ("side", "agent"),
+    "post_plant":    ("map", "agent", "side"),
+    "retake":        ("map", "agent", "side"),
+    "economy":       ("side", "score"),
+    "agent_info":    ("agent",),
+    "meta":          (),          # deterministic — never ask anything
+    "stat_analysis": (),          # pulls from DB — no user input needed
+    "post_game":     (),          # pre-populated by the post-game pipeline
+    "general":       ("agent", "map"),
+}
+
+MAX_QUESTIONS = 3
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -48,12 +65,15 @@ _MAP_NAMES: tuple[str, ...] = (
     "Sunset",
 )
 
-_AGENT_NAMES: tuple[str, ...] = (
-    "Astra", "Breach", "Brimstone", "Chamber", "Clove", "Cypher",
-    "Deadlock", "Fade", "Gekko", "Harbor", "Iso", "Jett", "KAY/O",
-    "Killjoy", "Miks", "Neon", "Omen", "Phoenix", "Raze", "Reyna",
-    "Sage", "Skye", "Sova", "Tejo", "Veto", "Viper", "Vyse", "Waylay", "Yoru",
-)
+
+def _agent_names() -> tuple[str, ...]:
+    """Return the canonical agent roster from ``agents.json``."""
+    from valocoach.retrieval.agents import list_agent_names
+
+    return tuple(list_agent_names())
+
+
+_AGENT_NAMES: tuple[str, ...] = _agent_names()
 
 _SCORE_PATTERN = re.compile(r"^(\d{1,2})\s*[-–:]\s*(\d{1,2})$")
 _CLUTCH_PATTERN = re.compile(r"^([1-5])\s*v\s*([1-5])$", re.IGNORECASE)
@@ -103,26 +123,28 @@ _SITE_MAP: dict[str, str] = {"a": "A", "b": "B", "c": "C"}
 # ---------------------------------------------------------------------------
 
 
-def should_elicit(situation: Situation, raw_text: str) -> bool:
-    """Return True when the situation is underspecified enough to warrant questions.
+def should_elicit(situation: Situation, raw_text: str, intent: str = "general") -> bool:
+    """Return True when the situation is missing fields relevant to *intent*.
 
-    Elicitation fires when:
-    - Two or more critical fields (map, side, primary_agent) are missing, OR
-    - One critical field is missing AND the raw input is short (< 60 chars).
-
-    This keeps elicitation out of long, descriptive queries where the user
-    clearly gave plenty of context despite not naming every field explicitly.
+    - Never prompts when stdin is not a TTY (pipes, CI, tests).
+    - Never prompts for intents with no required fields (meta, stat_analysis, post_game).
+    - Only prompts when at least one intent-relevant field is still None.
     """
     if not sys.stdin.isatty():
-        # Never prompt in non-interactive contexts (pipes, CI, tests).
         return False
 
-    missing = sum([
-        situation.map is None,
-        situation.side is None,
-        situation.primary_agent is None,
-    ])
-    return missing >= 2 or (missing >= 1 and len(raw_text.strip()) < 60)
+    relevant = FIELDS_BY_INTENT.get(intent, ("agent", "map", "side"))
+    if not relevant:
+        return False
+
+    field_values: dict[str, object] = {
+        "map":   situation.map,
+        "side":  situation.side,
+        "agent": situation.primary_agent,
+        "score": situation.score,
+    }
+    missing = [f for f in relevant if field_values.get(f) is None]
+    return bool(missing)
 
 
 # ---------------------------------------------------------------------------
@@ -135,7 +157,6 @@ def _match_map(answer: str) -> str | None:
     ans = answer.strip().title()
     if ans in _MAP_NAMES:
         return ans
-    # Fuzzy match — "asc" → "Ascent", "ice" → "Icebox"
     hits = get_close_matches(ans, _MAP_NAMES, n=1, cutoff=0.5)
     return hits[0] if hits else None
 
@@ -143,11 +164,9 @@ def _match_map(answer: str) -> str | None:
 def _match_agent(answer: str) -> str | None:
     """Return the canonical agent name for *answer*, or None."""
     ans = answer.strip()
-    # Exact case-insensitive
     for name in _AGENT_NAMES:
         if ans.lower() == name.lower():
             return name
-    # KAY/O alias
     if ans.upper() in ("KAYO", "KAY/O"):
         return "KAY/O"
     hits = get_close_matches(ans.title(), _AGENT_NAMES, n=1, cutoff=0.55)
@@ -178,11 +197,7 @@ def _match_clutch(answer: str) -> tuple[int, int] | None:
 
 
 def _ask(prompt: str, *, optional: bool = False) -> str:
-    """Print *prompt* and return stripped user input.
-
-    Returns an empty string when the user just presses Enter (only valid when
-    ``optional=True`` — callers treat empty as "skip").
-    """
+    """Print *prompt* and return stripped user input."""
     from valocoach.cli import display
 
     display.console.print(f"  [info]»[/info] [bold]{prompt}[/bold]", end=" ")
@@ -199,8 +214,8 @@ def _print_header() -> None:
     display.console.print()
     display.console.rule("[heading]Context needed[/heading]", style="dim")
     display.console.print(
-        "  [muted]A few quick questions for better advice  "
-        "(Enter to skip optional ones)[/muted]"
+        "  [muted]A quick question or two for better advice  "
+        "(Enter to skip)[/muted]"
     )
     display.console.print()
 
@@ -215,85 +230,83 @@ def run_elicitation(
     agent: str | None,
     map_: str | None,
     side: str | None,
+    *,
+    intent: str = "general",
 ) -> tuple[Situation, str | None, str | None, str | None]:
-    """Ask targeted questions to fill missing Situation fields.
+    """Ask targeted questions for fields relevant to *intent*.
 
-    Returns an enriched ``(situation, agent, map_, side)`` tuple with all
-    elicited values merged in.  Fields already present from parsing are never
-    overwritten.  The original ``Situation.raw`` is preserved unchanged.
+    At most ``MAX_QUESTIONS`` questions are asked.  Fields already resolved
+    (from the parser or CLI flags) are never re-asked.  The original
+    ``Situation.raw`` is preserved unchanged.
+
+    Returns an enriched ``(situation, agent, map_, side)`` tuple.
     """
     from valocoach.cli import display
 
-    _print_header()
-
-    # Resolved values — start from what the parser already found.
-    elicited_map = map_ or parsed.map
-    elicited_side = side or parsed.side
+    # Start from what we already know
+    elicited_map   = map_  or parsed.map
+    elicited_side  = side  or parsed.side
     elicited_agent = agent or parsed.primary_agent
     elicited_score = parsed.score
-    elicited_phase = parsed.phase
-    elicited_site = parsed.site
-    elicited_econ = parsed.econ
-    elicited_clutch = parsed.clutch
 
+    relevant = FIELDS_BY_INTENT.get(intent, ("agent", "map", "side"))
+    if not relevant:
+        return parsed, agent, map_, side
+
+    # Determine which relevant fields are still missing
+    still_missing = []
+    field_values: dict[str, object] = {
+        "map":   elicited_map,
+        "side":  elicited_side,
+        "agent": elicited_agent,
+        "score": elicited_score,
+    }
+    for f in relevant:
+        if field_values.get(f) is None:
+            still_missing.append(f)
+
+    if not still_missing:
+        return parsed, agent, map_, side
+
+    _print_header()
+
+    questions_asked = 0
     maps_hint = "/".join(_MAP_NAMES)
 
-    # --- Question 1: Map
-    if elicited_map is None:
-        ans = _ask(f"Map? [{maps_hint}]:")
-        if ans:
-            resolved = _match_map(ans)
-            if resolved:
-                elicited_map = resolved
-            else:
-                display.warn(f"Map '{ans}' not recognised — coaching will proceed without map context.")
+    for field in still_missing:
+        if questions_asked >= MAX_QUESTIONS:
+            break
 
-    # --- Question 2: Side
-    if elicited_side is None:
-        ans = _ask("Side? [attack/defense]:")
-        elicited_side = _SIDE_MAP.get(ans.lower().strip()) if ans else None
+        if field == "map":
+            ans = _ask(f"Map? [{maps_hint}]:")
+            if ans:
+                resolved = _match_map(ans)
+                if resolved:
+                    elicited_map = resolved
+                else:
+                    display.warn(f"Map '{ans}' not recognised — proceeding without map context.")
+            questions_asked += 1
 
-    # --- Question 3: Agent
-    if elicited_agent is None:
-        ans = _ask("Your agent?:")
-        if ans:
-            resolved = _match_agent(ans)
-            if resolved:
-                elicited_agent = resolved
-            else:
-                display.warn(f"Agent '{ans}' not recognised — coaching will proceed without agent context.")
+        elif field == "side":
+            ans = _ask("Side? [attack/defense]:")
+            elicited_side = _SIDE_MAP.get(ans.lower().strip()) if ans else None
+            questions_asked += 1
 
-    # --- Questions 4-8 are soft-optional (always asked but Enter skips)
+        elif field == "agent":
+            ans = _ask("Your agent? (Enter to skip):")
+            if ans:
+                resolved = _match_agent(ans)
+                if resolved:
+                    elicited_agent = resolved
+                else:
+                    display.warn(f"Agent '{ans}' not recognised — proceeding without agent context.")
+            questions_asked += 1
 
-    # Question 4: Score
-    if elicited_score is None:
-        ans = _ask("Score? e.g. 8-12  (Enter to skip):")
-        if ans:
-            elicited_score = _match_score(ans)
-
-    # Question 5: Phase
-    if elicited_phase is None:
-        ans = _ask("Phase? [post_plant/retake/execute/default]  (Enter to skip):")
-        if ans:
-            elicited_phase = _PHASE_MAP.get(ans.lower().strip())
-
-    # Question 6: Site
-    if elicited_site is None:
-        ans = _ask("Site? [A/B/C]  (Enter to skip):")
-        if ans:
-            elicited_site = _SITE_MAP.get(ans.upper().strip())
-
-    # Question 7: Economy
-    if elicited_econ is None:
-        ans = _ask("Economy? [eco/half/full]  (Enter to skip):")
-        if ans:
-            elicited_econ = _ECON_MAP.get(ans.lower().strip())
-
-    # Question 8: Clutch
-    if elicited_clutch is None:
-        ans = _ask("Clutch? e.g. 1v3  (Enter to skip):")
-        if ans:
-            elicited_clutch = _match_clutch(ans)
+        elif field == "score":
+            ans = _ask("Score? e.g. 8-12  (Enter to skip):")
+            if ans:
+                elicited_score = _match_score(ans)
+            questions_asked += 1
 
     display.console.print()
 
@@ -305,13 +318,9 @@ def run_elicitation(
     enriched = parsed.model_copy(
         update={
             "agents": agents,
-            "map": elicited_map,
-            "side": elicited_side,
-            "score": elicited_score,
-            "phase": elicited_phase,
-            "site": elicited_site,
-            "econ": elicited_econ,
-            "clutch": elicited_clutch,
+            "map":    elicited_map,
+            "side":   elicited_side,
+            "score":  elicited_score,
         }
     )
 
@@ -319,6 +328,8 @@ def run_elicitation(
 
 
 __all__ = [
+    "FIELDS_BY_INTENT",
+    "MAX_QUESTIONS",
     "run_elicitation",
     "should_elicit",
 ]

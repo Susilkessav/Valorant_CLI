@@ -99,8 +99,16 @@ def load_session(path: Path) -> list[dict[str, str]] | None:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         turns = data.get("turns", [])
-        # Validate structure — every item must have role and content.
-        if all(isinstance(t, dict) and "role" in t and "content" in t for t in turns):
+        # Validate structure — every item must have role (one of user/assistant)
+        # and content. A malformed turn with role="system" or "" would survive
+        # the prior loose check and confuse downstream prompt assembly.
+        valid_roles = {"user", "assistant"}
+        if all(
+            isinstance(t, dict)
+            and t.get("role") in valid_roles
+            and isinstance(t.get("content"), str)
+            for t in turns
+        ):
             return turns
         return None
     except Exception as exc:

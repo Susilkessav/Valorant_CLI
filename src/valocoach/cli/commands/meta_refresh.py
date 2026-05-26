@@ -143,7 +143,15 @@ def _render_result(result: object, *, dry_run: bool) -> None:
 
     if r.errors:
         for err in r.errors:
-            display.warn(err)
+            if "LLM returned no valid JSON" in err or "empty response" in err.lower():
+                display.warn(err)
+                display.console.print(
+                    "[muted]Tip: this usually means the model ran out of context or tokens.\n"
+                    "  Try: [bold]ollama pull qwen3:14b[/bold]  (larger model handles longer prompts)\n"
+                    "  Or:  set a smaller model that fits in your VRAM.[/muted]"
+                )
+            else:
+                display.warn(err)
 
     if r.meta_written:
         if dry_run:
