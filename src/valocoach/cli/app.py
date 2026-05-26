@@ -23,6 +23,20 @@ def _version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
+def _require_llm() -> None:
+    """Check Ollama is reachable and exit with an actionable error if not."""
+    from valocoach.core.config import load_settings
+    from valocoach.core.preflight import check_ollama
+
+    result = check_ollama(load_settings())
+    if not result.ok:
+        display.error_with_hint(
+            result.message,
+            result.hint or "Start Ollama with: ollama serve",
+        )
+        raise typer.Exit(1)
+
+
 @app.callback(invoke_without_command=True)
 def main(
     ctx: typer.Context,
@@ -69,18 +83,8 @@ def coach(
 ) -> None:
     """Get tactical coaching for a match situation."""
     from valocoach.cli.commands.coach import run_coach
-    from valocoach.core.config import load_settings
-    from valocoach.core.preflight import check_ollama
 
-    settings = load_settings()
-    ollama_result = check_ollama(settings)
-    if not ollama_result.ok:
-        display.error_with_hint(
-            ollama_result.message,
-            ollama_result.hint or "Start Ollama with: ollama serve",
-        )
-        raise typer.Exit(1)
-
+    _require_llm()
     run_coach(
         situation=situation,
         agent=agent,
@@ -253,31 +257,9 @@ def meta(
     ),
 ) -> None:
     """Show current meta: tier list, agent abilities, or map callouts."""
-    if json_output:
-        import json
-
-        from valocoach.retrieval.agents import get_agent
-        from valocoach.retrieval.maps import get_map
-        from valocoach.retrieval.meta import get_meta
-
-        meta_data = get_meta()
-        if agent:
-            ag = get_agent(agent)
-            print(json.dumps({"agent": ag, "meta": meta_data.get("agent_meta", {}).get(
-                next((k for k in meta_data.get("agent_meta", {})
-                      if k.casefold() == agent.casefold()), None))}, indent=2, default=str))
-        elif map_:
-            mp = get_map(map_)
-            print(json.dumps({"map": mp, "meta": meta_data.get("map_meta", {}).get(
-                next((k for k in meta_data.get("map_meta", {})
-                      if k.casefold() == map_.casefold()), None))}, indent=2, default=str))
-        else:
-            print(json.dumps(meta_data, indent=2, default=str))
-        return
-
     from valocoach.cli.commands.meta import run_meta
 
-    run_meta(agent=agent, map_=map_)
+    run_meta(agent=agent, map_=map_, json_output=json_output)
 
 
 @app.command(rich_help_panel="Data")
@@ -348,24 +330,6 @@ def ingest(
         preview=preview,
         add_lineup=add_lineup,
     )
-
-
-@app.command(rich_help_panel="Data")
-def index() -> None:
-    """Index the static corpus into the vector store (agents, maps, concepts)."""
-    from pathlib import Path
-
-    from valocoach.cli.commands.ingest import run_ingest
-
-    corpus_dir = Path("corpus")
-    if not corpus_dir.exists():
-        display.error_with_hint(
-            "corpus/ not found.",
-            "Run  python scripts/build_corpus.py  first.",
-        )
-        raise typer.Exit(1)
-
-    run_ingest(url=None, youtube=None, corpus=True, seed=False, clear=False, show_stats=False)
 
 
 @app.command(rich_help_panel="Game Info")
