@@ -23,7 +23,7 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def _patch_lines() -> list[str]:
+def _patch_lines(settings=None) -> list[str]:
     """Return patch + meta-freshness info from meta.json."""
     try:
         from valocoach.retrieval.meta import get_meta
@@ -36,10 +36,25 @@ def _patch_lines() -> list[str]:
             if meta.get("sync_in_progress")
             else ""
         )
-        return [
+        lines = [
             f"  [heading]Patch[/heading] [info]{patch}[/info]"
             f"  [muted]·  meta updated {updated}{sync_flag}[/muted]"
         ]
+        # Show stale-meta warning if patch data is old
+        try:
+            if settings is not None:
+                from valocoach.retrieval.patch_tracker import get_patch_staleness_days
+
+                stale = get_patch_staleness_days(settings.data_dir)
+                if stale is None or stale > 21:
+                    age = "never checked" if stale is None else f"{stale:.0f}d ago"
+                    lines.append(
+                        f"  [warning]⚠ Meta may be outdated ({age})"
+                        " — run [info]valocoach meta-refresh[/info] to update[/warning]"
+                    )
+        except Exception:
+            pass
+        return lines
     except Exception:
         log.debug("hub: patch info unavailable", exc_info=True)
         return []
@@ -48,17 +63,14 @@ def _patch_lines() -> list[str]:
 def _player_lines(settings) -> list[str]:
     """Return player identity + quick match-count summary, or setup hint."""
     try:
-        from valocoach.coach.session_manager import get_player_puuid
-        from valocoach.core.config import load_settings
-
         if settings is None:
             return []
 
         # Read identity from config (fast — no DB)
-        riot_id = getattr(settings, "riot_id", None) or getattr(settings, "valorant_name", None)
-        tag = getattr(settings, "riot_tag", None) or getattr(settings, "valorant_tag", None)
-        if riot_id and tag:
-            identity = f"[info]{riot_id}[/info][muted]#{tag}[/muted]"
+        riot_name = getattr(settings, "riot_name", "") or ""
+        riot_tag = getattr(settings, "riot_tag", "") or ""
+        if riot_name and riot_tag:
+            identity = f"[info]{riot_name}[/info][muted]#{riot_tag}[/muted]"
         else:
             return [
                 "  [muted]No player configured — run [info]valocoach config init[/info] to set up.[/muted]"
@@ -119,7 +131,7 @@ def show_hub(settings=None) -> None:
     display.render_banner()
     display.console.print()
 
-    patch_lines = _patch_lines()
+    patch_lines = _patch_lines(settings)
     player_lines = _player_lines(settings)
 
     if patch_lines or player_lines:
