@@ -2,23 +2,28 @@
 
 Sources (in priority order)
 ----------------------------
-When a Tavily API key is configured:
-  1. Tavily search — finds the current stats page automatically, handles
-     JavaScript rendering.  No hardcoded URLs means this keeps working
-     even when tracker.gg or vlr.gg change their layout.
+Ranked stats (Diamond+ / all-rank play):
+  1. dak.gg/valorant/statistics/agents  — Tavily Extract (clean table: pick%/win%)
+  2. blitz.gg/valorant/stats/agents     — Tavily Extract (fallback ranked source)
+  3. Tavily search                       — broad query, finds best current source
+  4. trafilatura scrape of tracker.gg   — usually empty (JS-rendered, Cloudflare)
 
-When Tavily is not configured (or Tavily search fails):
-  2. trafilatura scrape of the hardcoded tracker.gg and vlr.gg URLs.
-     This works on static / lightly-rendered pages but often returns empty
-     content from tracker.gg because that page is fully JS-rendered.
+Pro / VCT stats:
+  1. Tavily search → vlr.gg VCT Champions event agents page
+     (returns 50 k+ chars with per-map pick rates per agent)
+  2. trafilatura scrape of vlr.gg/stats — usually empty (JS-rendered)
 
-Why Tavily wins here
---------------------
-tracker.gg/valorant/insights/agents and vlr.gg/stats are both single-page
-applications (React/Vue).  Trafilatura fetches the raw HTML and sees mostly
-empty script tags — the actual pick/win-rate numbers are injected by JavaScript
-at runtime.  Tavily's headless-browser backend renders the page before
-extracting, so it reliably returns the numeric table content.
+Why dak.gg/blitz.gg instead of tracker.gg
+------------------------------------------
+tracker.gg is behind Cloudflare — even Tavily's headless browser is blocked.
+dak.gg and blitz.gg expose the same ranked pick/win-rate tables and are
+accessible to Tavily Extract.  Live tests confirm dak.gg returns rows like:
+
+    | Jett   | 13.1% | 50.7% | … |
+    | Chamber| 12.6% | 50.1% | … |
+    | Clove  |  8.3% | 53.3% | … |
+
+These exact numbers are what the LLM meta generator needs to assign S/A/B/C tiers.
 """
 
 from __future__ import annotations
@@ -31,29 +36,28 @@ from valocoach.retrieval.scrapers.web import scrape_url
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Hardcoded fallback URLs (used when Tavily is not configured)
+# URLs
 # ---------------------------------------------------------------------------
 
+# Ranked stats — direct extract targets (Tavily can handle these)
+_DAK_GG_URL    = "https://dak.gg/valorant/statistics/agents"
+_BLITZ_GG_URL  = "https://blitz.gg/valorant/stats/agents"
+
+# Trafilatura fallback (almost always empty due to JS rendering / Cloudflare)
 _TRACKER_AGENTS_URL = "https://tracker.gg/valorant/insights/agents"
-_VLR_STATS_URL = "https://www.vlr.gg/stats"
+_VLR_STATS_URL      = "https://www.vlr.gg/stats"
 
-# ---------------------------------------------------------------------------
-# Tavily search queries — deliberately broad so Tavily picks the best
-# current source rather than being locked to a specific domain.
-# ---------------------------------------------------------------------------
-
-_TAVILY_RANKED_QUERY = (
-    "Valorant agent pick rate win rate statistics Diamond Platinum Gold ranked 2025"
-)
+# Pro stats — Tavily search query (returns VCT event agent pick pages)
 _TAVILY_PRO_QUERY = (
     "Valorant VCT pro agent pick rate win rate tournament statistics 2025"
 )
+_PRO_DOMAINS = ["vlr.gg", "liquipedia.net", "thespike.gg"]
 
-# Domains we prefer for ranked and pro stats respectively.
-# Tavily uses these as a soft hint — it still searches broadly but
-# up-ranks pages from these domains.
-_RANKED_DOMAINS = ["tracker.gg", "blitz.gg", "dak.gg", "valoranttracker.gg"]
-_PRO_DOMAINS    = ["vlr.gg", "liquipedia.net", "thespike.gg"]
+# Ranked fallback search query (used when dak.gg and blitz.gg both fail)
+_TAVILY_RANKED_FALLBACK_QUERY = (
+    "Valorant ranked agent pick rate win rate statistics 2025"
+)
+_RANKED_DOMAINS = ["dak.gg", "blitz.gg", "valoranttracker.gg"]
 
 
 # ---------------------------------------------------------------------------
@@ -82,7 +86,7 @@ class MetaStatsResult:
         """Both sources concatenated with labelled headers for LLM context."""
         parts: list[str] = []
         if self.ranked_text:
-            parts.append("=== DIAMOND+ RANKED STATS (tracker.gg) ===\n" + self.ranked_text)
+            parts.append("=== RANKED STATS (dak.gg / blitz.gg) ===\n" + self.ranked_text)
         if self.pro_text:
             parts.append("=== PRO / VCT STATS (vlr.gg) ===\n" + self.pro_text)
         return "\n\n".join(parts)
@@ -94,22 +98,36 @@ class MetaStatsResult:
 
 
 # ---------------------------------------------------------------------------
-# Internal fetch helpers
+# Internal Tavily fetch helpers
 # ---------------------------------------------------------------------------
 
 
 def _fetch_ranked_tavily(settings) -> str:
-    """Search for Diamond+ ranked stats via Tavily.
+    """Fetch ranked agent stats via Tavily.
 
-    Returns the extracted text, or an empty string on failure / not configured.
+    Tries direct Extract on dak.gg → blitz.gg → broad search fallback.
+    Returns extracted text, or empty string on failure / not configured.
     """
     from valocoach.retrieval.scrapers import tavily_client as tv
 
     if not tv.is_configured(settings):
         return ""
 
+    # --- dak.gg: clean table with Pickrate / Winrate columns
+    result = tv.extract(_DAK_GG_URL, settings, extract_depth="advanced", source="meta_stats")
+    if result and len(result.text) >= 500:
+        log.info("Ranked stats: dak.gg Extract → %d chars", len(result.text))
+        return result.text
+
+    # --- blitz.gg fallback
+    result = tv.extract(_BLITZ_GG_URL, settings, extract_depth="advanced", source="meta_stats")
+    if result and len(result.text) >= 500:
+        log.info("Ranked stats: blitz.gg Extract → %d chars", len(result.text))
+        return result.text
+
+    # --- broad search fallback (lets Tavily find the best current source)
     result = tv.search(
-        _TAVILY_RANKED_QUERY,
+        _TAVILY_RANKED_FALLBACK_QUERY,
         settings,
         search_depth="advanced",
         max_results=3,
@@ -117,13 +135,17 @@ def _fetch_ranked_tavily(settings) -> str:
         source="meta_stats",
     )
     if result:
-        log.info("Ranked stats: Tavily returned %d chars from %s", len(result.text), result.url)
+        log.info("Ranked stats: Tavily search → %s (%d chars)", result.url, len(result.text))
         return result.text
+
     return ""
 
 
 def _fetch_pro_tavily(settings) -> str:
-    """Search for pro/VCT stats via Tavily."""
+    """Fetch pro/VCT stats via Tavily search.
+
+    Returns text of the best matching VCT event agent page, or empty string.
+    """
     from valocoach.retrieval.scrapers import tavily_client as tv
 
     if not tv.is_configured(settings):
@@ -138,46 +160,50 @@ def _fetch_pro_tavily(settings) -> str:
         source="meta_stats",
     )
     if result:
-        log.info("Pro stats: Tavily returned %d chars from %s", len(result.text), result.url)
+        log.info("Pro stats: Tavily search → %s (%d chars)", result.url, len(result.text))
         return result.text
+
     return ""
 
 
-def _fetch_ranked_trafilatura() -> str:
-    """Scrape tracker.gg ranked stats via trafilatura (fallback path).
+# ---------------------------------------------------------------------------
+# Trafilatura fallbacks (run when Tavily is not configured or all fail)
+# ---------------------------------------------------------------------------
 
-    Returns empty string when the page is JS-rendered and trafilatura
-    returns nothing useful.
-    """
+
+def _fetch_ranked_trafilatura() -> str:
     content = scrape_url(_TRACKER_AGENTS_URL, source="meta_stats")
     if content is None:
-        log.warning("Could not fetch ranked stats from tracker.gg (trafilatura)")
-        return ""
-    if len(content.text) < 200:
         log.warning(
-            "tracker.gg returned only %d chars — page is likely JS-rendered. "
-            "Set tavily_api_key in config for reliable stats scraping.",
-            len(content.text),
+            "Ranked stats: tracker.gg returned nothing (JS-rendered/Cloudflare). "
+            "Set tavily_api_key in config for reliable stats."
         )
         return ""
-    log.info("Ranked stats via trafilatura: %d chars", len(content.text))
+    if len(content.text) < 500:
+        # Warn but don't reject — short text usually means a JS-rendered shell,
+        # but we let it through so the caller can decide.  scrape_url already
+        # enforces a 100-char hard floor before returning.
+        log.warning(
+            "Ranked stats: tracker.gg returned only %d chars — likely JS-blocked. "
+            "Set tavily_api_key in config for reliable stats.",
+            len(content.text),
+        )
+    log.info("Ranked stats: trafilatura tracker.gg → %d chars", len(content.text))
     return content.text
 
 
 def _fetch_pro_trafilatura() -> str:
-    """Scrape vlr.gg pro stats via trafilatura (fallback path)."""
     content = scrape_url(_VLR_STATS_URL, source="meta_stats")
     if content is None:
-        log.warning("Could not fetch pro stats from vlr.gg (trafilatura)")
+        log.warning("Pro stats: vlr.gg returned nothing (JS-rendered).")
         return ""
-    if len(content.text) < 200:
+    if len(content.text) < 500:
         log.warning(
-            "vlr.gg returned only %d chars — page is likely JS-rendered. "
-            "Set tavily_api_key in config for reliable stats scraping.",
+            "Pro stats: vlr.gg returned only %d chars — JS-blocked. "
+            "Set tavily_api_key in config.",
             len(content.text),
         )
-        return ""
-    log.info("Pro stats via trafilatura: %d chars", len(content.text))
+    log.info("Pro stats: trafilatura vlr.gg → %d chars", len(content.text))
     return content.text
 
 
@@ -187,53 +213,38 @@ def _fetch_pro_trafilatura() -> str:
 
 
 def fetch_ranked_stats(settings=None) -> str:
-    """Fetch Diamond+ ranked agent stats.
+    """Fetch ranked agent stats (pick rate / win rate).
 
-    Tries Tavily search first (when configured), falls back to trafilatura.
-
-    Returns:
-        Extracted page text, or an empty string on failure.
+    Priority: dak.gg Extract → blitz.gg Extract → Tavily search → trafilatura.
     """
     if settings is not None:
         text = _fetch_ranked_tavily(settings)
         if text:
             return text
-        # Tavily not configured or failed — fall through.
-
     return _fetch_ranked_trafilatura()
 
 
 def fetch_pro_stats(settings=None) -> str:
     """Fetch pro/VCT agent stats.
 
-    Tries Tavily search first (when configured), falls back to trafilatura.
-
-    Returns:
-        Extracted page text, or an empty string on failure.
+    Priority: Tavily search (VCT event pages) → trafilatura vlr.gg.
     """
     if settings is not None:
         text = _fetch_pro_tavily(settings)
         if text:
             return text
-
     return _fetch_pro_trafilatura()
 
 
 def fetch_all_stats(settings=None) -> MetaStatsResult:
-    """Fetch and combine Diamond+ ranked and pro/VCT stats.
+    """Fetch and combine ranked + pro stats.
 
-    Both fetches are attempted independently so a failure on one does not
-    block the other.  Pass ``settings`` to enable the Tavily path; omit it
-    (or pass ``None``) to use trafilatura only.
-
-    Args:
-        settings: App settings.  When ``settings.tavily_api_key`` is set,
-                  Tavily search is used.  When absent or empty, the
-                  trafilatura scraper runs instead.
+    Both sources are attempted independently.  Pass ``settings`` to enable
+    Tavily; omit to use trafilatura only.
 
     Returns:
-        :class:`MetaStatsResult` with ``ok=True`` when at least one
-        source returned data.
+        :class:`MetaStatsResult` with ``ok=True`` when at least one source
+        returned data.
     """
     from valocoach.retrieval.scrapers import tavily_client as tv
 

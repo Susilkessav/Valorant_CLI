@@ -398,7 +398,7 @@ class TestMetaStats:
 
         r = MetaStatsResult(ranked_text="ranked", pro_text="pro")
         combined = r.combined
-        assert "tracker.gg" in combined
+        assert "dak.gg" in combined   # header updated: now shows dak.gg / blitz.gg
         assert "vlr.gg" in combined
         assert "ranked" in combined
         assert "pro" in combined
