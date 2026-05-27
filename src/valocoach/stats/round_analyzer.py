@@ -692,6 +692,7 @@ def analyze_rounds_per_map(
     for each map, not just overall.
     """
     from collections import defaultdict
+
     buckets: dict[str, list[Match]] = defaultdict(list)
     for match in matches:
         buckets[match.map_name].append(match)
@@ -701,6 +702,7 @@ def analyze_rounds_per_map(
 @dataclass(frozen=True, slots=True)
 class WeaponSplit:
     """Per-weapon kill + headshot counts for a player (E2)."""
+
     weapon: str
     kills: int
     headshots: int
@@ -726,6 +728,7 @@ def compute_weapon_stats(
     loaded (same contract as :func:`analyze_rounds`).
     """
     from collections import defaultdict
+
     weapon_hits: dict[str, list[bool]] = defaultdict(list)
 
     for match in matches:

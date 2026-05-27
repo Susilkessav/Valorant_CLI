@@ -50,7 +50,7 @@ class SyncResult:
     meta_regenerated: bool = False
     meta_written: bool = False
     meta_ingested: bool = False
-    patch_diff_extracted: bool = False   # C3 — set when patch changes are extracted
+    patch_diff_extracted: bool = False  # C3 — set when patch changes are extracted
 
     errors: list[str] = field(default_factory=list)
 

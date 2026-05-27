@@ -236,9 +236,7 @@ class TestIsVideoIngested:
         mock_coll.get.return_value = {"ids": []}
 
         # get_collection is imported from valocoach.retrieval.vector_store inside the function
-        with patch(
-            "valocoach.retrieval.vector_store.get_collection", return_value=mock_coll
-        ):
+        with patch("valocoach.retrieval.vector_store.get_collection", return_value=mock_coll):
             assert is_video_ingested(MagicMock(), "abc12345678") is False
 
     def test_returns_true_when_video_id_found(self):
@@ -247,9 +245,7 @@ class TestIsVideoIngested:
         mock_coll = MagicMock()
         mock_coll.get.return_value = {"ids": ["youtube:abc12345678:0"]}
 
-        with patch(
-            "valocoach.retrieval.vector_store.get_collection", return_value=mock_coll
-        ):
+        with patch("valocoach.retrieval.vector_store.get_collection", return_value=mock_coll):
             assert is_video_ingested(MagicMock(), "abc12345678") is True
 
     def test_returns_false_on_chroma_error(self):

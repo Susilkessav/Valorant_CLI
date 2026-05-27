@@ -59,9 +59,7 @@ def _client(settings: Settings):
     try:
         from tavily import TavilyClient  # type: ignore[import]
     except ImportError as exc:
-        raise ImportError(
-            "tavily-python is not installed. Run: uv add tavily-python"
-        ) from exc
+        raise ImportError("tavily-python is not installed. Run: uv add tavily-python") from exc
 
     api_key = getattr(settings, "tavily_api_key", "")
     if not api_key:
@@ -144,7 +142,7 @@ def search(
         log.debug("Tavily: best result too short (%d chars) for %r", len(text), query)
         return None
 
-    url   = best.get("url", query)
+    url = best.get("url", query)
     title = best.get("title") or url.split("/")[-1].replace("-", " ").title()
 
     log.info("Tavily search: best result → %s (%d chars)", url, len(text))
@@ -194,7 +192,7 @@ def extract(
         log.warning("Tavily extract failed for %s: %s", url, exc)
         return None
 
-    results = (response.get("results") or [])
+    results = response.get("results") or []
     if not results:
         failed = response.get("failed_results") or []
         log.debug("Tavily extract: no content for %s (failed=%s)", url, failed)

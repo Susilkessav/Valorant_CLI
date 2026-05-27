@@ -247,7 +247,5 @@ def fetch_patch_notes(version: str, settings=None) -> ScrapedContent | None:
             log.info("Patch notes fetched via Tavily for %s.%s", major, minor)
             return result
 
-    log.warning(
-        "All patch notes sources failed for version %r (%s.%s)", version, major, minor
-    )
+    log.warning("All patch notes sources failed for version %r (%s.%s)", version, major, minor)
     return None

@@ -64,16 +64,55 @@ _LINEUP_TTL_SECONDS = 60 * 24 * 3600
 # casing ("sova", "SOVA", "Sova").  We canonicalise both at write time and
 # at query time so filtered retrieval actually finds chunks.
 
-_CANONICAL_AGENTS: dict[str, str] = {a.lower(): a for a in (
-    "Astra", "Breach", "Brimstone", "Chamber", "Clove", "Cypher", "Deadlock",
-    "Fade", "Gekko", "Harbor", "Iso", "Jett", "KAY/O", "Killjoy", "Neon",
-    "Omen", "Phoenix", "Raze", "Reyna", "Sage", "Skye", "Sova", "Tejo",
-    "Viper", "Vyse", "Waylay", "Yoru",
-)}
-_CANONICAL_MAPS: dict[str, str] = {m.lower(): m for m in (
-    "Ascent", "Bind", "Breeze", "Fracture", "Haven", "Icebox", "Lotus",
-    "Pearl", "Split", "Sunset", "Abyss", "Corrode",
-)}
+_CANONICAL_AGENTS: dict[str, str] = {
+    a.lower(): a
+    for a in (
+        "Astra",
+        "Breach",
+        "Brimstone",
+        "Chamber",
+        "Clove",
+        "Cypher",
+        "Deadlock",
+        "Fade",
+        "Gekko",
+        "Harbor",
+        "Iso",
+        "Jett",
+        "KAY/O",
+        "Killjoy",
+        "Neon",
+        "Omen",
+        "Phoenix",
+        "Raze",
+        "Reyna",
+        "Sage",
+        "Skye",
+        "Sova",
+        "Tejo",
+        "Viper",
+        "Vyse",
+        "Waylay",
+        "Yoru",
+    )
+}
+_CANONICAL_MAPS: dict[str, str] = {
+    m.lower(): m
+    for m in (
+        "Ascent",
+        "Bind",
+        "Breeze",
+        "Fracture",
+        "Haven",
+        "Icebox",
+        "Lotus",
+        "Pearl",
+        "Split",
+        "Sunset",
+        "Abyss",
+        "Corrode",
+    )
+}
 _CANONICAL_SITES = {"a": "A", "b": "B", "c": "C", "d": "D", "mid": "Mid"}
 
 # Primary lineup ability per agent — used as a fallback when the LLM returns null.
@@ -100,7 +139,10 @@ _PURPOSE_HINTS: list[tuple[list[str], str]] = [
     (["post plant", "post-plant", "spike planted", "after plant"], "post-plant deny"),
     (["retake", "take back", "reclaim"], "retake"),
     (["site clear", "clearing site", "check site", "clear the site"], "site clear"),
-    (["revealing", "reveal", "scanning ahead", "scan", "pre round", "pre-round", "before round"], "pre-round info"),
+    (
+        ["revealing", "reveal", "scanning ahead", "scan", "pre round", "pre-round", "before round"],
+        "pre-round info",
+    ),
 ]
 
 # Site keyword hints — checked in order per word-boundary patterns.
@@ -109,7 +151,20 @@ _SITE_HINTS: list[tuple[list[str], str]] = [
     # Haven D-short (Haven-unique)
     (["d site", "d short", "long hall", "d main"], "D"),
     # A site variants
-    (["a site", "a short", "a main", "a heaven", "a link", "a lobby", "a bath", "a court", "onto a"], "A"),
+    (
+        [
+            "a site",
+            "a short",
+            "a main",
+            "a heaven",
+            "a link",
+            "a lobby",
+            "a bath",
+            "a court",
+            "onto a",
+        ],
+        "A",
+    ),
     # B site variants
     (["b site", "b main", "b long", "b box", "b hall", "b lobby", "onto b"], "B"),
     # C site variants (Haven, Lotus, Fracture)
@@ -269,7 +324,7 @@ def extract_lineup_metadata(text: str, settings: Any, *, video_title: str | None
         context_line = f'Video: "{video_title}"\n\n' if video_title else ""
         prompt = (
             f"{context_line}"
-            f"Transcript excerpt:\n\"\"\"\n{text[:1500]}\n\"\"\"\n\n"
+            f'Transcript excerpt:\n"""\n{text[:1500]}\n"""\n\n'
             "Extract lineup metadata as JSON."
         )
         raw = call_llm(
@@ -381,7 +436,12 @@ def ingest_lineup_chunk(
         vec = embed_one(text)
         coll = get_collection(data_dir, _COLLECTION)
         coll.upsert(ids=[doc_id], documents=[text], embeddings=[vec], metadatas=[metadata])
-        log.info("G1: upserted lineup chunk %s (agent=%s map=%s)", doc_id, meta_fields.get("agent"), meta_fields.get("map"))
+        log.info(
+            "G1: upserted lineup chunk %s (agent=%s map=%s)",
+            doc_id,
+            meta_fields.get("agent"),
+            meta_fields.get("map"),
+        )
     except Exception as exc:
         log.warning("G1: failed to ingest lineup chunk %s: %s", doc_id, exc)
 
@@ -572,7 +632,7 @@ def format_lineup_results(hits: list[dict]) -> str:
         lines.append(f"   {hit['text']}")
 
         if channel != "seed":
-            lines.append(f"   📹 {channel} \"{title}\" @ {mins}:{secs:02d}")
+            lines.append(f'   📹 {channel} "{title}" @ {mins}:{secs:02d}')
         lines.append("")
 
     return "\n".join(lines).rstrip()

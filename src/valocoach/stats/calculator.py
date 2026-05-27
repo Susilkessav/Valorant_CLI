@@ -406,17 +406,19 @@ def _extract_api_entries(
         if not isinstance(match, MatchData):
             continue
         player = next(
-            (p for p in match.players.all_players
-             if p.name.lower() == name_lower and p.tag.lower() == tag_lower),
+            (
+                p
+                for p in match.players.all_players
+                if p.name.lower() == name_lower and p.tag.lower() == tag_lower
+            ),
             None,
         )
         if player is None:
             continue
 
         team = player.team
-        won = (
-            (team == "Red" and match.teams.red.has_won)
-            or (team == "Blue" and match.teams.blue.has_won)
+        won = (team == "Red" and match.teams.red.has_won) or (
+            team == "Blue" and match.teams.blue.has_won
         )
 
         s = player.stats
@@ -431,20 +433,22 @@ def _extract_api_entries(
                 if rs.puuid == player.puuid
             )
 
-        entries.append(_ApiMatchEntry(
-            agent=player.character,
-            map_name=match.metadata.map_name,
-            rounds_played=match.metadata.rounds_played or 1,
-            won=won,
-            score=s.score,
-            kills=s.kills,
-            deaths=s.deaths,
-            assists=s.assists,
-            headshots=s.headshots,
-            bodyshots=s.bodyshots,
-            legshots=s.legshots,
-            damage_dealt=damage,
-        ))
+        entries.append(
+            _ApiMatchEntry(
+                agent=player.character,
+                map_name=match.metadata.map_name,
+                rounds_played=match.metadata.rounds_played or 1,
+                won=won,
+                score=s.score,
+                kills=s.kills,
+                deaths=s.deaths,
+                assists=s.assists,
+                headshots=s.headshots,
+                bodyshots=s.bodyshots,
+                legshots=s.legshots,
+                damage_dealt=damage,
+            )
+        )
     return entries
 
 

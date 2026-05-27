@@ -36,13 +36,13 @@ class SessionMatchContext:
     """
 
     map: str | None = None
-    side: str | None = None          # "attack" | "defense"
+    side: str | None = None  # "attack" | "defense"
     agent: str | None = None
     enemy_agents: list[str] = field(default_factory=list)
-    score: tuple[int, int] | None = None   # (own, opp) from player's POV
-    result: str | None = None        # "won" | "lost"
-    econ: str | None = None          # "eco" | "half_buy" | "full_buy"
-    phase: str | None = None         # "post_plant" | "retake" | "execute" | "default"
+    score: tuple[int, int] | None = None  # (own, opp) from player's POV
+    result: str | None = None  # "won" | "lost"
+    econ: str | None = None  # "eco" | "half_buy" | "full_buy"
+    phase: str | None = None  # "post_plant" | "retake" | "execute" | "default"
 
     # ------------------------------------------------------------------ #
     # Introspection
@@ -68,8 +68,14 @@ class SessionMatchContext:
 
     def set_side(self, value: str) -> None:
         """Normalise and store side."""
-        _side = {"attack": "attack", "atk": "attack", "offense": "attack",
-                 "defense": "defense", "def": "defense", "defend": "defense"}
+        _side = {
+            "attack": "attack",
+            "atk": "attack",
+            "offense": "attack",
+            "defense": "defense",
+            "def": "defense",
+            "defend": "defense",
+        }
         self.side = _side.get(value.lower(), value.lower())
 
     def flip_side(self) -> None:
@@ -195,16 +201,18 @@ class SessionMatchContext:
     # ------------------------------------------------------------------ #
 
     def to_json(self) -> str:
-        return json.dumps({
-            "map": self.map,
-            "side": self.side,
-            "agent": self.agent,
-            "enemy_agents": self.enemy_agents,
-            "score": list(self.score) if self.score else None,
-            "result": self.result,
-            "econ": self.econ,
-            "phase": self.phase,
-        })
+        return json.dumps(
+            {
+                "map": self.map,
+                "side": self.side,
+                "agent": self.agent,
+                "enemy_agents": self.enemy_agents,
+                "score": list(self.score) if self.score else None,
+                "result": self.result,
+                "econ": self.econ,
+                "phase": self.phase,
+            }
+        )
 
     @classmethod
     def from_json(cls, data: str) -> SessionMatchContext:

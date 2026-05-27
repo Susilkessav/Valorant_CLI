@@ -38,7 +38,9 @@ def run_ingest(
 
         s = collection_stats(data_dir)
         with display.command_frame("Knowledge Base"):
-            display.console.print(f"Vector store: [stat.value]{s['total']}[/stat.value] document(s)")
+            display.console.print(
+                f"Vector store: [stat.value]{s['total']}[/stat.value] document(s)"
+            )
             for doc_type, count in sorted(s["by_type"].items()):
                 display.console.print(f"  [stat.label]{doc_type}:[/stat.label] {count}")
         return
@@ -63,11 +65,16 @@ def run_ingest(
     all_youtube: list[str] = list(youtube or [])
     if youtube_list:
         from pathlib import Path as _Path
+
         list_path = _Path(youtube_list)
         if not list_path.exists():
             display.error(f"File not found: {youtube_list}")
             raise typer.Exit(1)
-        lines = [ln.strip() for ln in list_path.read_text().splitlines() if ln.strip() and not ln.startswith("#")]
+        lines = [
+            ln.strip()
+            for ln in list_path.read_text().splitlines()
+            if ln.strip() and not ln.startswith("#")
+        ]
         all_youtube.extend(lines)
 
     nothing_specified = not corpus and url is None and not all_youtube
@@ -83,7 +90,9 @@ def run_ingest(
             _do_url(data_dir, url, settings=settings)
 
         if all_youtube:
-            _do_youtube_batch(all_youtube, data_dir, settings=settings, force=force, preview=preview)
+            _do_youtube_batch(
+                all_youtube, data_dir, settings=settings, force=force, preview=preview
+            )
 
 
 def _do_seed(data_dir: Path) -> None:
@@ -162,7 +171,9 @@ def _print_web_result(result: object) -> None:
     c.print()
 
     # ── Counts ────────────────────────────────────────────────────────────
-    c.print(f"[stat.label]Chunks fetched:[/stat.label]  [stat.value]{result.fetched_count}[/stat.value]")
+    c.print(
+        f"[stat.label]Chunks fetched:[/stat.label]  [stat.value]{result.fetched_count}[/stat.value]"
+    )
 
     kept_parts = []
     if result.lineup_count:
@@ -170,7 +181,9 @@ def _print_web_result(result: object) -> None:
     if result.web_count:
         kept_parts.append(f"tactical: {result.web_count}")
     kept_detail = f"  [muted]({' · '.join(kept_parts)})[/muted]" if kept_parts else ""
-    c.print(f"[stat.label]Chunks kept:[/stat.label]     [stat.value]{result.kept_count}[/stat.value]{kept_detail}")
+    c.print(
+        f"[stat.label]Chunks kept:[/stat.label]     [stat.value]{result.kept_count}[/stat.value]{kept_detail}"
+    )
 
     if result.dropped_counts:
         total_dropped = sum(result.dropped_counts.values())
@@ -179,12 +192,13 @@ def _print_web_result(result: object) -> None:
             drop_parts.append(f"off-topic: {result.dropped_counts['off_topic']}")
         if result.dropped_counts.get("low_score"):
             drop_parts.append(f"low-relevance: {result.dropped_counts['low_score']}")
-        c.print(f"[stat.label]Dropped:[/stat.label]         [muted]{total_dropped}  ({' · '.join(drop_parts)})[/muted]")
+        c.print(
+            f"[stat.label]Dropped:[/stat.label]         [muted]{total_dropped}  ({' · '.join(drop_parts)})[/muted]"
+        )
 
     # ── Lineup entries extracted ───────────────────────────────────────────
     lineup_chunks = [
-        r for r in result.chunks
-        if r["category"] == "lineups" and not r["drop_reason"]
+        r for r in result.chunks if r["category"] == "lineups" and not r["drop_reason"]
     ]
     if lineup_chunks:
         c.print()
@@ -336,7 +350,9 @@ def _print_youtube_plan(plan: object) -> None:
         return
 
     if plan.skipped_reason == "ip_blocked":
-        c.print("[warning]YouTube is rate-limiting this IP — wait a few minutes and try again.[/warning]")
+        c.print(
+            "[warning]YouTube is rate-limiting this IP — wait a few minutes and try again.[/warning]"
+        )
         c.print("[muted]Tip: avoid running ingest --youtube rapidly in succession.[/muted]")
         return
 
@@ -351,7 +367,9 @@ def _print_youtube_plan(plan: object) -> None:
 
     if plan.skipped_reason == "no_transcript":
         c.print("[warning]No transcript available for this video.[/warning]")
-        c.print("[muted]Possible causes: captions disabled, transcript unavailable in English.[/muted]")
+        c.print(
+            "[muted]Possible causes: captions disabled, transcript unavailable in English.[/muted]"
+        )
         return
 
     # ── Video header ──────────────────────────────────────────────────────
@@ -360,7 +378,9 @@ def _print_youtube_plan(plan: object) -> None:
     c.print()
 
     # ── Chunk counts ─────────────────────────────────────────────────────
-    c.print(f"[stat.label]Chunks fetched:[/stat.label]   [stat.value]{plan.fetched_count}[/stat.value]")
+    c.print(
+        f"[stat.label]Chunks fetched:[/stat.label]   [stat.value]{plan.fetched_count}[/stat.value]"
+    )
 
     kept_detail = ""
     if plan.lineup_count or plan.youtube_count:
@@ -370,7 +390,9 @@ def _print_youtube_plan(plan: object) -> None:
         if plan.youtube_count:
             parts.append(f"regular: {plan.youtube_count}")
         kept_detail = f"  [muted]({' · '.join(parts)})[/muted]"
-    c.print(f"[stat.label]Chunks kept:[/stat.label]      [stat.value]{plan.kept_count}[/stat.value]{kept_detail}")
+    c.print(
+        f"[stat.label]Chunks kept:[/stat.label]      [stat.value]{plan.kept_count}[/stat.value]{kept_detail}"
+    )
 
     if plan.dropped_counts:
         total_dropped = sum(plan.dropped_counts.values())
@@ -394,16 +416,24 @@ def _print_youtube_plan(plan: object) -> None:
                 "is Ollama running with nomic-embed-text pulled?"
             )
         if plan.dropped_counts.get("off_topic"):
-            reason_parts.append(f"{plan.dropped_counts['off_topic']} chunk(s) were off-topic (intro/outro/sponsor)")
+            reason_parts.append(
+                f"{plan.dropped_counts['off_topic']} chunk(s) were off-topic (intro/outro/sponsor)"
+            )
         if plan.dropped_counts.get("low_score"):
-            reason_parts.append(f"{plan.dropped_counts['low_score']} chunk(s) scored below the relevance threshold")
+            reason_parts.append(
+                f"{plan.dropped_counts['low_score']} chunk(s) scored below the relevance threshold"
+            )
         for msg in reason_parts:
             c.print(f"[warning]»[/warning]  {msg}")
         c.print("[muted]Nothing to ingest.[/muted]")
         return
 
     # ── Lineup candidates ─────────────────────────────────────────────────
-    lineup_chunks = [chunk for chunk in plan.candidates if chunk.category == "lineups" and chunk.drop_reason is None]
+    lineup_chunks = [
+        chunk
+        for chunk in plan.candidates
+        if chunk.category == "lineups" and chunk.drop_reason is None
+    ]
     if lineup_chunks:
         c.print()
         c.print(f"[val.red]Lineup candidates[/val.red] — {len(lineup_chunks)}")
@@ -421,7 +451,11 @@ def _print_youtube_plan(plan: object) -> None:
                 id_parts.append(meta["map"])
             if meta.get("site"):
                 id_parts.append(f"{meta['site']} site")
-            label = " · ".join(id_parts) if id_parts else "[muted]metadata extraction incomplete[/muted]"
+            label = (
+                " · ".join(id_parts)
+                if id_parts
+                else "[muted]metadata extraction incomplete[/muted]"
+            )
             purpose = meta.get("purpose", "")
             purpose_str = f"  [muted][{purpose}][/muted]" if purpose else ""
 
@@ -429,7 +463,9 @@ def _print_youtube_plan(plan: object) -> None:
             if len(chunk.text) > 110:
                 snippet += "…"
 
-            c.print(f"  [stat.value]{i}.[/stat.value]  [muted]{mins}:{secs:02d}[/muted]  {label}{purpose_str}")
+            c.print(
+                f"  [stat.value]{i}.[/stat.value]  [muted]{mins}:{secs:02d}[/muted]  {label}{purpose_str}"
+            )
             c.print(f'       [muted]"{snippet}"[/muted]')
             c.print()
 
@@ -479,24 +515,22 @@ def _do_add_lineup(data_dir: Path, settings: object) -> None:
 
     # ── Collect fields ─────────────────────────────────────────────────────
     agents_hint = ", ".join(sorted(_CANONICAL_AGENTS.values())[:8]) + " …"
-    maps_hint   = ", ".join(sorted(_CANONICAL_MAPS.values()))
+    maps_hint = ", ".join(sorted(_CANONICAL_MAPS.values()))
 
-    agent_raw   = typer.prompt(f"Agent  ({agents_hint})")
-    ability     = typer.prompt("Ability (e.g. Recon Bolt, Snake Bite)")
-    map_raw     = typer.prompt(f"Map  ({maps_hint})")
-    site_raw    = typer.prompt("Site  (A / B / C / D / Mid)", default="")
-    side        = typer.prompt("Side  (attack / defense)", default="")
-    purpose     = typer.prompt(
+    agent_raw = typer.prompt(f"Agent  ({agents_hint})")
+    ability = typer.prompt("Ability (e.g. Recon Bolt, Snake Bite)")
+    map_raw = typer.prompt(f"Map  ({maps_hint})")
+    site_raw = typer.prompt("Site  (A / B / C / D / Mid)", default="")
+    side = typer.prompt("Side  (attack / defense)", default="")
+    purpose = typer.prompt(
         "Purpose  (post-plant deny / pre-round info / site clear / retake)", default=""
     )
-    description = typer.prompt(
-        "\nDescribe the lineup (where to stand, where to aim, what it does)"
-    )
+    description = typer.prompt("\nDescribe the lineup (where to stand, where to aim, what it does)")
 
     # ── Canonicalise ──────────────────────────────────────────────────────
-    agent   = _canon_agent(agent_raw) or agent_raw.strip().title()
-    map_val = _canon_map(map_raw)     or map_raw.strip().title()
-    site    = _canon_site(site_raw)   if site_raw.strip() else None
+    agent = _canon_agent(agent_raw) or agent_raw.strip().title()
+    map_val = _canon_map(map_raw) or map_raw.strip().title()
+    site = _canon_site(site_raw) if site_raw.strip() else None
 
     # ── Build embed text ──────────────────────────────────────────────────
     parts = [description.strip()]
@@ -533,15 +567,15 @@ def _do_add_lineup(data_dir: Path, settings: object) -> None:
 
     doc_id = f"lineup:manual:{int(_time.time())}"
     metadata: dict = {
-        "type":    "lineup",
-        "agent":   agent,
+        "type": "lineup",
+        "agent": agent,
         "ability": ability.strip(),
-        "map":     map_val,
+        "map": map_val,
         "video_id": "manual",
-        "title":   "Manual entry",
+        "title": "Manual entry",
         "channel": "manual",
         "start_seconds": 0,
-        "source":  "manual",
+        "source": "manual",
         "expires_at_unix": int(_time.time()) + 365 * 24 * 3600,  # 1-year TTL for hand-curated
     }
     if site:
@@ -552,10 +586,12 @@ def _do_add_lineup(data_dir: Path, settings: object) -> None:
         metadata["purpose"] = purpose.strip()
 
     try:
-        vec  = embed_one(embed_text)
+        vec = embed_one(embed_text)
         coll = get_collection(data_dir, "valocoach_live")
         coll.upsert(ids=[doc_id], documents=[embed_text], embeddings=[vec], metadatas=[metadata])
-        display.success(f"Lineup saved — {agent} {ability} on {map_val}" + (f" ({site} site)" if site else ""))
+        display.success(
+            f"Lineup saved — {agent} {ability} on {map_val}" + (f" ({site} site)" if site else "")
+        )
     except Exception as exc:
         display.error(f"Failed to save lineup: {exc}")
         raise typer.Exit(1) from exc

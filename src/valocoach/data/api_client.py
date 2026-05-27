@@ -275,9 +275,7 @@ class HenrikClient:
             params["mode"] = mode
         payload = await self._get(f"/valorant/v3/matches/{region}/{name}/{tag}", params=params)
         return [
-            MatchData.model_validate(m)
-            for m in payload["data"]
-            if m.get("metadata") is not None
+            MatchData.model_validate(m) for m in payload["data"] if m.get("metadata") is not None
         ]
 
     @_retry_policy

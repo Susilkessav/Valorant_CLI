@@ -63,6 +63,7 @@ def format_map_context(name: str) -> str | None:
     if last_verified:
         try:
             from valocoach.retrieval.meta import get_meta
+
             current_patch = get_meta().get("patch", "")
             if current_patch and last_verified != current_patch:
                 lines.append(

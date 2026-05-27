@@ -196,8 +196,8 @@ def _format_context(
     top_n: int = DEFAULT_TOP_N,
     round_analysis: RoundAnalysis | None = None,
     baseline_comparison: BaselineComparison | None = None,
-    per_map_analysis: dict[str, RoundAnalysis] | None = None,   # E1
-    weapon_splits: list[WeaponSplit] | None = None,               # E2
+    per_map_analysis: dict[str, RoundAnalysis] | None = None,  # E1
+    weapon_splits: list[WeaponSplit] | None = None,  # E2
 ) -> str:
     """Render a compact context block for the LLM prompt.
 
@@ -290,8 +290,7 @@ def _format_context(
                 and map_ra.defense_win_rate is not None
             ):
                 side_str = (
-                    f" · ATK {_pct(map_ra.attack_win_rate)}"
-                    f"/{_pct(map_ra.defense_win_rate)} DEF"
+                    f" · ATK {_pct(map_ra.attack_win_rate)}/{_pct(map_ra.defense_win_rate)} DEF"
                 )
             lines.append(
                 f"- {m.map_name} ({s.matches}g{split_thin}): "
@@ -301,10 +300,7 @@ def _format_context(
     # E2: weapon HS% — only when we have meaningful data
     if weapon_splits:
         top_weapons = weapon_splits[:4]  # at most 4
-        weapon_str = " · ".join(
-            f"{w.weapon} {_pct(w.hs_pct)}"
-            for w in top_weapons
-        )
+        weapon_str = " · ".join(f"{w.weapon} {_pct(w.hs_pct)}" for w in top_weapons)
         lines.append(f"Weapon HS%: {weapon_str}")
 
     # E5: session tilt detector
@@ -364,15 +360,11 @@ def build_stats_context(
 
     # E1: per-map ATK/DEF split
     per_map_analysis = (
-        analyze_rounds_per_map(data.full_matches, data.player.puuid)
-        if data.full_matches
-        else None
+        analyze_rounds_per_map(data.full_matches, data.player.puuid) if data.full_matches else None
     )
     # E2: weapon HS%
     weapon_splits = (
-        compute_weapon_stats(data.full_matches, data.player.puuid)
-        if data.full_matches
-        else None
+        compute_weapon_stats(data.full_matches, data.player.puuid) if data.full_matches else None
     )
 
     return _format_context(

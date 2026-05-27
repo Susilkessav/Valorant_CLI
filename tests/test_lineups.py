@@ -23,18 +23,18 @@ class TestExtractLineupMetadata:
 
         # fake_llm_response would be passed to extract_lineup_metadata in real use;
         # here we mock the function itself so only the return value matters.
-        _ = json.dumps({
-            "agent": "Sova",
-            "ability": "Recon Bolt",
-            "map": "Ascent",
-            "site": "A",
-            "side": "attack",
-            "purpose": "pre-round info",
-        })
+        _ = json.dumps(
+            {
+                "agent": "Sova",
+                "ability": "Recon Bolt",
+                "map": "Ascent",
+                "site": "A",
+                "side": "attack",
+                "purpose": "pre-round info",
+            }
+        )
 
-        with patch(
-            "valocoach.retrieval.lineups.extract_lineup_metadata"
-        ) as mock_extract:
+        with patch("valocoach.retrieval.lineups.extract_lineup_metadata") as mock_extract:
             mock_extract.return_value = {
                 "agent": "Sova",
                 "ability": "Recon Bolt",
@@ -194,7 +194,11 @@ class TestLineupsSeedData:
 
         seed_path = (
             Path(__file__).parent.parent
-            / "src" / "valocoach" / "retrieval" / "data" / "lineups_seed.json"
+            / "src"
+            / "valocoach"
+            / "retrieval"
+            / "data"
+            / "lineups_seed.json"
         )
         assert seed_path.exists(), f"Seed file not found: {seed_path}"
 
@@ -209,7 +213,11 @@ class TestLineupsSeedData:
 
         seed_path = (
             Path(__file__).parent.parent
-            / "src" / "valocoach" / "retrieval" / "data" / "lineups_seed.json"
+            / "src"
+            / "valocoach"
+            / "retrieval"
+            / "data"
+            / "lineups_seed.json"
         )
         with open(seed_path) as f:
             data = json.load(f)
@@ -310,9 +318,7 @@ class TestSuggestLineupsForLowUtil:
         }
 
         # search_lineups is imported lazily inside _suggest_lineups_for_low_util
-        with patch(
-            "valocoach.retrieval.lineups.search_lineups", return_value=[mock_hit]
-        ):
+        with patch("valocoach.retrieval.lineups.search_lineups", return_value=[mock_hit]):
             result = _suggest_lineups_for_low_util(findings, "Sova", "Ascent", MagicMock())
 
         assert result is not None

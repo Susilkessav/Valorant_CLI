@@ -47,6 +47,7 @@ def run_meta_refresh(
 # Single run
 # ---------------------------------------------------------------------------
 
+
 async def _run_once(
     *,
     force: bool,
@@ -61,13 +62,13 @@ async def _run_once(
     await ensure_db(settings.data_dir / "valocoach.db")
 
     step_labels = {
-        "patch_check":    "Checking patch version …",
-        "patch_notes":    "Scraping patch notes …",
-        "stats_scrape":   "Scraping agent stats …",
+        "patch_check": "Checking patch version …",
+        "patch_notes": "Scraping patch notes …",
+        "stats_scrape": "Scraping agent stats …",
         "youtube_ingest": "Ingesting YouTube transcripts …",
-        "meta_generate":  "Regenerating tier list (LLM) …",
-        "meta_write":     "Writing meta.json …",
-        "re_ingest":      "Re-embedding knowledge base …",
+        "meta_generate": "Regenerating tier list (LLM) …",
+        "meta_write": "Writing meta.json …",
+        "re_ingest": "Re-embedding knowledge base …",
     }
 
     current_status_msg = ["Initialising …"]
@@ -85,9 +86,7 @@ async def _run_once(
 
         def _on_step(name: str, sts: str) -> None:
             on_step(name, sts)
-            status_widget.update(
-                f"[bold cyan]{current_status_msg[0]}[/bold cyan]"
-            )
+            status_widget.update(f"[bold cyan]{current_status_msg[0]}[/bold cyan]")
 
         result = await run_meta_sync(
             settings,
@@ -123,12 +122,12 @@ def _render_result(result: object, *, dry_run: bool) -> None:
     display.console.print(f"  Patch detected: {patch_label}")
 
     rows = [
-        ("Patch notes",   r.patch_notes_scraped),
-        ("Ranked stats",  r.ranked_stats_scraped),
+        ("Patch notes", r.patch_notes_scraped),
+        ("Ranked stats", r.ranked_stats_scraped),
         ("Pro/VCT stats", r.pro_stats_scraped),
         ("Tier list LLM", r.meta_regenerated),
-        ("meta.json",     r.meta_written),
-        ("Re-ingest KB",  r.meta_ingested),
+        ("meta.json", r.meta_written),
+        ("Re-ingest KB", r.meta_ingested),
     ]
     for label, ok in rows:
         icon = "[success]✔[/success]" if ok else "[muted]–[/muted]"
@@ -189,16 +188,11 @@ def _install_cron() -> None:
         )
         raise typer.Exit(1)
 
-    cron_line = (
-        f"{_CRON_SCHEDULE}  {valocoach_bin} meta-refresh  "
-        f"{_CRON_MARKER}"
-    )
+    cron_line = f"{_CRON_SCHEDULE}  {valocoach_bin} meta-refresh  {_CRON_MARKER}"
 
     # Read existing crontab (empty string if none).
     try:
-        existing = subprocess.check_output(
-            ["crontab", "-l"], stderr=subprocess.DEVNULL, text=True
-        )
+        existing = subprocess.check_output(["crontab", "-l"], stderr=subprocess.DEVNULL, text=True)
     except subprocess.CalledProcessError:
         existing = ""
 

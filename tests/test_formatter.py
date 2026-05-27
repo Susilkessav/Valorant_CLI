@@ -50,6 +50,7 @@ from valocoach.stats.round_analyzer import RoundAnalysis
 def _con() -> Console:
     """Capture console — no ANSI escapes, stable width, writes to StringIO."""
     from valocoach.cli.display import THEME
+
     return Console(file=StringIO(), force_terminal=False, width=120, theme=THEME)
 
 

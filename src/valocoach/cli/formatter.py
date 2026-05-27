@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 
 WARN_PREFIX: Final[str] = "! "
 
+
 def fmt_pct(ratio: float) -> str:
     return f"{ratio * 100:.1f}%"
 
@@ -56,6 +57,7 @@ def render_warn_legend(console: Console) -> None:
 # ---------------------------------------------------------------------------
 # Rank tier color helper
 # ---------------------------------------------------------------------------
+
 
 def _rank_style(tier_patched: str) -> str:
     t = tier_patched.lower()
@@ -394,7 +396,10 @@ def render_identity_panel(console: Console, player: Player) -> None:
         f"[{rank_style}]{player.current_tier_patched}[/{rank_style}]"
         f"  [muted]({player.current_rr} RR · elo {player.elo})[/muted]",
     )
-    body.add_row("Peak", f"[{_rank_style(player.peak_tier_patched)}]{player.peak_tier_patched}[/{_rank_style(player.peak_tier_patched)}]")
+    body.add_row(
+        "Peak",
+        f"[{_rank_style(player.peak_tier_patched)}]{player.peak_tier_patched}[/{_rank_style(player.peak_tier_patched)}]",
+    )
     body.add_row(
         "Region",
         f"{player.region.upper()}  [muted]· level {player.account_level}[/muted]",

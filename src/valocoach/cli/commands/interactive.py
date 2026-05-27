@@ -38,41 +38,52 @@ log = logging.getLogger(__name__)
 
 _SLASH_HELP: dict[str, str] = {
     # ── Match context ──────────────────────────────────────────────────
-    "/agent":   "Set your agent:  /agent Jett",
-    "/map":     "Set the map:     /map Ascent",
-    "/side":    "Set your side:   /side attack  or  /side defense",
-    "/score":   "Set the score:   /score 9-11",
-    "/won":     "Mark last match as won.",
-    "/lost":    "Mark last match as lost.",
-    "/eco":     "Set economy:     /eco eco  |  /eco half  |  /eco full",
-    "/enemy":   "Add an enemy agent:  /enemy Cypher",
-    "/half":    "Toggle side at half-time (attack ↔ defense).",
+    "/agent": "Set your agent:  /agent Jett",
+    "/map": "Set the map:     /map Ascent",
+    "/side": "Set your side:   /side attack  or  /side defense",
+    "/score": "Set the score:   /score 9-11",
+    "/won": "Mark last match as won.",
+    "/lost": "Mark last match as lost.",
+    "/eco": "Set economy:     /eco eco  |  /eco half  |  /eco full",
+    "/enemy": "Add an enemy agent:  /enemy Cypher",
+    "/half": "Toggle side at half-time (attack ↔ defense).",
     "/context": "Show current match context.",
-    "/reset":   "Clear all match context for this session.",
+    "/reset": "Clear all match context for this session.",
     # ── Session management ─────────────────────────────────────────────
-    "/help":    "Show this help message.",
-    "/clear":   "Clear conversation memory — start a fresh session.",
-    "/memory":  "Show turn count and token usage in the current window.",
-    "/save":    "Save the current session to disk immediately.",
-    "/sessions":"List previously saved sessions.",
-    "/stats":   "Display your recent stats card.",
-    "/note":    "Add a coaching note:  /note <text>",
-    "/notes":   "List your open (unresolved) coaching notes.",
+    "/help": "Show this help message.",
+    "/clear": "Clear conversation memory — start a fresh session.",
+    "/memory": "Show turn count and token usage in the current window.",
+    "/save": "Save the current session to disk immediately.",
+    "/sessions": "List previously saved sessions.",
+    "/stats": "Display your recent stats card.",
+    "/note": "Add a coaching note:  /note <text>",
+    "/notes": "List your open (unresolved) coaching notes.",
     "/resolve": "Resolve a coaching note by id:  /resolve <id>",
-    "/quit":    "Exit the REPL (also: Ctrl-D, Ctrl-C).",
+    "/quit": "Exit the REPL (also: Ctrl-D, Ctrl-C).",
 }
 
-_CONTEXT_CMDS = frozenset({
-    "/agent", "/map", "/side", "/score", "/won", "/lost",
-    "/eco", "/enemy", "/half", "/context", "/reset",
-})
+_CONTEXT_CMDS = frozenset(
+    {
+        "/agent",
+        "/map",
+        "/side",
+        "/score",
+        "/won",
+        "/lost",
+        "/eco",
+        "/enemy",
+        "/half",
+        "/context",
+        "/reset",
+    }
+)
 
 _WELCOME_PARTS = [
     "",
     "[val.red]━━━ Interactive Coaching Mode ━━━[/val.red]",
     "",
     "[heading]Ask anything about your gameplay.[/heading]",
-    '[muted]Set context first: /agent Jett  /map Ascent  /side attack[/muted]',
+    "[muted]Set context first: /agent Jett  /map Ascent  /side attack[/muted]",
     '[muted]Then ask: "how do I hold A site better?"[/muted]',
     "",
     "[muted]Commands: /help  ·  Ctrl-D to exit[/muted]",
@@ -107,7 +118,7 @@ def _handle_context_slash(
         _match_score,
     )
 
-    arg = raw_input.strip()[len(cmd):].strip()
+    arg = raw_input.strip()[len(cmd) :].strip()
 
     if cmd == "/agent":
         if not arg:
@@ -270,7 +281,7 @@ def _handle_slash(
             display.warn(f"Couldn't load stats: {exc}")
 
     elif cmd == "/note":
-        body = raw_input.strip()[len("/note"):].strip()
+        body = raw_input.strip()[len("/note") :].strip()
         if not body:
             display.warn("Usage: /note <text>   e.g. /note Work on crossfire at A long")
             return
@@ -296,16 +307,16 @@ def _handle_slash(
             return
         display.console.print(f"\n[heading]Open coaching notes ({len(notes)}):[/heading]")
         for n in notes:
-            pri_icon = {1: "[val.red]●[/val.red]", 2: "[warning]●[/warning]", 3: "[muted]●[/muted]"}.get(
-                n.priority, "●"
-            )
-            display.console.print(
-                f"  [muted]{n.id:>4}.[/muted] {pri_icon} [{n.category}] {n.body}"
-            )
+            pri_icon = {
+                1: "[val.red]●[/val.red]",
+                2: "[warning]●[/warning]",
+                3: "[muted]●[/muted]",
+            }.get(n.priority, "●")
+            display.console.print(f"  [muted]{n.id:>4}.[/muted] {pri_icon} [{n.category}] {n.body}")
         display.console.print()
 
     elif cmd == "/resolve":
-        id_str = raw_input.strip()[len("/resolve"):].strip()
+        id_str = raw_input.strip()[len("/resolve") :].strip()
         if not id_str:
             display.warn("Usage: /resolve <note-id>   e.g. /resolve 12")
             return
@@ -448,7 +459,9 @@ def run_interactive(
             try:
                 raw = session.prompt("vc > ")
             except KeyboardInterrupt:
-                display.console.print("\n[muted]Interrupted — type /quit or Ctrl-D to exit.[/muted]")
+                display.console.print(
+                    "\n[muted]Interrupted — type /quit or Ctrl-D to exit.[/muted]"
+                )
                 continue
             except EOFError:
                 display.console.print("\n[muted]Bye.[/muted]")

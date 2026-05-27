@@ -54,6 +54,7 @@ def main(
     if ctx.invoked_subcommand is None:
         if sys.stdin.isatty():
             from valocoach.cli.hub import show_hub
+
             show_hub()
         else:
             # Non-interactive context (pipe/CI) — emit plain help text
@@ -96,11 +97,12 @@ def coach(
         # No situation provided — launch the REPL on TTY, show help on pipes.
         if sys.stdin.isatty():
             from valocoach.cli.commands.interactive import run_interactive
+
             run_interactive()
         else:
             display.console.print(
-                "[muted]Usage: valocoach coach \"<situation>\"[/muted]\n"
-                "[muted]Example: valocoach coach \"1v2 post-plant B site Haven attack\"[/muted]"
+                '[muted]Usage: valocoach coach "<situation>"[/muted]\n'
+                '[muted]Example: valocoach coach "1v2 post-plant B site Haven attack"[/muted]'
             )
         return
 

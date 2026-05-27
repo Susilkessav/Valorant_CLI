@@ -101,16 +101,14 @@ async def check_patch_update(settings: Settings) -> tuple[str, bool]:
                 is_new = bool(meta_patch and meta_patch != current)
                 if is_new:
                     log.info(
-                        "Patch tracked at %s but meta.json still on %s — "
-                        "treating as new patch.",
+                        "Patch tracked at %s but meta.json still on %s — treating as new patch.",
                         current,
                         meta_patch,
                     )
                 else:
                     log.debug("Patch unchanged and meta.json aligned: %s", current)
             except Exception as exc:
-                log.warning("Could not compare meta.json patch (%s); "
-                            "assuming aligned.", exc)
+                log.warning("Could not compare meta.json patch (%s); assuming aligned.", exc)
                 is_new = False
 
     # Invalidate volatile entries after the PatchVersion row is committed,

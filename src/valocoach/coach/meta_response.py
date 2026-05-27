@@ -235,8 +235,7 @@ def format_personalised_takeaway(settings) -> str | None:
             else:
                 badge = "new — not yet in knowledge base"
             aligned.append(
-                f"{a.agent} ({badge}, {a.stats.matches}g, "
-                f"{a.stats.win_rate * 100:.0f}% WR)"
+                f"{a.agent} ({badge}, {a.stats.matches}g, {a.stats.win_rate * 100:.0f}% WR)"
             )
         lines.append(f"  • Agent pool: {', '.join(aligned)}.")
 

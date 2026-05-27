@@ -37,8 +37,7 @@ _LIQUIPEDIA_API = (
     "&cmlimit=100&cmtype=page&format=json"
 )
 _LIQUIPEDIA_WIKITEXT_API = (
-    "https://liquipedia.net/valorant/api.php"
-    "?action=parse&page={page}&prop=wikitext&format=json"
+    "https://liquipedia.net/valorant/api.php?action=parse&page={page}&prop=wikitext&format=json"
 )
 _USER_AGENT = "ValoCoachBot/1.0 (personal coaching tool)"
 
@@ -103,7 +102,9 @@ def _parse_agent_wikitext(wikitext: str) -> dict | None:
     import re
 
     # 1. Infobox agent — name + role/class.
-    infobox_match = re.search(r"\{\{Infobox agent\s*\n(.+?)\n\}\}", wikitext, re.DOTALL | re.IGNORECASE)
+    infobox_match = re.search(
+        r"\{\{Infobox agent\s*\n(.+?)\n\}\}", wikitext, re.DOTALL | re.IGNORECASE
+    )
     if not infobox_match:
         return None
     infobox = _parse_template_fields(infobox_match.group(1))
@@ -114,7 +115,9 @@ def _parse_agent_wikitext(wikitext: str) -> dict | None:
 
     # 2. AbilityCard blocks — one per ability.
     abilities: dict[str, dict] = {}
-    for ab_match in re.finditer(r"\{\{AbilityCard\s*\n(.+?)\n\}\}", wikitext, re.DOTALL | re.IGNORECASE):
+    for ab_match in re.finditer(
+        r"\{\{AbilityCard\s*\n(.+?)\n\}\}", wikitext, re.DOTALL | re.IGNORECASE
+    ):
         ab = _parse_template_fields(ab_match.group(1))
         hotkey = (ab.get("hotkey") or "").strip().upper()
         if hotkey not in {"C", "Q", "E", "X"}:
@@ -127,7 +130,7 @@ def _parse_agent_wikitext(wikitext: str) -> dict | None:
         # Description — strip wikitext bold/italic markers and verbose UPPER-CASED
         # verbs ("EQUIP", "FIRE") that the wiki uses but bloat the prompt.
         desc = ab.get("description", "").strip()
-        desc = re.sub(r"'{2,5}", "", desc)            # bold/italic
+        desc = re.sub(r"'{2,5}", "", desc)  # bold/italic
         desc = re.sub(r"\[\[(?:[^\]|]*\|)?([^\]]+)\]\]", r"\1", desc)  # [[link|text]] → text
         desc = re.sub(r"\s+", " ", desc).strip()
         entry["description"] = desc
@@ -231,8 +234,7 @@ def _scrape_roster() -> list[str] | None:
 
 def _new_agent_template_block(name: str) -> str:
     """Print-ready JSON skeleton for a new agent entry."""
-    return (
-        f"""    {{
+    return f"""    {{
       "name": "{name}",
       "role": "Duelist | Initiator | Controller | Sentinel",
       "abilities": {{
@@ -244,7 +246,6 @@ def _new_agent_template_block(name: str) -> str:
       "playstyle": "...",
       "economy_tip": "..."
     }}"""
-    )
 
 
 def _stub_meta_entries(meta: dict, missing: list[str]) -> int:

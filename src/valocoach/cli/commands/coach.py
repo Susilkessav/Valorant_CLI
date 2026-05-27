@@ -64,6 +64,7 @@ def warn_stale_meta_once(settings) -> None:
     """
     _maybe_warn_stale_meta(settings, once=True)
 
+
 # Team-roster questions ("who was in my team", "list teammates") — the schema
 # stores teammate puuids but not their display names, so the LLM has no source
 # of truth.  Detecting these queries lets us inject an explicit data-availability
@@ -86,7 +87,7 @@ _TEAM_ROSTER_CONTRACT = (
     "1. The match database does NOT track teammate display names — only puuids "
     "and the agent each teammate played.\n"
     "2. Your FIRST sentence MUST be exactly: \"I don't have teammate names "
-    "stored — only the agents they played in each match.\"\n"
+    'stored — only the agents they played in each match."\n'
     "3. You MAY offer to list the agent composition of recent matches if such "
     "data is provided in the user message; otherwise say it isn't available "
     "in the prompt this turn.\n"
@@ -236,9 +237,7 @@ def run_coach(
         from valocoach.coach.elicitation import run_elicitation, should_elicit
 
         if should_elicit(parsed, situation, intent):
-            parsed, agent, map_, side = run_elicitation(
-                parsed, agent, map_, side, intent=intent
-            )
+            parsed, agent, map_, side = run_elicitation(parsed, agent, map_, side, intent=intent)
             # Persist elicited values into match_context so the REPL doesn't
             # re-ask the same fields on the next turn.
             if match_context is not None:
@@ -403,7 +402,9 @@ def run_coach(
     if _TEAM_ROSTER_KW.search(situation):
         system_prompt = f"{system_prompt}\n\n---\n\n{_TEAM_ROSTER_CONTRACT}"
 
-    display.info(f"Using model: [heading]{settings.ollama_model}[/heading] [muted][{intent}][/muted]")
+    display.info(
+        f"Using model: [heading]{settings.ollama_model}[/heading] [muted][{intent}][/muted]"
+    )
 
     stop_tokens = _POST_GAME_STOP_TOKENS if intent == "post_game" else None
     max_tokens_override = _INTENT_MAX_TOKENS.get(intent)

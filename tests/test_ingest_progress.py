@@ -352,6 +352,7 @@ _WEB_INGEST_SRC = "valocoach.retrieval.web_ingest.ingest_web_url"
 class TestDoUrl:
     def _make_settings(self):
         from unittest.mock import MagicMock
+
         return MagicMock()
 
     def _make_result(self, *, skipped_reason=None, kept_count=5, lineup_count=2, web_count=3):
@@ -375,7 +376,11 @@ class TestDoUrl:
 
         with patch(_WEB_INGEST_SRC, return_value=self._make_result()):
             # Must not raise
-            _do_url(tmp_path, "https://dotesports.com/valorant/sova-haven-lineups", settings=self._make_settings())
+            _do_url(
+                tmp_path,
+                "https://dotesports.com/valorant/sova-haven-lineups",
+                settings=self._make_settings(),
+            )
 
     def test_scrape_failure_shows_error(self, tmp_path: Path):
         from valocoach.cli.commands.ingest import _do_url
@@ -389,7 +394,11 @@ class TestDoUrl:
 
         result = self._make_result(lineup_count=3, web_count=2)
         with patch(_WEB_INGEST_SRC, return_value=result) as mock_ingest:
-            _do_url(tmp_path, "https://dotesports.com/valorant/sova-haven-lineups", settings=self._make_settings())
+            _do_url(
+                tmp_path,
+                "https://dotesports.com/valorant/sova-haven-lineups",
+                settings=self._make_settings(),
+            )
         mock_ingest.assert_called_once()
         # Result has lineup_count > 0 — no exception means success path ran
         assert result.lineup_count == 3
@@ -505,7 +514,10 @@ class TestDoYoutube:
         from valocoach.cli.commands.ingest import _do_youtube
 
         with (
-            patch(_ANALYZE_SRC, return_value=_make_plan(skipped_reason="already_ingested", kept_count=0)),
+            patch(
+                _ANALYZE_SRC,
+                return_value=_make_plan(skipped_reason="already_ingested", kept_count=0),
+            ),
             patch(_APPLY_SRC) as mock_apply,
             patch(_TYPER_CONFIRM_SRC) as mock_confirm,
         ):
@@ -519,7 +531,9 @@ class TestDoYoutube:
         from valocoach.cli.commands.ingest import _do_youtube
 
         with (
-            patch(_ANALYZE_SRC, return_value=_make_plan(kept_count=0, lineup_count=0, youtube_count=0)),
+            patch(
+                _ANALYZE_SRC, return_value=_make_plan(kept_count=0, lineup_count=0, youtube_count=0)
+            ),
             patch(_APPLY_SRC) as mock_apply,
             patch(_TYPER_CONFIRM_SRC) as mock_confirm,
         ):

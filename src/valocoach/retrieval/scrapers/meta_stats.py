@@ -40,23 +40,19 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 # Ranked stats — direct extract targets (Tavily can handle these)
-_DAK_GG_URL    = "https://dak.gg/valorant/statistics/agents"
-_BLITZ_GG_URL  = "https://blitz.gg/valorant/stats/agents"
+_DAK_GG_URL = "https://dak.gg/valorant/statistics/agents"
+_BLITZ_GG_URL = "https://blitz.gg/valorant/stats/agents"
 
 # Trafilatura fallback (almost always empty due to JS rendering / Cloudflare)
 _TRACKER_AGENTS_URL = "https://tracker.gg/valorant/insights/agents"
-_VLR_STATS_URL      = "https://www.vlr.gg/stats"
+_VLR_STATS_URL = "https://www.vlr.gg/stats"
 
 # Pro stats — Tavily search query (returns VCT event agent pick pages)
-_TAVILY_PRO_QUERY = (
-    "Valorant VCT pro agent pick rate win rate tournament statistics 2025"
-)
+_TAVILY_PRO_QUERY = "Valorant VCT pro agent pick rate win rate tournament statistics 2025"
 _PRO_DOMAINS = ["vlr.gg", "liquipedia.net", "thespike.gg"]
 
 # Ranked fallback search query (used when dak.gg and blitz.gg both fail)
-_TAVILY_RANKED_FALLBACK_QUERY = (
-    "Valorant ranked agent pick rate win rate statistics 2025"
-)
+_TAVILY_RANKED_FALLBACK_QUERY = "Valorant ranked agent pick rate win rate statistics 2025"
 _RANKED_DOMAINS = ["dak.gg", "blitz.gg", "valoranttracker.gg"]
 
 
@@ -199,8 +195,7 @@ def _fetch_pro_trafilatura() -> str:
         return ""
     if len(content.text) < 500:
         log.warning(
-            "Pro stats: vlr.gg returned only %d chars — JS-blocked. "
-            "Set tavily_api_key in config.",
+            "Pro stats: vlr.gg returned only %d chars — JS-blocked. Set tavily_api_key in config.",
             len(content.text),
         )
     log.info("Pro stats: trafilatura vlr.gg → %d chars", len(content.text))
@@ -251,10 +246,10 @@ def fetch_all_stats(settings=None) -> MetaStatsResult:
     use_tavily = settings is not None and tv.is_configured(settings)
 
     ranked_text = fetch_ranked_stats(settings)
-    ranked_src  = "tavily" if (use_tavily and ranked_text) else "trafilatura"
+    ranked_src = "tavily" if (use_tavily and ranked_text) else "trafilatura"
 
     pro_text = fetch_pro_stats(settings)
-    pro_src  = "tavily" if (use_tavily and pro_text) else "trafilatura"
+    pro_src = "tavily" if (use_tavily and pro_text) else "trafilatura"
 
     result = MetaStatsResult(
         ranked_text=ranked_text,
@@ -264,7 +259,9 @@ def fetch_all_stats(settings=None) -> MetaStatsResult:
     )
     log.info(
         "Meta stats: ranked=%s(%d chars) pro=%s(%d chars)",
-        ranked_src, len(ranked_text),
-        pro_src, len(pro_text),
+        ranked_src,
+        len(ranked_text),
+        pro_src,
+        len(pro_text),
     )
     return result

@@ -108,14 +108,14 @@ def _load_mmr_sync(settings, puuid: str, limit: int = 10) -> list:
 
 _SEV_COLOUR = {
     "critical": "[val.red]",
-    "warning":  "[warning]",
-    "neutral":  "[muted]",
+    "warning": "[warning]",
+    "neutral": "[muted]",
     "positive": "[success]",
 }
 _SEV_ICON = {
     "critical": ">>>",
-    "warning":  " > ",
-    "neutral":  "   ",
+    "warning": " > ",
+    "neutral": "   ",
     "positive": " + ",
 }
 
@@ -229,9 +229,7 @@ def _auto_note_criticals(
         )
         if note_id is not None:
             saved += 1
-            display.success(
-                f"Note #{note_id} saved  [muted](critical · {cat})[/muted]"
-            )
+            display.success(f"Note #{note_id} saved  [muted](critical · {cat})[/muted]")
 
     return saved
 
@@ -261,9 +259,7 @@ def _build_match_context(match, puuid: str) -> SessionMatchContext:
     # Enemy agents — the other team's agents
     for mp in match.players:
         if mp.puuid != puuid:
-            my_team = ctx.agent and next(
-                (p.team for p in match.players if p.puuid == puuid), None
-            )
+            my_team = ctx.agent and next((p.team for p in match.players if p.puuid == puuid), None)
             if my_team and mp.team != my_team:
                 ctx.add_enemy(mp.agent_name)
 
@@ -281,9 +277,7 @@ def _offer_repl_handoff(match_ctx: SessionMatchContext) -> None:
         return  # non-interactive context (pipe, CI) — skip
 
     display.console.print()
-    display.console.print(
-        "[muted]Continue coaching this match in interactive mode?[/muted]"
-    )
+    display.console.print("[muted]Continue coaching this match in interactive mode?[/muted]")
     try:
         answer = input("Launch REPL? [y/N] ").strip().lower()
     except (EOFError, KeyboardInterrupt):
@@ -301,10 +295,21 @@ def _offer_repl_handoff(match_ctx: SessionMatchContext) -> None:
 # ---------------------------------------------------------------------------
 
 # Agents where lineup/ability placement matters enough to surface suggestions
-_UTIL_HEAVY_AGENTS = frozenset({
-    "Sova", "Viper", "KAY/O", "Fade", "Brimstone", "Skye", "Breach",
-    "Astra", "Harbor", "Gekko", "Tejo",
-})
+_UTIL_HEAVY_AGENTS = frozenset(
+    {
+        "Sova",
+        "Viper",
+        "KAY/O",
+        "Fade",
+        "Brimstone",
+        "Skye",
+        "Breach",
+        "Astra",
+        "Harbor",
+        "Gekko",
+        "Tejo",
+    }
+)
 
 
 def _suggest_lineups_for_low_util(
@@ -345,11 +350,11 @@ def _suggest_lineups_for_low_util(
         formatted = format_lineup_results(hits)
         return (
             f"LINEUP SUGGESTIONS for {agent_clean} on {map_name.strip()} "
-            "(player used fewer abilities than expected):\n"
-            + formatted
+            "(player used fewer abilities than expected):\n" + formatted
         )
     except Exception as exc:
         import logging
+
         logging.getLogger(__name__).debug("G6: lineup suggestion failed: %s", exc)
         return None
 
@@ -463,7 +468,7 @@ def run_post_game(
         situation=situation,
         agent=player_agent,
         map_=match.map_name.strip() if match.map_name else None,
-        with_stats=False,   # analyzers already have the stats; avoid double-loading
+        with_stats=False,  # analyzers already have the stats; avoid double-loading
         no_elicit=True,
         force_intent="post_game",
     )
