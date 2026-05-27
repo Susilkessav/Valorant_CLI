@@ -64,17 +64,114 @@ _LINEUP_TTL_SECONDS = 60 * 24 * 3600
 # casing ("sova", "SOVA", "Sova").  We canonicalise both at write time and
 # at query time so filtered retrieval actually finds chunks.
 
-_CANONICAL_AGENTS: dict[str, str] = {a.lower(): a for a in (
-    "Astra", "Breach", "Brimstone", "Chamber", "Clove", "Cypher", "Deadlock",
-    "Fade", "Gekko", "Harbor", "Iso", "Jett", "KAY/O", "Killjoy", "Neon",
-    "Omen", "Phoenix", "Raze", "Reyna", "Sage", "Skye", "Sova", "Tejo",
-    "Viper", "Vyse", "Waylay", "Yoru",
-)}
-_CANONICAL_MAPS: dict[str, str] = {m.lower(): m for m in (
-    "Ascent", "Bind", "Breeze", "Fracture", "Haven", "Icebox", "Lotus",
-    "Pearl", "Split", "Sunset", "Abyss", "Corrode",
-)}
-_CANONICAL_SITES = {"a": "A", "b": "B", "c": "C", "mid": "Mid"}
+_CANONICAL_AGENTS: dict[str, str] = {
+    a.lower(): a
+    for a in (
+        "Astra",
+        "Breach",
+        "Brimstone",
+        "Chamber",
+        "Clove",
+        "Cypher",
+        "Deadlock",
+        "Fade",
+        "Gekko",
+        "Harbor",
+        "Iso",
+        "Jett",
+        "KAY/O",
+        "Killjoy",
+        "Neon",
+        "Omen",
+        "Phoenix",
+        "Raze",
+        "Reyna",
+        "Sage",
+        "Skye",
+        "Sova",
+        "Tejo",
+        "Viper",
+        "Vyse",
+        "Waylay",
+        "Yoru",
+    )
+}
+_CANONICAL_MAPS: dict[str, str] = {
+    m.lower(): m
+    for m in (
+        "Ascent",
+        "Bind",
+        "Breeze",
+        "Fracture",
+        "Haven",
+        "Icebox",
+        "Lotus",
+        "Pearl",
+        "Split",
+        "Sunset",
+        "Abyss",
+        "Corrode",
+    )
+}
+_CANONICAL_SITES = {"a": "A", "b": "B", "c": "C", "d": "D", "mid": "Mid"}
+
+# Primary lineup ability per agent — used as a fallback when the LLM returns null.
+# These are the abilities most commonly the subject of YouTube lineup guides.
+_DEFAULT_LINEUP_ABILITIES: dict[str, str] = {
+    "Sova": "Recon Bolt",
+    "Viper": "Snake Bite",
+    "Brimstone": "Incendiary",
+    "KAY/O": "ZERO/point",
+    "Omen": "Dark Cover",
+    "Astra": "Gravity Well",
+    "Harbor": "High Tide",
+    "Gekko": "Wingman",
+    "Breach": "Aftershock",
+    "Fade": "Seize",
+    "Deadlock": "Sonic Sensor",
+    "Killjoy": "Nanoswarm",
+    "Cypher": "Trapwire",
+    "Chamber": "Trademark",
+}
+
+# Keyword hints for purpose detection — checked in order, first match wins.
+_PURPOSE_HINTS: list[tuple[list[str], str]] = [
+    (["post plant", "post-plant", "spike planted", "after plant"], "post-plant deny"),
+    (["retake", "take back", "reclaim"], "retake"),
+    (["site clear", "clearing site", "check site", "clear the site"], "site clear"),
+    (
+        ["revealing", "reveal", "scanning ahead", "scan", "pre round", "pre-round", "before round"],
+        "pre-round info",
+    ),
+]
+
+# Site keyword hints — checked in order per word-boundary patterns.
+# Map-specific entries first so they don't get eclipsed by generic ones.
+_SITE_HINTS: list[tuple[list[str], str]] = [
+    # Haven D-short (Haven-unique)
+    (["d site", "d short", "long hall", "d main"], "D"),
+    # A site variants
+    (
+        [
+            "a site",
+            "a short",
+            "a main",
+            "a heaven",
+            "a link",
+            "a lobby",
+            "a bath",
+            "a court",
+            "onto a",
+        ],
+        "A",
+    ),
+    # B site variants
+    (["b site", "b main", "b long", "b box", "b hall", "b lobby", "onto b"], "B"),
+    # C site variants (Haven, Lotus, Fracture)
+    (["c site", "c long", "c short", "c lobby", "c link", "onto c"], "C"),
+    # Mid — last so specific sites take priority
+    (["mid site", "mid-lane", " mid ", "through mid", "from mid"], "Mid"),
+]
 
 
 def _canon_agent(value: str | None) -> str | None:
@@ -107,24 +204,107 @@ def _canon_site(value: str | None) -> str | None:
 _EXTRACTION_SYSTEM = """\
 You are a Valorant lineup metadata extractor.
 Given a transcript excerpt describing a lineup or utility throw, extract structured metadata.
-Return ONLY a valid JSON object with these fields (use null for anything not mentioned):
+
+The video title and channel are provided as context — use them to fill in fields the
+transcript does not explicitly state (e.g. if the title says "Sova Haven Defense" you
+can infer agent=Sova, map=Haven, side=defense even if the speaker never says them aloud).
+
+ABILITY NAMES — use these exact strings:
+- Sova: "Recon Bolt" (dart that bounces + reveals; audio cue "scanning ahead"), "Shock Dart", "Owl Drone", "Hunter's Fury"
+- Viper: "Snake Bite" (molotov), "Poison Cloud" (smoke orb), "Toxic Screen" (wall), "Viper's Pit"
+- Brimstone: "Incendiary" (molotov), "Sky Smoke", "Stim Beacon", "Orbital Strike"
+- Omen: "Dark Cover" (smoke), "Shrouded Step", "Paranoia", "From the Shadows"
+- KAY/O: "ZERO/point" (knife), "FLASH/drive", "FRAG/ment" (molly), "NULL/cmd"
+- Killjoy: "Nanoswarm" (molly), "Alarmbot", "Turret", "Lockdown"
+- Cypher: "Trapwire", "Cyber Cage", "Spycam", "Neural Theft"
+- Breach: "Aftershock", "Flashpoint", "Fault Line", "Rolling Thunder"
+- Fade: "Seize", "Haunt", "Prowler", "Nightfall"
+- Astra: "Gravity Well", "Nova Pulse", "Nebula", "Cosmic Divide"
+- Harbor: "Cove", "High Tide", "Cascade", "Reckoning"
+- Gekko: "Wingman", "Dizzy", "Mosh Pit", "Thrash"
+
+SITE NAMES — use only: "A", "B", "C", "D", "Mid" (Haven has A, B, C bomb sites plus D short area)
+
+Return ONLY a valid JSON object with these fields (use null for anything not determined):
 {
-  "agent": "<agent name or null>",
-  "ability": "<ability name or null>",
-  "map": "<map name or null>",
-  "site": "<A|B|C|Mid|null>",
+  "agent": "<exact Valorant agent name or null>",
+  "ability": "<exact ability name or null>",
+  "map": "<exact map name or null>",
+  "site": "<A|B|C|D|Mid|null>",
   "side": "<attack|defense|null>",
   "purpose": "<post-plant deny|pre-round info|site clear|retake|null>"
 }
-Do not include any other text. Only output the JSON object."""
+Do not include any explanation, preamble, or extra text. Output only the JSON object."""
 
 
-def extract_lineup_metadata(text: str, settings: Any) -> dict:
+def _infer_from_title(title: str) -> dict[str, str | None]:
+    """Deterministically extract agent, map, and side from a video title.
+
+    Searches for canonical agent and map names (case-insensitive).  Returns
+    only the fields that could be matched — missing fields are omitted so the
+    caller can merge this dict as a fallback without clobbering LLM results.
+    """
+    result: dict[str, str | None] = {}
+    t = title.lower()
+
+    for key, canonical in _CANONICAL_AGENTS.items():
+        if key in t:
+            result["agent"] = canonical
+            break
+
+    for key, canonical in _CANONICAL_MAPS.items():
+        if key in t:
+            result["map"] = canonical
+            break
+
+    if any(w in t for w in ("defense", "defend", "defending", "def ")):
+        result["side"] = "defense"
+    elif any(w in t for w in ("attack", "attacking", "offense", "atk ")):
+        result["side"] = "attack"
+
+    return result
+
+
+def _apply_fallbacks(result: dict[str, str | None], text: str) -> None:
+    """Fill in null fields using deterministic rules — modifies *result* in place.
+
+    Called after LLM extraction so it only fires when the model couldn't determine
+    a value.  Keeps extraction best-effort without silently losing known information.
+    """
+    # Ability: if agent is known and ability is null, use the agent's primary lineup ability
+    if not result.get("ability") and result.get("agent"):
+        default_ability = _DEFAULT_LINEUP_ABILITIES.get(result["agent"])
+        if default_ability:
+            result["ability"] = default_ability
+
+    text_lower = text.lower()
+
+    # Site: keyword scan — only fires when LLM returned null
+    if not result.get("site"):
+        for keywords, site in _SITE_HINTS:
+            if any(kw in text_lower for kw in keywords):
+                result["site"] = site
+                break
+
+    # Purpose: keyword scan over the transcript text
+    if not result.get("purpose"):
+        for keywords, purpose in _PURPOSE_HINTS:
+            if any(kw in text_lower for kw in keywords):
+                result["purpose"] = purpose
+                break
+
+
+def extract_lineup_metadata(text: str, settings: Any, *, video_title: str | None = None) -> dict:
     """Ask the LLM to extract structured lineup metadata from a transcript chunk.
 
+    If *video_title* is provided it is used two ways:
+    - Passed to the LLM as context so it can infer fields not stated in the transcript.
+    - Parsed deterministically via :func:`_infer_from_title` to supply reliable
+      agent/map/side defaults even when the LLM extraction fails or returns nulls.
+
     Returns a dict with keys: agent, ability, map, site, side, purpose.
-    All values may be None if the LLM cannot determine them.
-    Never raises — returns all-None dict on any failure.
+    All values may be None if neither LLM nor title inference could determine them.
+    Never raises — returns defaults on any failure.
     """
     defaults: dict[str, str | None] = {
         "agent": None,
@@ -135,11 +315,16 @@ def extract_lineup_metadata(text: str, settings: Any) -> dict:
         "purpose": None,
     }
 
+    # Deterministic title inference — reliable fallback regardless of LLM outcome
+    title_fields = _infer_from_title(video_title) if video_title else {}
+
     try:
         from valocoach.llm.provider import call_llm
 
+        context_line = f'Video: "{video_title}"\n\n' if video_title else ""
         prompt = (
-            f"Transcript excerpt:\n\"\"\"\n{text[:800]}\n\"\"\"\n\n"
+            f"{context_line}"
+            f'Transcript excerpt:\n"""\n{text[:1500]}\n"""\n\n'
             "Extract lineup metadata as JSON."
         )
         raw = call_llm(
@@ -149,12 +334,10 @@ def extract_lineup_metadata(text: str, settings: Any) -> dict:
             max_tokens=256,
         )
         if not raw:
-            return defaults
+            merged = dict(defaults)
+            merged.update(title_fields)
+            return merged
 
-        # Try direct parse first (works when the LLM follows instructions).
-        # Only fall back to regex extraction when the response has chatter
-        # around the JSON — the regex tolerates flat objects only, so a
-        # direct parse handles future schema growth.
         parsed: dict | None = None
         try:
             parsed = json.loads(raw)
@@ -167,23 +350,37 @@ def extract_lineup_metadata(text: str, settings: Any) -> dict:
                     parsed = None
 
         if not isinstance(parsed, dict):
-            return defaults
+            merged = dict(defaults)
+            merged.update(title_fields)
+            return merged
 
-        # Normalise to canonical case so ChromaDB $eq filters actually hit.
+        # Build result: title inference as base, LLM overrides any non-null field
         result: dict[str, str | None] = dict(defaults)
-        result["agent"] = _canon_agent(parsed.get("agent"))
-        result["map"] = _canon_map(parsed.get("map"))
-        result["site"] = _canon_site(parsed.get("site"))
-        # Side/ability/purpose are stored lower-cased for consistency.
+        result.update(title_fields)
+
+        llm_agent = _canon_agent(parsed.get("agent"))
+        llm_map = _canon_map(parsed.get("map"))
+        llm_site = _canon_site(parsed.get("site"))
+        if llm_agent:
+            result["agent"] = llm_agent
+        if llm_map:
+            result["map"] = llm_map
+        if llm_site:
+            result["site"] = llm_site
         for key in ("ability", "side", "purpose"):
             v = parsed.get(key)
             if isinstance(v, str) and v.strip():
                 result[key] = v.strip()
+
+        _apply_fallbacks(result, text)
         return result
 
     except Exception as exc:
         log.debug("G2: lineup metadata extraction failed: %s", exc)
-        return defaults
+        merged = dict(defaults)
+        merged.update(title_fields)
+        _apply_fallbacks(merged, text)
+        return merged
 
 
 # ---------------------------------------------------------------------------
@@ -202,6 +399,7 @@ def ingest_lineup_chunk(
     url: str,
     settings: Any,
     expected_chunks: int | None = None,
+    video_title: str | None = None,
 ) -> None:
     """Embed and upsert one lineup chunk into the LIVE collection.
 
@@ -216,7 +414,7 @@ def ingest_lineup_chunk(
     from valocoach.retrieval.embedder import embed_one
     from valocoach.retrieval.vector_store import get_collection
 
-    meta_fields = extract_lineup_metadata(text, settings)
+    meta_fields = extract_lineup_metadata(text, settings, video_title=video_title or title)
 
     doc_id = f"lineup:{video_id}:{start_seconds}"
     metadata: dict[str, Any] = {
@@ -238,7 +436,12 @@ def ingest_lineup_chunk(
         vec = embed_one(text)
         coll = get_collection(data_dir, _COLLECTION)
         coll.upsert(ids=[doc_id], documents=[text], embeddings=[vec], metadatas=[metadata])
-        log.info("G1: upserted lineup chunk %s (agent=%s map=%s)", doc_id, meta_fields.get("agent"), meta_fields.get("map"))
+        log.info(
+            "G1: upserted lineup chunk %s (agent=%s map=%s)",
+            doc_id,
+            meta_fields.get("agent"),
+            meta_fields.get("map"),
+        )
     except Exception as exc:
         log.warning("G1: failed to ingest lineup chunk %s: %s", doc_id, exc)
 
@@ -392,7 +595,7 @@ def search_lineups(
     metas = (results.get("metadatas") or [[]])[0]
     dists = (results.get("distances") or [[]])[0]
 
-    for text, meta, dist in zip(docs, metas, dists):
+    for text, meta, dist in zip(docs, metas, dists, strict=False):
         if dist <= 0.55:  # generous threshold — lineup queries are specific
             hits.append({"text": text, "metadata": meta, "distance": dist})
 
@@ -429,16 +632,17 @@ def format_lineup_results(hits: list[dict]) -> str:
         lines.append(f"   {hit['text']}")
 
         if channel != "seed":
-            lines.append(f"   📹 {channel} \"{title}\" @ {mins}:{secs:02d}")
+            lines.append(f'   📹 {channel} "{title}" @ {mins}:{secs:02d}')
         lines.append("")
 
     return "\n".join(lines).rstrip()
 
 
 __all__ = [
+    "_infer_from_title",
     "extract_lineup_metadata",
+    "format_lineup_results",
     "ingest_lineup_chunk",
     "ingest_seed_lineups",
     "search_lineups",
-    "format_lineup_results",
 ]

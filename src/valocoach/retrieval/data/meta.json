@@ -1,7 +1,4 @@
 {
-  "patch": "10.08",
-  "updated": "2025-04",
-  "notes": "Tier list reflects high-ELO competitive play (Diamond+). Solo-queue viability may differ.",
   "tier_list": {
     "S": [
       "Omen",
@@ -40,105 +37,6 @@
       "Waylay",
       "Veto"
     ]
-  },
-  "economy": {
-    "full_buy": 3900,
-    "half_buy": 2400,
-    "force_buy": 1900,
-    "eco_save": 1600,
-    "notes": "Full buy: Phantom/Vandal (2900) + Heavy Armor (1000) + signature ability. Half buy: Spectre (1600) + Heavy Armor (1000) or light armor + cheap abilities. Eco/save: pistol only, save credits for next round."
-  },
-  "map_meta": {
-    "Ascent": {
-      "top_agents": [
-        "Jett",
-        "Killjoy",
-        "Sova",
-        "Omen",
-        "Brimstone"
-      ],
-      "notes": "Jett Op on A Catwalk is a must-defend angle. Killjoy Lockdown retakes B through Mid Market. Sova Recon lineups into A Wine and B Main are critical."
-    },
-    "Bind": {
-      "top_agents": [
-        "Viper",
-        "Raze",
-        "Skye",
-        "KAY/O",
-        "Sage"
-      ],
-      "notes": "Viper Toxic Screen splits A Long. Teleporters require denial (cage/slow in the tube). No mid means utility usage is heavily site-specific."
-    },
-    "Haven": {
-      "top_agents": [
-        "Omen",
-        "Killjoy",
-        "Reyna",
-        "Sage",
-        "Breach"
-      ],
-      "notes": "Omen is the default controller: 3 smokes can cover Mid Doors + one site simultaneously. Sage C Long wall on defense is a time-buy. Killjoy holds B or C retake. B Mid is the cheapest site entry — smoke B Window and push."
-    },
-    "Icebox": {
-      "top_agents": [
-        "Viper",
-        "Jett",
-        "Sova",
-        "Killjoy",
-        "KAY/O"
-      ],
-      "notes": "Viper Pit on A or B site is map-defining post-plant. B Tube with Jett Updraft elevation is the most effective aggressive peek. Sova drone through B Tube is a classic opener."
-    },
-    "Lotus": {
-      "top_agents": [
-        "Omen",
-        "Viper",
-        "Breach",
-        "Sova",
-        "Killjoy"
-      ],
-      "notes": "Rotating doors create audio tells — time rotations around door sounds. Breach Rolling Thunder on B Halls is nearly unavoidable. Viper Pit on A or C locks out retakes."
-    },
-    "Pearl": {
-      "top_agents": [
-        "Omen",
-        "Fade",
-        "Cypher",
-        "Jett",
-        "Viper"
-      ],
-      "notes": "Mid control determines the round. Op at Mid Top with Chamber or Jett is high-value. Cypher cam through A Art is consistent intel."
-    },
-    "Split": {
-      "top_agents": [
-        "Sage",
-        "Cypher",
-        "Omen",
-        "Raze",
-        "KAY/O"
-      ],
-      "notes": "Sage Barrier on A Ramps or B Main is the highest-value single ability in the game here. Defender-sided: winning Heaven on both sites is the meta. Rush strategies are rare — default to slow setups."
-    },
-    "Sunset": {
-      "top_agents": [
-        "Jett",
-        "Omen",
-        "Killjoy",
-        "Sova",
-        "Fade"
-      ],
-      "notes": "B Lane is a long-range Op corridor. A Bridge elevation enables aggressive Jett peeks. Omen smokes Mid Market to cut rotation timing."
-    },
-    "Abyss": {
-      "top_agents": [
-        "Jett",
-        "Reyna",
-        "Omen",
-        "Cypher",
-        "Sova"
-      ],
-      "notes": "Edge mechanics punish aggressive crossing. Jett Tailwind dash near ledges is high risk/reward. Cypher trapwire near ledge angles forces opponents to stop and look before peeking."
-    }
   },
   "agent_meta": {
     "Omen": {
@@ -181,7 +79,7 @@
       "tier": "A",
       "pick_rate": "~22%",
       "win_rate": "~50%",
-      "reason": "Strongest single-site anchor. Neural Theft reveals all enemies — most information-dense ult available."
+      "reason": "Strongest single-site anchor. Neural Theft reveals all enemies \u2014 most information-dense ult available."
     },
     "Fade": {
       "tier": "A",
@@ -229,7 +127,7 @@
       "tier": "A",
       "pick_rate": "~12%",
       "win_rate": "~50%",
-      "reason": "Global control kit makes her exceptional on Lotus, Bind, Haven where map-wide presence matters. Cosmic Divide can deny entire site retakes. High skill ceiling — falls off in solo queue."
+      "reason": "Global control kit makes her exceptional on Lotus, Bind, Haven where map-wide presence matters. Cosmic Divide can deny entire site retakes. High skill ceiling \u2014 falls off in solo queue."
     },
     "Clove": {
       "tier": "B",
@@ -259,7 +157,7 @@
       "tier": "C",
       "pick_rate": "~6%",
       "win_rate": "~47%",
-      "reason": "Highest map-speed of any agent, but Fast Lane is vision-only (no bullet block) and her kit lacks an escape. Updated in mid-2025 with Overdrive nerfs — pick rate has fallen since."
+      "reason": "Highest map-speed of any agent, but Fast Lane is vision-only (no bullet block) and her kit lacks an escape. Updated in mid-2025 with Overdrive nerfs \u2014 pick rate has fallen since."
     },
     "Yoru": {
       "tier": "C",
@@ -283,37 +181,139 @@
       "tier": "C",
       "pick_rate": "~4%",
       "win_rate": "~47%",
-      "reason": "Newest sentinel — Steel Garden + Arc Rose combo can lock down a full retake but requires extensive setup. Underexplored at pro level; expect tier shift after the next major patch."
+      "reason": "Newest sentinel \u2014 Steel Garden + Arc Rose combo can lock down a full retake but requires extensive setup. Underexplored at pro level; expect tier shift after the next major patch."
     },
     "Miks": {
       "tier": "C",
-      "pick_rate": "—",
-      "win_rate": "—",
-      "reason": "Released 2026-03-17. New-agent placeholder tier — pro and Diamond+ data not yet meaningful. Harmonize is the only ally combat-stim in the game; Waveform smokes are flexible but require setup time. Re-evaluate after the next meta refresh."
+      "pick_rate": "\u2014",
+      "win_rate": "\u2014",
+      "reason": "Released 2026-03-17. New-agent placeholder tier \u2014 pro and Diamond+ data not yet meaningful. Harmonize is the only ally combat-stim in the game; Waveform smokes are flexible but require setup time. Re-evaluate after the next meta refresh."
     },
     "Raze": {
       "tier": "C",
-      "pick_rate": "—",
-      "win_rate": "—",
-      "reason": "Auto-stubbed placeholder — pro/Diamond+ data not yet available. Re-run `valocoach meta-refresh --force` for real tier placement."
+      "pick_rate": "\u2014",
+      "win_rate": "\u2014",
+      "reason": "Auto-stubbed placeholder \u2014 pro/Diamond+ data not yet available. Re-run `valocoach meta-refresh --force` for real tier placement."
     },
     "Tejo": {
       "tier": "C",
-      "pick_rate": "—",
-      "win_rate": "—",
-      "reason": "Auto-stubbed placeholder — pro/Diamond+ data not yet available. Re-run `valocoach meta-refresh --force` for real tier placement."
+      "pick_rate": "\u2014",
+      "win_rate": "\u2014",
+      "reason": "Auto-stubbed placeholder \u2014 pro/Diamond+ data not yet available. Re-run `valocoach meta-refresh --force` for real tier placement."
     },
     "Waylay": {
       "tier": "C",
-      "pick_rate": "—",
-      "win_rate": "—",
-      "reason": "Auto-stubbed placeholder — pro/Diamond+ data not yet available. Re-run `valocoach meta-refresh --force` for real tier placement."
+      "pick_rate": "\u2014",
+      "win_rate": "\u2014",
+      "reason": "Auto-stubbed placeholder \u2014 pro/Diamond+ data not yet available. Re-run `valocoach meta-refresh --force` for real tier placement."
     },
     "Veto": {
       "tier": "C",
-      "pick_rate": "—",
-      "win_rate": "—",
-      "reason": "Auto-stubbed placeholder — pro/Diamond+ data not yet available. Re-run `valocoach meta-refresh --force` for real tier placement."
+      "pick_rate": "\u2014",
+      "win_rate": "\u2014",
+      "reason": "Auto-stubbed placeholder \u2014 pro/Diamond+ data not yet available. Re-run `valocoach meta-refresh --force` for real tier placement."
     }
+  },
+  "map_meta": {
+    "Ascent": {
+      "top_agents": [
+        "Jett",
+        "Killjoy",
+        "Sova",
+        "Omen",
+        "Brimstone"
+      ],
+      "notes": "Jett Op on A Catwalk is a must-defend angle. Killjoy Lockdown retakes B through Mid Market. Sova Recon lineups into A Wine and B Main are critical."
+    },
+    "Bind": {
+      "top_agents": [
+        "Viper",
+        "Raze",
+        "Skye",
+        "KAY/O",
+        "Sage"
+      ],
+      "notes": "Viper Toxic Screen splits A Long. Teleporters require denial (cage/slow in the tube). No mid means utility usage is heavily site-specific."
+    },
+    "Haven": {
+      "top_agents": [
+        "Omen",
+        "Killjoy",
+        "Reyna",
+        "Sage",
+        "Breach"
+      ],
+      "notes": "Omen is the default controller: 3 smokes can cover Mid Doors + one site simultaneously. Sage C Long wall on defense is a time-buy. Killjoy holds B or C retake. B Mid is the cheapest site entry \u2014 smoke B Window and push."
+    },
+    "Icebox": {
+      "top_agents": [
+        "Viper",
+        "Jett",
+        "Sova",
+        "Killjoy",
+        "KAY/O"
+      ],
+      "notes": "Viper Pit on A or B site is map-defining post-plant. B Tube with Jett Updraft elevation is the most effective aggressive peek. Sova drone through B Tube is a classic opener."
+    },
+    "Lotus": {
+      "top_agents": [
+        "Omen",
+        "Viper",
+        "Breach",
+        "Sova",
+        "Killjoy"
+      ],
+      "notes": "Rotating doors create audio tells \u2014 time rotations around door sounds. Breach Rolling Thunder on B Halls is nearly unavoidable. Viper Pit on A or C locks out retakes."
+    },
+    "Pearl": {
+      "top_agents": [
+        "Omen",
+        "Fade",
+        "Cypher",
+        "Jett",
+        "Viper"
+      ],
+      "notes": "Mid control determines the round. Op at Mid Top with Chamber or Jett is high-value. Cypher cam through A Art is consistent intel."
+    },
+    "Split": {
+      "top_agents": [
+        "Sage",
+        "Cypher",
+        "Omen",
+        "Raze",
+        "KAY/O"
+      ],
+      "notes": "Sage Barrier on A Ramps or B Main is the highest-value single ability in the game here. Defender-sided: winning Heaven on both sites is the meta. Rush strategies are rare \u2014 default to slow setups."
+    },
+    "Sunset": {
+      "top_agents": [
+        "Jett",
+        "Omen",
+        "Killjoy",
+        "Sova",
+        "Fade"
+      ],
+      "notes": "B Lane is a long-range Op corridor. A Bridge elevation enables aggressive Jett peeks. Omen smokes Mid Market to cut rotation timing."
+    },
+    "Abyss": {
+      "top_agents": [
+        "Jett",
+        "Reyna",
+        "Omen",
+        "Cypher",
+        "Sova"
+      ],
+      "notes": "Edge mechanics punish aggressive crossing. Jett Tailwind dash near ledges is high risk/reward. Cypher trapwire near ledge angles forces opponents to stop and look before peeking."
+    }
+  },
+  "patch": "12.09",
+  "updated": "2026-05",
+  "notes": "Tier list reflects Diamond+ ranked play and pro/VCT data. Auto-generated by valocoach meta-refresh.",
+  "economy": {
+    "full_buy": 3900,
+    "half_buy": 2400,
+    "force_buy": 1900,
+    "eco_save": 1600,
+    "notes": "Full buy: Phantom/Vandal (2900) + Heavy Armor (1000) + signature ability. Half buy: Spectre (1600) + Heavy Armor (1000) or light armor + cheap abilities. Eco/save: pistol only, save credits for next round."
   }
 }

@@ -14,10 +14,17 @@ from valocoach.retrieval.scrapers import ScrapedContent
 log = logging.getLogger(__name__)
 
 _OEMBED_URL = (
-    "https://www.youtube.com/oembed"
-    "?url=https://www.youtube.com/watch?v={video_id}&format=json"
+    "https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json"
 )
-_DEFAULT_WINDOW_SECONDS = 120  # D3: 2-minute time windows
+_DEFAULT_WINDOW_SECONDS = 60  # D3: 1-minute windows — finer granularity for lineup guides
+
+# Matches YouTube caption noise: [Music], [Applause], [Laughter], [music], etc.
+_NOISE_RE = re.compile(r"\[[\w\s]+\]")
+
+# Human-readable failure reason returned alongside an empty chunk list so
+# callers can show an actionable message instead of a raw exception.
+# Values: "ip_blocked" | "no_captions" | "unavailable" | "no_language" | "unknown"
+TranscriptFailReason = str
 
 
 # ---------------------------------------------------------------------------
@@ -73,11 +80,24 @@ def fetch_video_metadata(video_id: str) -> dict:
         return {"title": f"YouTube — {video_id}", "channel": "Unknown channel"}
 
 
+def clean_transcript_text(text: str) -> str:
+    """Strip caption noise tags and normalize whitespace.
+
+    Removes ``[Music]``, ``[Applause]``, ``[Laughter]`` and any similar
+    bracketed annotations that YouTube auto-captions inject.  These tokens
+    carry no tactical information and dilute embedding similarity scores.
+    """
+    cleaned = _NOISE_RE.sub(" ", text)
+    # Collapse runs of whitespace left by the substitution
+    return " ".join(cleaned.split())
+
+
 def _window_entries(entries: list, window_seconds: int) -> list[tuple[int, str]]:
     """Group timed transcript entries into fixed-length time windows.
 
     Returns a list of ``(start_seconds, combined_text)`` tuples.  A new window
     starts whenever an entry's ``start`` time crosses a window boundary.
+    Text is cleaned of caption noise (``[Music]`` etc.) before joining.
     """
     if not entries:
         return []
@@ -88,7 +108,7 @@ def _window_entries(entries: list, window_seconds: int) -> list[tuple[int, str]]
 
     for entry in entries:
         entry_start = int(entry.start)
-        text = entry.text.strip()
+        text = clean_transcript_text(entry.text.strip())
         if not text:
             continue
 
@@ -115,28 +135,29 @@ def fetch_transcript_chunks(
     url: str,
     languages: list[str] | None = None,
     window_seconds: int = _DEFAULT_WINDOW_SECONDS,
-) -> list[YouTubeChunk]:
+) -> tuple[list[YouTubeChunk], TranscriptFailReason | None]:
     """Fetch a YouTube transcript and split it into time-windowed chunks (D3).
 
     Each chunk covers a ``window_seconds``-wide segment of the video.  The
     real video title and channel are fetched via oEmbed (D1).
 
-    Args:
-        url:            Full YouTube URL or bare 11-char video ID.
-        languages:      Transcript language preference order.
-        window_seconds: Window width in seconds (default 120 = 2 minutes).
-
     Returns:
-        A list of :class:`YouTubeChunk` objects — one per non-trivial window.
-        Empty list on any failure.
+        ``(chunks, fail_reason)`` — on success, *chunks* is non-empty and
+        *fail_reason* is ``None``.  On failure, *chunks* is ``[]`` and
+        *fail_reason* is one of ``"ip_blocked"``, ``"no_captions"``,
+        ``"unavailable"``, ``"no_language"``, or ``"unknown"``.
     """
     from youtube_transcript_api import YouTubeTranscriptApi
+    from youtube_transcript_api._errors import (
+        TranscriptsDisabled,
+        VideoUnavailable,
+    )
 
     try:
         video_id = _extract_video_id(url)
     except ValueError as exc:
-        log.warning("Invalid YouTube URL/ID: %s", exc)
-        return []
+        log.debug("Invalid YouTube URL/ID: %s", exc)
+        return [], "unavailable"
 
     langs = languages or ["en", "en-US", "en-GB"]
     now = datetime.now(tz=UTC).isoformat()
@@ -148,13 +169,32 @@ def fetch_transcript_chunks(
     try:
         transcript = YouTubeTranscriptApi().fetch(video_id, languages=langs)
         entries = list(transcript)
+    except TranscriptsDisabled:
+        log.debug("Captions disabled for %s", video_id)
+        return [], "no_captions"
+    except VideoUnavailable:
+        log.debug("Video unavailable: %s", video_id)
+        return [], "unavailable"
     except Exception as exc:
-        log.warning("Transcript fetch failed for %s: %s", video_id, exc)
-        return []
+        exc_str = str(exc)
+        # youtube_transcript_api raises RequestBlocked / IpBlocked with this text
+        if (
+            "blocked" in exc_str.lower()
+            or "requestblocked" in exc_str.lower()
+            or "ipblocked" in exc_str.lower()
+        ):
+            log.debug("YouTube transcript request blocked for %s", video_id)
+            return [], "ip_blocked"
+        # NoTranscriptFound — no transcript in the requested language
+        if "notranscriptfound" in type(exc).__name__.lower() or "no transcript" in exc_str.lower():
+            log.debug("No transcript found for %s in %s", video_id, langs)
+            return [], "no_language"
+        log.debug("Transcript fetch failed for %s: %s", video_id, exc)
+        return [], "unknown"
 
     if not entries:
-        log.warning("Empty transcript for %s", video_id)
-        return []
+        log.debug("Empty transcript for %s", video_id)
+        return [], "unknown"
 
     windows = _window_entries(entries, window_seconds)
     chunks: list[YouTubeChunk] = [
@@ -178,7 +218,16 @@ def fetch_transcript_chunks(
         meta["title"],
         meta["channel"],
     )
-    return chunks
+    return chunks, None
+
+
+__all__ = [
+    "YouTubeChunk",
+    "clean_transcript_text",
+    "fetch_transcript",
+    "fetch_transcript_chunks",
+    "fetch_video_metadata",
+]
 
 
 def fetch_transcript(
@@ -192,7 +241,7 @@ def fetch_transcript(
         pipeline: time windows, oEmbed metadata, anchor filter, dedup).
         This wrapper is kept for backward compatibility only.
     """
-    chunks = fetch_transcript_chunks(url, languages=languages)
+    chunks, _fail_reason = fetch_transcript_chunks(url, languages=languages)
     if not chunks:
         return None
 

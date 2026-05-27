@@ -4,7 +4,6 @@ import logging
 
 import typer
 
-from valocoach import __version__
 from valocoach.cli import display
 
 log = logging.getLogger(__name__)
@@ -23,6 +22,20 @@ def _version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
+def _require_llm() -> None:
+    """Check Ollama is reachable and exit with an actionable error if not."""
+    from valocoach.core.config import load_settings
+    from valocoach.core.preflight import check_ollama
+
+    result = check_ollama(load_settings())
+    if not result.ok:
+        display.error_with_hint(
+            result.message,
+            result.hint or "Start Ollama with: ollama serve",
+        )
+        raise typer.Exit(1)
+
+
 @app.callback(invoke_without_command=True)
 def main(
     ctx: typer.Context,
@@ -36,23 +49,27 @@ def main(
     ),
 ) -> None:
     """Valorant tactical coaching CLI."""
+    import sys
+
     if ctx.invoked_subcommand is None:
-        display.render_banner()
-        display.console.print()
-        display.console.print("[heading]Quick start:[/heading]")
-        display.console.print("  [info]valocoach config init[/info]    [muted]Set up your Riot ID and API key[/muted]")
-        display.console.print("  [info]valocoach sync[/info]           [muted]Pull your match history[/muted]")
-        display.console.print("  [info]valocoach stats[/info]          [muted]View your performance dashboard[/muted]")
-        display.console.print("  [info]valocoach coach[/info] [muted]\"...\"    Get tactical advice[/muted]")
-        display.console.print("  [info]valocoach post-game[/info]      [muted]Debrief your last match[/muted]")
-        display.console.print("  [info]valocoach interactive[/info]    [muted]Start a coaching session[/muted]")
-        display.console.print()
-        display.console.print("[muted]Run valocoach --help for all commands.[/muted]")
+        if sys.stdin.isatty():
+            from valocoach.cli.hub import show_hub
+
+            show_hub()
+        else:
+            # Non-interactive context (pipe/CI) — emit plain help text
+            display.render_banner()
+            display.console.print()
+            display.console.print("[muted]Usage: valocoach <command> [args][/muted]")
+            display.console.print("[muted]Run valocoach --help for all commands.[/muted]")
 
 
 @app.command(rich_help_panel="Coaching")
 def coach(
-    situation: str = typer.Argument(..., help="Describe the match situation"),
+    situation: str | None = typer.Argument(
+        None,
+        help="Describe the match situation.  Omit to open the interactive REPL.",
+    ),
     agent: str | None = typer.Option(None, "--agent", "-a"),
     map_: str | None = typer.Option(None, "--map", "-m", help="Map name"),
     side: str | None = typer.Option(None, "--side", "-s", help="attack or defense"),
@@ -64,22 +81,32 @@ def coach(
     no_elicit: bool = typer.Option(
         False,
         "--no-elicit",
-        help="Skip the interactive context questions and go straight to coaching.",
+        help="Skip the context questions and go straight to coaching.",
     ),
 ) -> None:
-    """Get tactical coaching for a match situation."""
-    from valocoach.cli.commands.coach import run_coach
-    from valocoach.core.config import load_settings
-    from valocoach.core.preflight import check_ollama
+    """Get tactical coaching.
 
-    settings = load_settings()
-    ollama_result = check_ollama(settings)
-    if not ollama_result.ok:
-        display.error_with_hint(
-            ollama_result.message,
-            ollama_result.hint or "Start Ollama with: ollama serve",
-        )
-        raise typer.Exit(1)
+    With a situation argument:  one-shot advice for a specific scenario.
+    Without arguments (on a terminal):  opens the interactive coaching REPL.
+    """
+    import sys
+
+    _require_llm()
+
+    if situation is None:
+        # No situation provided — launch the REPL on TTY, show help on pipes.
+        if sys.stdin.isatty():
+            from valocoach.cli.commands.interactive import run_interactive
+
+            run_interactive()
+        else:
+            display.console.print(
+                '[muted]Usage: valocoach coach "<situation>"[/muted]\n'
+                '[muted]Example: valocoach coach "1v2 post-plant B site Haven attack"[/muted]'
+            )
+        return
+
+    from valocoach.cli.commands.coach import run_coach
 
     run_coach(
         situation=situation,
@@ -253,31 +280,9 @@ def meta(
     ),
 ) -> None:
     """Show current meta: tier list, agent abilities, or map callouts."""
-    if json_output:
-        import json
-
-        from valocoach.retrieval.agents import get_agent
-        from valocoach.retrieval.maps import get_map
-        from valocoach.retrieval.meta import get_meta
-
-        meta_data = get_meta()
-        if agent:
-            ag = get_agent(agent)
-            print(json.dumps({"agent": ag, "meta": meta_data.get("agent_meta", {}).get(
-                next((k for k in meta_data.get("agent_meta", {})
-                      if k.casefold() == agent.casefold()), None))}, indent=2, default=str))
-        elif map_:
-            mp = get_map(map_)
-            print(json.dumps({"map": mp, "meta": meta_data.get("map_meta", {}).get(
-                next((k for k in meta_data.get("map_meta", {})
-                      if k.casefold() == map_.casefold()), None))}, indent=2, default=str))
-        else:
-            print(json.dumps(meta_data, indent=2, default=str))
-        return
-
     from valocoach.cli.commands.meta import run_meta
 
-    run_meta(agent=agent, map_=map_)
+    run_meta(agent=agent, map_=map_, json_output=json_output)
 
 
 @app.command(rich_help_panel="Data")
@@ -285,8 +290,16 @@ def ingest(
     url: str | None = typer.Option(
         None, "--url", "-u", help="Scrape and ingest a URL (patch notes, blog post, etc.)."
     ),
-    youtube: str | None = typer.Option(
-        None, "--youtube", "-y", help="Fetch and ingest a YouTube video transcript."
+    youtube: list[str] = typer.Option(  # noqa: B008
+        [],
+        "--youtube",
+        "-y",
+        help="YouTube URL or video ID to ingest. Repeatable: --youtube url1 --youtube url2.",
+    ),
+    youtube_list: str | None = typer.Option(
+        None,
+        "--youtube-list",
+        help="Path to a text file with one YouTube URL per line (batch ingest).",
     ),
     corpus: bool = typer.Option(
         False,
@@ -299,31 +312,47 @@ def ingest(
     show_stats: bool = typer.Option(
         False, "--stats", help="Show what's currently in the vector store."
     ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Re-ingest a YouTube video even if it is already stored (bypasses dedup check).",
+    ),
+    preview: bool = typer.Option(
+        False,
+        "--preview",
+        help="Analyse a YouTube video and show what would be ingested, without writing anything.",
+    ),
+    add_lineup: bool = typer.Option(
+        False,
+        "--add-lineup",
+        help="Interactively add a hand-curated lineup entry to the database.",
+    ),
 ) -> None:
-    """Populate the vector store (run once, then augmented by --url / --youtube / --corpus)."""
+    """Populate the vector store (run once, then augmented by --url / --youtube / --corpus).
+
+    \b
+    Batch YouTube ingest:
+      valocoach ingest --youtube url1 --youtube url2
+      valocoach ingest --youtube-list urls.txt
+
+    \b
+    Hand-curate a lineup:
+      valocoach ingest --add-lineup
+    """
     from valocoach.cli.commands.ingest import run_ingest
 
     run_ingest(
-        url=url, youtube=youtube, corpus=corpus, seed=seed, clear=clear, show_stats=show_stats
+        url=url,
+        youtube=youtube or [],
+        youtube_list=youtube_list,
+        corpus=corpus,
+        seed=seed,
+        clear=clear,
+        show_stats=show_stats,
+        force=force,
+        preview=preview,
+        add_lineup=add_lineup,
     )
-
-
-@app.command(rich_help_panel="Data")
-def index() -> None:
-    """Index the static corpus into the vector store (agents, maps, concepts)."""
-    from pathlib import Path
-
-    from valocoach.cli.commands.ingest import run_ingest
-
-    corpus_dir = Path("corpus")
-    if not corpus_dir.exists():
-        display.error_with_hint(
-            "corpus/ not found.",
-            "Run  python scripts/build_corpus.py  first.",
-        )
-        raise typer.Exit(1)
-
-    run_ingest(url=None, youtube=None, corpus=True, seed=False, clear=False, show_stats=False)
 
 
 @app.command(rich_help_panel="Game Info")
@@ -489,14 +518,6 @@ def post_game(
     from valocoach.cli.commands.post_game import run_post_game
 
     run_post_game(match_id=match_id, no_notes=no_notes, no_repl=no_repl)
-
-
-@app.command(rich_help_panel="Coaching")
-def interactive() -> None:
-    """Start an interactive multi-turn coaching session (REPL)."""
-    from valocoach.cli.commands.interactive import run_interactive
-
-    run_interactive()
 
 
 notes_app = typer.Typer(help="Manage coaching notes (list, add, resolve).")

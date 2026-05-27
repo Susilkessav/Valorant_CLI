@@ -4,8 +4,6 @@ import logging
 import re
 
 from valocoach.cli import display
-
-log = logging.getLogger(__name__)
 from valocoach.coach import build_stats_context
 from valocoach.coach.intent import classify_intent
 from valocoach.coach.templates import PANEL_TITLES, PROMPT_TEMPLATES
@@ -14,6 +12,8 @@ from valocoach.core.context_budget import fit_prompt
 from valocoach.core.parser import Situation, parse_situation
 from valocoach.llm.provider import stream_completion
 from valocoach.retrieval import format_agent_context, format_map_context
+
+log = logging.getLogger(__name__)
 
 _META_SENSITIVE_INTENTS: frozenset[str] = frozenset({"meta", "agent_info"})
 _PATCH_STALE_THRESHOLD_DAYS: int = 21
@@ -48,7 +48,7 @@ def _maybe_warn_stale_meta(settings, *, once: bool = False) -> None:
                 "never checked" if stale_days is None else f"{stale_days:.0f}d since last check"
             )
             display.console.print(
-                f"[muted]⚠ Meta info may be outdated ({age_str}) — "
+                f"[muted]! Meta info may be outdated ({age_str}) — "
                 "run [info]valocoach patch --check[/info] to refresh.[/muted]"
             )
             _STALE_META_WARNED = True
@@ -63,6 +63,7 @@ def warn_stale_meta_once(settings) -> None:
     the staleness signal even on workflows that never touch the coach.
     """
     _maybe_warn_stale_meta(settings, once=True)
+
 
 # Team-roster questions ("who was in my team", "list teammates") — the schema
 # stores teammate puuids but not their display names, so the LLM has no source
@@ -86,7 +87,7 @@ _TEAM_ROSTER_CONTRACT = (
     "1. The match database does NOT track teammate display names — only puuids "
     "and the agent each teammate played.\n"
     "2. Your FIRST sentence MUST be exactly: \"I don't have teammate names "
-    "stored — only the agents they played in each match.\"\n"
+    'stored — only the agents they played in each match."\n'
     "3. You MAY offer to list the agent composition of recent matches if such "
     "data is provided in the user message; otherwise say it isn't available "
     "in the prompt this turn.\n"
@@ -229,11 +230,23 @@ def run_coach(
 
     parsed, agent, map_, side = _resolve_fields(situation, agent, map_, side)
 
+    # Classify intent BEFORE elicitation so we only ask relevant questions.
+    intent = force_intent if force_intent is not None else classify_intent(parsed, situation)
+
     if not no_elicit:
         from valocoach.coach.elicitation import run_elicitation, should_elicit
 
-        if should_elicit(parsed, situation):
-            parsed, agent, map_, side = run_elicitation(parsed, agent, map_, side)
+        if should_elicit(parsed, situation, intent):
+            parsed, agent, map_, side = run_elicitation(parsed, agent, map_, side, intent=intent)
+            # Persist elicited values into match_context so the REPL doesn't
+            # re-ask the same fields on the next turn.
+            if match_context is not None:
+                if agent and not match_context.agent:
+                    match_context.agent = agent
+                if map_ and not match_context.map:
+                    match_context.map = map_
+                if side and not match_context.side:
+                    match_context.side = side
 
     # Merge persistent match context — per-turn values take precedence
     match_context_block: str | None = None
@@ -241,8 +254,6 @@ def run_coach(
     if match_context is not None and not match_context.is_empty:
         agent, map_, side, extra_enemies = match_context.resolve_coach_kwargs(agent, map_, side)
         match_context_block = match_context.to_context_block()
-
-    intent = force_intent if force_intent is not None else classify_intent(parsed, situation)
     system_prompt_base = PROMPT_TEMPLATES[intent]
     panel_title = PANEL_TITLES[intent]
 
@@ -391,7 +402,9 @@ def run_coach(
     if _TEAM_ROSTER_KW.search(situation):
         system_prompt = f"{system_prompt}\n\n---\n\n{_TEAM_ROSTER_CONTRACT}"
 
-    display.info(f"Using model: [heading]{settings.ollama_model}[/heading] [muted][{intent}][/muted]")
+    display.info(
+        f"Using model: [heading]{settings.ollama_model}[/heading] [muted][{intent}][/muted]"
+    )
 
     stop_tokens = _POST_GAME_STOP_TOKENS if intent == "post_game" else None
     max_tokens_override = _INTENT_MAX_TOKENS.get(intent)
@@ -437,7 +450,7 @@ def run_coach(
 
                 lines = [
                     "",
-                    f"[warning]⚠ Ability fact-check — {len(ability_warnings)} "
+                    f"[warning]! Ability fact-check — {len(ability_warnings)} "
                     "claim(s) don't match the canonical agent kit:[/warning]",
                 ]
                 for cat in ("hallucination", "cross_attribution", "weapon", "generic"):
@@ -468,7 +481,7 @@ def run_coach(
             if stat_warnings:
                 stat_lines = [
                     "",
-                    f"[warning]⚠ Stat fact-check — {len(stat_warnings)} "
+                    f"[warning]! Stat fact-check — {len(stat_warnings)} "
                     "numeric claim(s) don't match your real PLAYER CONTEXT:[/warning]",
                 ]
                 for w in stat_warnings[:8]:

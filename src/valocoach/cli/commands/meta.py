@@ -67,7 +67,41 @@ def _try_get_live_patch(settings) -> str | None:
         return None
 
 
-def run_meta(agent: str | None, map_: str | None) -> None:
+def run_meta(agent: str | None, map_: str | None, *, json_output: bool = False) -> None:
+    if json_output:
+        import json as _json
+
+        meta_data = get_meta()
+        if agent:
+            ag = get_agent(agent)
+            key = next(
+                (k for k in meta_data.get("agent_meta", {}) if k.casefold() == agent.casefold()),
+                None,
+            )
+            print(
+                _json.dumps(
+                    {"agent": ag, "meta": meta_data.get("agent_meta", {}).get(key)},
+                    indent=2,
+                    default=str,
+                )
+            )
+        elif map_:
+            mp = get_map(map_)
+            key = next(
+                (k for k in meta_data.get("map_meta", {}) if k.casefold() == map_.casefold()),
+                None,
+            )
+            print(
+                _json.dumps(
+                    {"map": mp, "meta": meta_data.get("map_meta", {}).get(key)},
+                    indent=2,
+                    default=str,
+                )
+            )
+        else:
+            print(_json.dumps(meta_data, indent=2, default=str))
+        return
+
     settings = load_settings()
     meta = get_meta()
 
@@ -176,4 +210,6 @@ def run_meta(agent: str | None, map_: str | None) -> None:
         display.console.print()
         display.console.print(_eco_line())
         display.console.print()
-        display.info("Use [bold]--agent <name>[/bold] or [bold]--map <name>[/bold] for detailed info.")
+        display.info(
+            "Use [bold]--agent <name>[/bold] or [bold]--map <name>[/bold] for detailed info."
+        )

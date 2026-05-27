@@ -51,6 +51,12 @@ class Settings(BaseSettings):
     # APIs
     henrikdev_api_key: str = Field(default="", description="HenrikDev API key")
 
+    # Tavily web search / extract API (optional — enhances JS-heavy scraping)
+    # Free tier: 1 000 credits/month  https://tavily.com
+    # Used by meta-refresh (stats scraping) and ingest --url (JS-rendered pages).
+    # Leave empty to use the built-in trafilatura scraper instead.
+    tavily_api_key: str = Field(default="", description="Tavily API key (optional)")
+
     # LLM
     ollama_model: str = "qwen3:8b"
     ollama_host: str = "http://localhost:11434"
@@ -106,6 +112,7 @@ def write_default_config() -> Path:
         "riot_tag": "",
         "riot_region": "na",
         "henrikdev_api_key": "",
+        "tavily_api_key": "",
         "ollama_model": "qwen3:8b",
         "ollama_host": "http://localhost:11434",
         "llm_temperature": 0.6,

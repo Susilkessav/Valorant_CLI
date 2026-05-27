@@ -98,6 +98,7 @@ def _render_table(table) -> str:
     from io import StringIO
 
     from rich.console import Console
+
     from valocoach.cli.display import THEME
 
     buf = Console(file=StringIO(), force_terminal=False, width=120, theme=THEME)
@@ -239,6 +240,7 @@ class TestRunMetaAgent:
         """When agent_meta has a non-empty reason, it appears in rendered output."""
         from valocoach.cli import display
         from valocoach.cli.display import THEME
+
         buf = StringIO()
         cap = Console(file=buf, force_terminal=False, width=120, theme=THEME)
 
@@ -332,6 +334,7 @@ class TestRunMetaMap:
         """map_meta has 'notes' → notes line rendered (line 153)."""
         from valocoach.cli import display
         from valocoach.cli.display import THEME
+
         buf = StringIO()
         cap = Console(file=buf, force_terminal=False, width=120, theme=THEME)
 

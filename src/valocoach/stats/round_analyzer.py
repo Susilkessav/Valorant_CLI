@@ -647,7 +647,7 @@ def clutch_stat(analysis: RoundAnalysis, matches: int) -> StatResult:
         matches_used=matches,
         rounds_used=analysis.rounds,
         is_reliable=rel and not no_opps,
-        warning=warn or ("⚠ no clutch situations in sample" if no_opps else None),
+        warning=warn or ("! no clutch situations in sample" if no_opps else None),
     )
 
 
@@ -662,7 +662,7 @@ def trade_efficiency_stat(analysis: RoundAnalysis, matches: int) -> StatResult:
         matches_used=matches,
         rounds_used=analysis.rounds,
         is_reliable=rel and not no_deaths,
-        warning=warn or ("⚠ no deaths in sample" if no_deaths else None),
+        warning=warn or ("! no deaths in sample" if no_deaths else None),
     )
 
 
@@ -677,7 +677,7 @@ def trade_participation_stat(analysis: RoundAnalysis, matches: int) -> StatResul
         matches_used=matches,
         rounds_used=analysis.rounds,
         is_reliable=rel and not no_teammate_deaths,
-        warning=warn or ("⚠ no teammate deaths in sample" if no_teammate_deaths else None),
+        warning=warn or ("! no teammate deaths in sample" if no_teammate_deaths else None),
     )
 
 
@@ -692,6 +692,7 @@ def analyze_rounds_per_map(
     for each map, not just overall.
     """
     from collections import defaultdict
+
     buckets: dict[str, list[Match]] = defaultdict(list)
     for match in matches:
         buckets[match.map_name].append(match)
@@ -701,6 +702,7 @@ def analyze_rounds_per_map(
 @dataclass(frozen=True, slots=True)
 class WeaponSplit:
     """Per-weapon kill + headshot counts for a player (E2)."""
+
     weapon: str
     kills: int
     headshots: int
@@ -726,6 +728,7 @@ def compute_weapon_stats(
     loaded (same contract as :func:`analyze_rounds`).
     """
     from collections import defaultdict
+
     weapon_hits: dict[str, list[bool]] = defaultdict(list)
 
     for match in matches:

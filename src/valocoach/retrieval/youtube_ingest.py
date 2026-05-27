@@ -1,4 +1,4 @@
-"""YouTube ingest pipeline — Phase D (D2–D5).
+"""YouTube ingest pipeline -- Phase D (D2-D5).
 
 Orchestrates deduplication, time-window chunking, anchor-based relevance
 filtering, optional LLM summarisation, and vector-store upsert for a single
@@ -13,13 +13,17 @@ Pipeline (called once per video):
   6. Optionally run LLM to produce a 1-sentence summary      (D5, opt-in)
   7. Upsert into LIVE collection with rich metadata
 
-Entry point: :func:`ingest_youtube_video`.
+Two-phase public API:
+  - :func:`analyze_youtube_video`  — classify + extract metadata, no writes
+  - :func:`apply_youtube_ingest_plan` — upsert the pre-analysed plan
+  - :func:`ingest_youtube_video`   — backward-compat wrapper (analyse + apply)
 """
 
 from __future__ import annotations
 
 import logging
 import time
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -29,12 +33,49 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 # D4 — minimum cosine similarity to retain a chunk regardless of category.
-# 0.25 per §7.1 of the improvement plan — slightly aggressive on purpose;
-# easier to lower than to undo once polluted chunks are in ChromaDB.
-RELEVANCE_THRESHOLD = 0.25
+# 0.20 gives borderline lineup chunks a chance; keyword boost provides a
+# second gate so lowering this doesn't flood the store with noise.
+RELEVANCE_THRESHOLD = 0.20
 
 # YouTube chunks stay live for 60 days (same TTL as other scraped content).
 _YT_TTL_SECONDS = 60 * 24 * 3600
+
+
+# ---------------------------------------------------------------------------
+# Result dataclasses (two-phase analyse → apply API)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class CandidateChunk:
+    """One time-windowed transcript chunk after classification (and optional LLM extraction)."""
+
+    start_seconds: int
+    text: str
+    category: str  # e.g. "lineups", "map_tactics", "off_topic"
+    score: float  # cosine similarity to best anchor
+    lineup_metadata: dict | None = None
+    # None = kept.  Set to one of "off_topic" | "low_score" | "unknown" when dropped.
+    drop_reason: str | None = None
+
+
+@dataclass
+class YouTubeIngestPlan:
+    """Everything analyze_youtube_video() learned, without writing anything to ChromaDB."""
+
+    video_id: str
+    title: str
+    channel: str
+    already_ingested: bool = False
+    # Set when the plan cannot proceed: "invalid_url" | "already_ingested" | "no_transcript" | "ip_blocked" | "no_captions" | "no_language"
+    skipped_reason: str | None = None
+    fetched_count: int = 0
+    kept_count: int = 0
+    lineup_count: int = 0
+    youtube_count: int = 0
+    # {"off_topic": N, "low_score": N, "unknown": N}
+    dropped_counts: dict[str, int] = field(default_factory=dict)
+    candidates: list[CandidateChunk] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -64,6 +105,15 @@ ANCHOR_PHRASES: dict[str, list[str]] = {
         "recon bolt lineup bounces off wall",
         "stand here aim there ability placement",
         "post-plant molotov incendiary lineup spot",
+        # Natural speech patterns found in real lineup guides:
+        "stand here and throw the lineup right here",
+        "aim at the box on the roof bounces off",
+        "from this position throw your dart or smoke",
+        "this lineup reveals the entire site defenders",
+        "for this smoke stand on the ledge and aim",
+        "one bounce lineup lands perfectly on site",
+        "throw from here and it will land right there",
+        "this is where you stand for the lineup spot",
     ],
     "economy": [
         "round economy buy decisions credit management",
@@ -175,6 +225,127 @@ def get_classifier() -> AnchorClassifier:
 
 
 # ---------------------------------------------------------------------------
+# D4b — Deterministic keyword boost for lineup detection
+# ---------------------------------------------------------------------------
+
+# Tactical words that are strong evidence of lineup content.  These are
+# checked after the embedding classifier — a chunk that scores just below
+# RELEVANCE_THRESHOLD but contains several of these keywords gets a second
+# chance rather than being silently dropped.
+_LINEUP_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "lineup",
+        "lineups",
+        "stand here",
+        "aim here",
+        "aim at",
+        "aim there",
+        "one bounce",
+        "two bounce",
+        "post plant",
+        "post-plant",
+        "molly",
+        "molotov",
+        "incendiary",
+        "dart",
+        "recon bolt",
+        "shock bolt",
+        "owl drone",
+        "seeker",
+        "alarmbot",
+        "killjoy",
+        "cypher",
+        "chamber",
+        "smoke",
+        "wall",
+        "barrier",
+        "turret",
+        "tripwire",
+        "trap",
+        "bounce",
+        "bounces",
+        "throw from",
+        "land on",
+        "lands on",
+        "right here",
+        "stand on",
+        "position",
+        "ledge",
+        "corner",
+        "pre plant",
+        "retake",
+        "site clear",
+        "revealing",
+        "reveal",
+        "scan",
+    }
+)
+
+# Agent names — presence strongly suggests tactical lineup content
+_AGENT_NAMES: frozenset[str] = frozenset(
+    {
+        "sova",
+        "viper",
+        "brimstone",
+        "omen",
+        "astra",
+        "harbor",
+        "killjoy",
+        "cypher",
+        "sage",
+        "chamber",
+        "deadlock",
+        "vyse",
+        "breach",
+        "skye",
+        "fade",
+        "gekko",
+        "kayo",
+        "kay/o",
+        "jett",
+        "phoenix",
+        "reyna",
+        "raze",
+        "neon",
+        "yoru",
+        "iso",
+        "clove",
+        "tejo",
+        "waylay",
+    }
+)
+
+
+def _keyword_lineup_boost(text: str) -> float:
+    """Return 0.0-1.0 based on tactical keyword density.
+
+    3 or more keyword hits → score of 1.0 (full boost).  Used as a safety
+    net for chunks that embed slightly below RELEVANCE_THRESHOLD but are
+    clearly about lineups based on word choice.
+    """
+    text_lower = text.lower()
+    hits = sum(1 for kw in _LINEUP_KEYWORDS if kw in text_lower)
+    hits += sum(1 for agent in _AGENT_NAMES if agent in text_lower)
+    return min(hits / 3.0, 1.0)
+
+
+def _should_keep_as_lineup(category: str, score: float, text: str) -> bool:
+    """Return True when a chunk should be treated as a lineup candidate.
+
+    A chunk qualifies if:
+    - The embedding classifier said "lineups" and the score is above threshold, OR
+    - The keyword boost is strong (≥ 0.7), regardless of embedding score — this
+      rescues chunks whose signal was diluted by noise that survived cleaning.
+    """
+    if category == "off_topic" or category == "unknown":
+        return False
+    if category == "lineups" and score >= RELEVANCE_THRESHOLD:
+        return True
+    boost = _keyword_lineup_boost(text)
+    return boost >= 0.7
+
+
+# ---------------------------------------------------------------------------
 # D2 — Deduplication
 # ---------------------------------------------------------------------------
 
@@ -275,7 +446,265 @@ def summarise_chunk(settings: Settings, text: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Public API
+# Public API — two-phase: analyse (no writes) then apply (upsert)
+# ---------------------------------------------------------------------------
+
+
+def analyze_youtube_video(
+    data_dir: Path,
+    url: str,
+    settings: Settings,
+    *,
+    force: bool = False,
+) -> YouTubeIngestPlan:
+    """Classify a YouTube video and extract lineup metadata without writing to ChromaDB.
+
+    Runs steps 1-4 of the full pipeline (validate, dedup check, transcript
+    fetch, anchor classification) plus LLM metadata extraction for any chunk
+    classified as ``lineups``.  Nothing is written to ChromaDB.
+
+    Returns a :class:`YouTubeIngestPlan` the caller can inspect and then pass
+    to :func:`apply_youtube_ingest_plan` to actually persist.
+    """
+    from valocoach.retrieval.scrapers.youtube import _extract_video_id, fetch_transcript_chunks
+
+    # Step 1: validate
+    try:
+        video_id = _extract_video_id(url)
+    except ValueError as exc:
+        log.warning("YouTube analyze skipped — invalid URL/ID: %s", exc)
+        return YouTubeIngestPlan(
+            video_id="",
+            title="",
+            channel="",
+            skipped_reason="invalid_url",
+        )
+
+    # D2: dedup check
+    already = is_video_ingested(data_dir, video_id)
+    if already and not force:
+        log.info(
+            "YouTube %s already ingested — skipping analyze (pass force=True to re-analyse)",
+            video_id,
+        )
+        return YouTubeIngestPlan(
+            video_id=video_id,
+            title="",
+            channel="",
+            already_ingested=True,
+            skipped_reason="already_ingested",
+        )
+
+    # D3 + D1: fetch chunks
+    chunks, fail_reason = fetch_transcript_chunks(url)
+    if not chunks:
+        skipped = fail_reason if fail_reason else "no_transcript"
+        if fail_reason == "ip_blocked":
+            log.warning("YouTube transcript blocked for %s — IP rate-limited", video_id)
+        else:
+            log.warning("No transcript chunks retrieved for %s (%s)", video_id, skipped)
+        return YouTubeIngestPlan(
+            video_id=video_id,
+            title="",
+            channel="",
+            already_ingested=already,
+            skipped_reason=skipped,
+        )
+
+    title = chunks[0].title
+    channel = chunks[0].channel
+
+    # D4: classify — embedding anchor + keyword boost rescue
+    classifier = get_classifier()
+    candidates: list[CandidateChunk] = []
+    dropped_counts: dict[str, int] = {"off_topic": 0, "low_score": 0, "unknown": 0}
+
+    for chunk in chunks:
+        category, score = classifier.classify(chunk.text)
+        drop_reason: str | None = None
+
+        if category == "off_topic":
+            drop_reason = "off_topic"
+        elif category == "unknown":
+            drop_reason = "unknown"
+        elif (
+            not _should_keep_as_lineup(category, score, chunk.text) and score < RELEVANCE_THRESHOLD
+        ):
+            # Neither the embedding threshold nor the keyword boost saved it
+            drop_reason = "low_score"
+
+        # Keyword-rescued lineup: force category to "lineups" so the G2 path runs
+        if drop_reason is None and category != "lineups":
+            boost = _keyword_lineup_boost(chunk.text)
+            if boost >= 0.7:
+                category = "lineups"
+
+        if drop_reason:
+            dropped_counts[drop_reason] = dropped_counts.get(drop_reason, 0) + 1
+            candidates.append(
+                CandidateChunk(
+                    start_seconds=chunk.start_seconds,
+                    text=chunk.text,
+                    category=category,
+                    score=score,
+                    drop_reason=drop_reason,
+                )
+            )
+        else:
+            candidates.append(
+                CandidateChunk(
+                    start_seconds=chunk.start_seconds,
+                    text=chunk.text,
+                    category=category,
+                    score=score,
+                )
+            )
+
+    kept = [c for c in candidates if c.drop_reason is None]
+    lineup_chunks = [c for c in kept if c.category == "lineups"]
+    youtube_chunks = [c for c in kept if c.category != "lineups"]
+
+    # G2: LLM metadata extraction for lineup chunks (preview shows what will be stored)
+    if lineup_chunks:
+        from valocoach.retrieval.lineups import extract_lineup_metadata
+
+        for chunk in lineup_chunks:
+            try:
+                chunk.lineup_metadata = extract_lineup_metadata(
+                    chunk.text, settings, video_title=title
+                )
+            except Exception as exc:
+                log.debug(
+                    "G2: metadata extraction failed for %s@%ds: %s",
+                    video_id,
+                    chunk.start_seconds,
+                    exc,
+                )
+                chunk.lineup_metadata = {}
+
+    if dropped_counts.get("unknown", 0):
+        log.warning(
+            "D4: %d/%d chunks classifier returned 'unknown' for %s — "
+            "embedding service may be degraded.",
+            dropped_counts["unknown"],
+            len(chunks),
+            video_id,
+        )
+
+    return YouTubeIngestPlan(
+        video_id=video_id,
+        title=title,
+        channel=channel,
+        already_ingested=already,
+        fetched_count=len(chunks),
+        kept_count=len(kept),
+        lineup_count=len(lineup_chunks),
+        youtube_count=len(youtube_chunks),
+        dropped_counts={k: v for k, v in dropped_counts.items() if v > 0},
+        candidates=candidates,
+    )
+
+
+def apply_youtube_ingest_plan(
+    plan: YouTubeIngestPlan,
+    data_dir: Path,
+    settings: Settings,
+    *,
+    summarize: bool = False,
+) -> int:
+    """Upsert a pre-analysed :class:`YouTubeIngestPlan` into ChromaDB.
+
+    Uses the ``lineup_metadata`` already extracted during :func:`analyze_youtube_video`
+    so no LLM calls are repeated.  Returns the total number of chunks stored
+    (lineup + regular YouTube).
+    """
+    from valocoach.retrieval.embedder import embed_one
+    from valocoach.retrieval.ingester import _upsert_batch
+    from valocoach.retrieval.vector_store import LIVE_COLLECTION, get_collection
+
+    if plan.skipped_reason:
+        return 0
+
+    kept = [c for c in plan.candidates if c.drop_reason is None]
+    if not kept:
+        return 0
+
+    expires_at_unix = int(time.time()) + _YT_TTL_SECONDS
+    total_kept = len(kept)
+
+    texts: list[str] = []
+    ids: list[str] = []
+    metadatas: list[dict] = []
+    lineup_count = 0
+
+    for chunk in kept:
+        embed_text = summarise_chunk(settings, chunk.text) if summarize else chunk.text
+
+        if chunk.category == "lineups":
+            # Use pre-extracted metadata — avoids a second LLM round-trip
+            meta_fields = chunk.lineup_metadata or {}
+            doc_id = f"lineup:{plan.video_id}:{chunk.start_seconds}"
+            metadata: dict = {
+                "type": "lineup",
+                "video_id": plan.video_id,
+                "title": plan.title,
+                "channel": plan.channel,
+                "start_seconds": chunk.start_seconds,
+                "source": f"https://www.youtube.com/watch?v={plan.video_id}",
+                "expires_at_unix": expires_at_unix,
+                "expected_chunks": total_kept,
+                **{k: v for k, v in meta_fields.items() if v is not None},
+            }
+            try:
+                vec = embed_one(embed_text)
+                coll = get_collection(data_dir, LIVE_COLLECTION)
+                coll.upsert(
+                    ids=[doc_id], documents=[embed_text], embeddings=[vec], metadatas=[metadata]
+                )
+                lineup_count += 1
+                log.info(
+                    "G1: upserted lineup chunk %s (agent=%s map=%s)",
+                    doc_id,
+                    meta_fields.get("agent"),
+                    meta_fields.get("map"),
+                )
+            except Exception as exc:
+                log.warning("G1: failed to upsert lineup chunk %s: %s", doc_id, exc)
+            continue
+
+        texts.append(embed_text)
+        ids.append(f"youtube:{plan.video_id}:{chunk.start_seconds}")
+        metadatas.append(
+            {
+                "type": "youtube",
+                "video_id": plan.video_id,
+                "title": plan.title,
+                "channel": plan.channel,
+                "source": f"https://www.youtube.com/watch?v={plan.video_id}",
+                "start_seconds": chunk.start_seconds,
+                "category": chunk.category,
+                "anchor_score": round(chunk.score, 4),
+                "summarized": summarize,
+                "raw_text": chunk.text[:500],
+                "expires_at_unix": expires_at_unix,
+                "expected_chunks": total_kept,
+            }
+        )
+
+    n = _upsert_batch(data_dir, texts, ids, metadatas, collection_name=LIVE_COLLECTION)
+    total = n + lineup_count
+    log.info(
+        "Ingested %d YouTube + %d lineup chunk(s) from %r (channel=%r)",
+        n,
+        lineup_count,
+        plan.title,
+        plan.channel,
+    )
+    return total
+
+
+# ---------------------------------------------------------------------------
+# Backward-compat wrapper
 # ---------------------------------------------------------------------------
 
 
@@ -289,168 +718,40 @@ def ingest_youtube_video(
 ) -> int:
     """Full Phase-D ingest pipeline for a single YouTube video.
 
-    Args:
-        data_dir:  Root data directory (ChromaDB lives under ``data_dir/chroma``).
-        url:       YouTube URL or bare 11-char video ID.
-        settings:  App settings (needed by D5 LLM summarisation).
-        force:     Re-ingest even if the video is already in ChromaDB (D2).
-        summarize: Run LLM summarisation on each retained chunk (D5).
+    Backward-compatible wrapper around :func:`analyze_youtube_video` +
+    :func:`apply_youtube_ingest_plan`.
 
     Returns:
         Number of chunks upserted (0 on skip or failure).
     """
-    from valocoach.retrieval.ingester import _upsert_batch
-    from valocoach.retrieval.scrapers.youtube import _extract_video_id, fetch_transcript_chunks
-    from valocoach.retrieval.vector_store import LIVE_COLLECTION
-
-    # Step 1: validate video ID
-    try:
-        video_id = _extract_video_id(url)
-    except ValueError as exc:
-        log.warning("YouTube ingest skipped — invalid URL/ID: %s", exc)
-        return 0
-
-    # D2: dedup check
-    if not force and is_video_ingested(data_dir, video_id):
-        log.info(
-            "YouTube %s already ingested — skipping (pass force=True to re-ingest)", video_id
-        )
-        return 0
-
-    # D3 + D1: time-windowed chunks with real title + channel
-    chunks = fetch_transcript_chunks(url)
-    if not chunks:
-        log.warning("No transcript chunks retrieved for %s", video_id)
-        return 0
-
-    title = chunks[0].title
-    channel = chunks[0].channel
-
-    # D4: anchor-based relevance filter
-    classifier = get_classifier()
-    kept: list[tuple] = []
-    dropped = 0
-    degraded = 0  # chunks the classifier couldn't categorise at all
-
-    for chunk in chunks:
-        category, score = classifier.classify(chunk.text)
-        is_off_topic = category == "off_topic"
-        # ``unknown`` with score 0 means the classifier couldn't make a
-        # decision — typically an embedding-service failure or no anchor
-        # matched.  Either way we drop the chunk: passing it through would
-        # let degraded-mode runs flood the LIVE collection with noise.
-        is_degraded = category == "unknown"
-        below_threshold = not is_degraded and score < RELEVANCE_THRESHOLD
-
-        if is_off_topic or below_threshold or is_degraded:
-            dropped += 1
-            if is_degraded:
-                degraded += 1
-            log.debug(
-                "D4 drop — start=%ds category=%s score=%.3f",
-                chunk.start_seconds,
-                category,
-                score,
+    plan = analyze_youtube_video(data_dir, url, settings, force=force)
+    if plan.skipped_reason:
+        if plan.skipped_reason == "already_ingested":
+            log.info(
+                "YouTube %s already ingested — skipping (pass force=True to re-ingest)",
+                plan.video_id,
             )
-            continue
-        kept.append((chunk, category, score))
-
-    log.info(
-        "D4 anchor filter: %d kept / %d dropped (%d degraded) from %s (%r)",
-        len(kept),
-        dropped,
-        degraded,
-        video_id,
-        title,
-    )
-    if degraded:
-        log.warning(
-            "D4: %d/%d chunks classifier returned 'unknown' for %s — "
-            "embedding service may be degraded.",
-            degraded,
-            len(chunks),
-            video_id,
-        )
-
-    if not kept:
-        log.warning("All chunks filtered for %s — nothing to ingest", video_id)
+        elif plan.skipped_reason == "no_transcript":
+            log.warning("No transcript chunks retrieved for %s", plan.video_id)
+        elif plan.skipped_reason == "invalid_url":
+            log.warning("YouTube ingest skipped — invalid URL/ID: %s", url)
         return 0
 
-    # Build batch for upsert
-    expires_at_unix = int(time.time()) + _YT_TTL_SECONDS
-    texts: list[str] = []
-    ids: list[str] = []
-    metadatas: list[dict] = []
-    lineup_count = 0  # track separately so the return value is the TOTAL chunks stored
+    if plan.kept_count == 0:
+        log.warning("All chunks filtered for %s — nothing to ingest", plan.video_id)
+        return 0
 
-    for chunk, category, score in kept:
-        # D5: optional LLM summarisation — summary becomes the embedding target
-        embed_text = summarise_chunk(settings, chunk.text) if summarize else chunk.text
-
-        # G2 — lineup chunks get an additional LLM metadata extraction pass.
-        # They are stored with type=lineup (not type=youtube) so the lineup
-        # retriever can filter them by agent/map/site metadata.
-        if category == "lineups":
-            try:
-                from valocoach.retrieval.lineups import ingest_lineup_chunk
-
-                ingest_lineup_chunk(
-                    data_dir,
-                    embed_text,
-                    video_id=video_id,
-                    title=title,
-                    channel=channel,
-                    start_seconds=chunk.start_seconds,
-                    url=chunk.url,
-                    settings=settings,
-                    expected_chunks=len(kept),
-                )
-                lineup_count += 1
-            except Exception as exc:
-                log.warning("G2: lineup ingest failed for %s @ %ds: %s", video_id, chunk.start_seconds, exc)
-            # Don't also add to the standard YouTube batch (avoid duplicate)
-            continue
-
-        texts.append(embed_text)
-        ids.append(f"youtube:{video_id}:{chunk.start_seconds}")
-        metadatas.append(
-            {
-                "type": "youtube",
-                "video_id": video_id,
-                "title": title,
-                "channel": channel,
-                "source": chunk.url,
-                "start_seconds": chunk.start_seconds,
-                "category": category,
-                "anchor_score": round(score, 4),
-                "summarized": summarize,
-                # Always store raw text so D6 citations can display it
-                "raw_text": chunk.text[:500],
-                "expires_at_unix": expires_at_unix,
-                # Total chunks this video is supposed to have, so
-                # ``is_video_ingested`` can detect partial-ingest crashes.
-                "expected_chunks": len(kept),
-            }
-        )
-
-    n = _upsert_batch(data_dir, texts, ids, metadatas, collection_name=LIVE_COLLECTION)
-    total = n + lineup_count
-    log.info(
-        "Ingested %d YouTube + %d lineup chunk(s) from %r (channel=%r, force=%s, summarize=%s)",
-        n,
-        lineup_count,
-        title,
-        channel,
-        force,
-        summarize,
-    )
-    return total  # includes both youtube and lineup chunks
+    return apply_youtube_ingest_plan(plan, data_dir, settings, summarize=summarize)
 
 
 __all__ = [
     "ANCHOR_PHRASES",
-    "AnchorClassifier",
     "RELEVANCE_THRESHOLD",
+    "AnchorClassifier",
+    "CandidateChunk",
+    "YouTubeIngestPlan",
+    "analyze_youtube_video",
+    "apply_youtube_ingest_plan",
     "get_classifier",
     "ingest_youtube_video",
     "is_video_ingested",

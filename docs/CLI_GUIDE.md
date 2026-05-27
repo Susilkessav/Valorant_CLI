@@ -431,10 +431,11 @@ Options:
 
 | Option | Meaning |
 |---|---|
-| `--period`, `-p` | Time window: `7d`, `30d`, `90d`, or `all`. Default is `30d`. |
+| `--period`, `-p` | Time window: `7d`, `30d`, `90d`, or `all`. Default is `90d`. |
 | `--agent`, `-a` | Filter to a single agent. |
 | `--map`, `-m` | Filter to a single map. |
 | `--result`, `-r` | Filter by `win` or `loss`. Omit for both. |
+| `--json` | Emit raw JSON instead of the Rich-rendered tables. Useful for scripting. |
 
 Examples:
 
@@ -469,6 +470,7 @@ Options:
 | `--name`, `-n` | Riot username. Defaults to configured `riot_name`. |
 | `--tag`, `-t` | Riot tag. Must be paired with `--name`. |
 | `--limit`, `-l` | Number of recent matches to summarize. Default is `20`. |
+| `--json` | Emit raw profile JSON instead of the Rich-rendered panel. |
 
 Examples:
 
@@ -506,6 +508,7 @@ Options:
 |---|---|
 | `--agent`, `-a` | Show ability and meta info for one agent. |
 | `--map`, `-m` | Show callouts and meta info for one map. |
+| `--json` | Emit the raw `meta.json` contents (or the relevant agent/map slice) as JSON. |
 
 ### Meta refresh
 
@@ -601,9 +604,23 @@ Options:
 | `--seed` | Re-embed the built-in JSON knowledge base. |
 | `--corpus`, `-c` | Embed markdown files from `corpus/`. |
 | `--url`, `-u URL` | Scrape and ingest a URL. |
-| `--youtube`, `-y URL` | Fetch and ingest a YouTube transcript. |
+| `--youtube`, `-y URL` | Fetch, classify, and ingest a YouTube video transcript. |
+| `--preview` | Analyse a YouTube video and show what would be ingested without writing anything. |
+| `--force` | Re-ingest a YouTube video even if it is already stored (bypasses dedup check). |
 | `--clear` | Wipe the vector store. |
 | `--stats` | Show current vector store document counts. |
+
+#### YouTube ingest flow
+
+When `--youtube` is provided, the pipeline runs before writing anything:
+
+1. Fetches the transcript and chunks it into 2-minute windows.
+2. Classifies each chunk (lineups, map tactics, agent strategy, economy, etc.) via embedding similarity.
+3. For chunks classified as `lineups`, runs an LLM metadata extraction pass to fill agent / map / site fields.
+4. Displays a summary panel showing chunk counts, drop reasons, and lineup candidates with extracted metadata.
+5. Prompts **Ingest these N chunks? [y/N]** — type `y` to confirm, `N` to abort without writing.
+
+Use `--preview` to see the summary and exit without being prompted. Use `--force` if the video was already ingested and you want to refresh it.
 
 Examples:
 
@@ -611,7 +628,16 @@ Examples:
 uv run valocoach ingest --seed
 uv run valocoach ingest --corpus
 uv run valocoach ingest --url "https://playvalorant.com/en-us/news/game-updates/valorant-patch-notes-9-04/"
+
+# Preview what a video contains before committing
+uv run valocoach ingest --youtube "https://www.youtube.com/watch?v=VIDEO_ID" --preview
+
+# Full ingest with confirmation prompt
 uv run valocoach ingest --youtube "https://www.youtube.com/watch?v=VIDEO_ID"
+
+# Re-ingest a video you have already ingested (e.g. to pick up metadata fixes)
+uv run valocoach ingest --youtube "https://www.youtube.com/watch?v=VIDEO_ID" --force
+
 uv run valocoach ingest --stats
 uv run valocoach ingest --clear
 ```

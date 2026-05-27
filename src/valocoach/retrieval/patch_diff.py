@@ -69,16 +69,52 @@ log = logging.getLogger(__name__)
 # Known entity lists for section detection
 # ---------------------------------------------------------------------------
 
-_AGENT_NAMES: frozenset[str] = frozenset({
-    "Astra", "Breach", "Brimstone", "Chamber", "Clove", "Cypher", "Deadlock",
-    "Fade", "Gekko", "Harbor", "Iso", "Jett", "KAY/O", "Killjoy", "Miks",
-    "Neon", "Omen", "Phoenix", "Raze", "Reyna", "Sage", "Skye", "Sova",
-    "Tejo", "Viper", "Vyse", "Waylay", "Yoru",
-})
+_AGENT_NAMES: frozenset[str] = frozenset(
+    {
+        "Astra",
+        "Breach",
+        "Brimstone",
+        "Chamber",
+        "Clove",
+        "Cypher",
+        "Deadlock",
+        "Fade",
+        "Gekko",
+        "Harbor",
+        "Iso",
+        "Jett",
+        "KAY/O",
+        "Killjoy",
+        "Miks",
+        "Neon",
+        "Omen",
+        "Phoenix",
+        "Raze",
+        "Reyna",
+        "Sage",
+        "Skye",
+        "Sova",
+        "Tejo",
+        "Viper",
+        "Vyse",
+        "Waylay",
+        "Yoru",
+    }
+)
 
-_MAP_NAMES: frozenset[str] = frozenset({
-    "Abyss", "Ascent", "Bind", "Haven", "Icebox", "Lotus", "Pearl", "Split", "Sunset",
-})
+_MAP_NAMES: frozenset[str] = frozenset(
+    {
+        "Abyss",
+        "Ascent",
+        "Bind",
+        "Haven",
+        "Icebox",
+        "Lotus",
+        "Pearl",
+        "Split",
+        "Sunset",
+    }
+)
 
 _BUFF_KEYWORDS = re.compile(
     r"\b(?:decreased?|reduced?|lowered?|buff(?:ed)?|improved?|restored?|reverted?|"
@@ -184,16 +220,10 @@ def _regex_extract(text: str) -> tuple[dict[str, list[dict]], dict[str, list[dic
         m = _HEADING_RE.match(stripped)
         if m:
             candidate = m.group(1).strip()
-            # Normalise KAY/O
-            candidate_norm = candidate.upper().replace("/", "/")
 
             # Check agent (case-insensitive)
-            found_agent = next(
-                (a for a in _AGENT_NAMES if a.upper() == candidate.upper()), None
-            )
-            found_map = next(
-                (mp for mp in _MAP_NAMES if mp.upper() == candidate.upper()), None
-            )
+            found_agent = next((a for a in _AGENT_NAMES if a.upper() == candidate.upper()), None)
+            found_map = next((mp for mp in _MAP_NAMES if mp.upper() == candidate.upper()), None)
 
             if found_agent:
                 _flush()
@@ -361,8 +391,7 @@ def extract_patch_changes(
     total_agent_changes = sum(len(v) for v in agents.values())
     total_map_changes = sum(len(v) for v in maps.values())
     log.info(
-        "Patch %s diff: %d agent change(s) across %d agent(s), "
-        "%d map change(s) across %d map(s)",
+        "Patch %s diff: %d agent change(s) across %d agent(s), %d map change(s) across %d map(s)",
         patch_version,
         total_agent_changes,
         len(agents),

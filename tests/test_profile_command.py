@@ -128,6 +128,7 @@ def _player(
 
 def _capture_console() -> Console:
     from valocoach.cli.display import THEME
+
     return Console(file=StringIO(), force_terminal=False, width=120, theme=THEME)
 
 
@@ -623,8 +624,14 @@ def test_run_profile_coaching_sessions_rendered(tmp_path) -> None:
     data = PlayerData(player=_player(), rows=rows, full_matches=[])
 
     sessions = [
-        SessionInfo(id=3, title="Post-plant drill", started_at="2026-05-06T10:00:00",
-                    ended_at="2026-05-06T12:00:00", focus_agent=None, focus_map=None),
+        SessionInfo(
+            id=3,
+            title="Post-plant drill",
+            started_at="2026-05-06T10:00:00",
+            ended_at="2026-05-06T12:00:00",
+            focus_agent=None,
+            focus_map=None,
+        ),
     ]
 
     con = _capture_console()
@@ -649,8 +656,13 @@ def test_run_profile_open_notes_rendered(tmp_path) -> None:
     data = PlayerData(player=_player(), rows=rows, full_matches=[])
 
     notes = [
-        NoteInfo(id=7, body="Work on crossfire at A long", category="tactical",
-                 priority=2, created_at="2026-05-06T10:00:00"),
+        NoteInfo(
+            id=7,
+            body="Work on crossfire at A long",
+            category="tactical",
+            priority=2,
+            created_at="2026-05-06T10:00:00",
+        ),
     ]
 
     con = _capture_console()
@@ -676,8 +688,10 @@ def test_run_profile_coaching_section_exception_silently_skipped(tmp_path) -> No
     with (
         patch("valocoach.cli.commands.profile.load_settings", return_value=fake_settings),
         patch("valocoach.cli.commands.profile.load_player_data", new=MagicMock(return_value=data)),
-        patch("valocoach.cli.commands.profile.list_coaching_sessions",
-              side_effect=RuntimeError("db down")),
+        patch(
+            "valocoach.cli.commands.profile.list_coaching_sessions",
+            side_effect=RuntimeError("db down"),
+        ),
         patch("valocoach.cli.commands.profile.list_open_notes", return_value=[]),
     ):
         run_profile(name="Tester", tag="NA1", console=con)  # must not raise
@@ -710,8 +724,12 @@ def test_run_profile_rank_trend_rendered_when_history_present(tmp_path) -> None:
     data = PlayerData(player=_player(), rows=rows, full_matches=[])
 
     history = [
-        MMRHistoryInfo(tier_patched="Plat I", rr=20, elo=1420, mmr_change=20, recorded_at="2026-05-06"),
-        MMRHistoryInfo(tier_patched="Gold II", rr=60, elo=1260, mmr_change=-10, recorded_at="2026-05-01"),
+        MMRHistoryInfo(
+            tier_patched="Plat I", rr=20, elo=1420, mmr_change=20, recorded_at="2026-05-06"
+        ),
+        MMRHistoryInfo(
+            tier_patched="Gold II", rr=60, elo=1260, mmr_change=-10, recorded_at="2026-05-01"
+        ),
     ]
 
     con = _capture_console()
@@ -758,7 +776,9 @@ def test_run_profile_rank_trend_skipped_with_single_snapshot(tmp_path) -> None:
     data = PlayerData(player=_player(), rows=rows, full_matches=[])
 
     history = [
-        MMRHistoryInfo(tier_patched="Gold II", rr=55, elo=1255, mmr_change=None, recorded_at="2026-05-06"),
+        MMRHistoryInfo(
+            tier_patched="Gold II", rr=55, elo=1255, mmr_change=None, recorded_at="2026-05-06"
+        ),
     ]
 
     con = _capture_console()
@@ -783,8 +803,12 @@ def test_run_profile_rank_trend_elo_delta_shown(tmp_path) -> None:
     data = PlayerData(player=_player(), rows=rows, full_matches=[])
 
     history = [
-        MMRHistoryInfo(tier_patched="Plat I", rr=10, elo=1410, mmr_change=50, recorded_at="2026-05-06"),
-        MMRHistoryInfo(tier_patched="Gold III", rr=80, elo=1280, mmr_change=30, recorded_at="2026-04-20"),
+        MMRHistoryInfo(
+            tier_patched="Plat I", rr=10, elo=1410, mmr_change=50, recorded_at="2026-05-06"
+        ),
+        MMRHistoryInfo(
+            tier_patched="Gold III", rr=80, elo=1280, mmr_change=30, recorded_at="2026-04-20"
+        ),
     ]
 
     con = _capture_console()
@@ -827,11 +851,15 @@ def _api_match(
     from valocoach.data.api_models import (
         MatchData,
         MatchMetadata,
-        MatchPlayer as ApiMatchPlayer,
         MatchPlayers,
         MatchTeams,
-        PlayerStats as ApiPlayerStats,
         TeamResult,
+    )
+    from valocoach.data.api_models import (
+        MatchPlayer as ApiMatchPlayer,
+    )
+    from valocoach.data.api_models import (
+        PlayerStats as ApiPlayerStats,
     )
 
     player = ApiMatchPlayer(
@@ -949,11 +977,17 @@ def test_render_lookup_identity_panel_shows_rank_and_region() -> None:
         AccountResponse,
         CurrentRankData,
         HighestRank,
+    )
+    from valocoach.data.api_models import (
         MMRData as ApiMMR,
     )
 
     account = AccountResponse(
-        puuid="p-1", region="na", account_level=150, name="Lookup", tag="LU01",
+        puuid="p-1",
+        region="na",
+        account_level=150,
+        name="Lookup",
+        tag="LU01",
     )
     mmr = ApiMMR(
         name="Lookup",
@@ -1048,23 +1082,40 @@ def test_compute_per_agent_from_api_multiple_agents() -> None:
     from valocoach.data.api_models import (
         MatchData,
         MatchMetadata,
-        MatchPlayer as ApiMatchPlayer,
         MatchPlayers,
         MatchTeams,
-        PlayerStats as ApiPlayerStats,
         TeamResult,
+    )
+    from valocoach.data.api_models import (
+        MatchPlayer as ApiMatchPlayer,
+    )
+    from valocoach.data.api_models import (
+        PlayerStats as ApiPlayerStats,
     )
     from valocoach.stats.calculator import compute_per_agent_from_api
 
     def _make(agent: str):
         player = ApiMatchPlayer(
-            puuid="p-1", name="P", tag="T", team="Blue", character=agent,
-            stats=ApiPlayerStats(score=3000, kills=15, deaths=10, assists=3,
-                                 headshots=5, bodyshots=30, legshots=2, damage_dealt=2000),
+            puuid="p-1",
+            name="P",
+            tag="T",
+            team="Blue",
+            character=agent,
+            stats=ApiPlayerStats(
+                score=3000,
+                kills=15,
+                deaths=10,
+                assists=3,
+                headshots=5,
+                bodyshots=30,
+                legshots=2,
+                damage_dealt=2000,
+            ),
         )
         return MatchData(
-            metadata=MatchMetadata(match_id="m-1", map_name="Ascent",
-                                   queue_id="competitive", rounds_played=20),
+            metadata=MatchMetadata(
+                match_id="m-1", map_name="Ascent", queue_id="competitive", rounds_played=20
+            ),
             players=MatchPlayers(all_players=[player]),
             teams=MatchTeams(blue=TeamResult(has_won=True)),
         )
@@ -1084,12 +1135,18 @@ def test_run_profile_falls_back_to_lookup_on_db_miss(tmp_path) -> None:
         AccountResponse,
         CurrentRankData,
         HighestRank,
+    )
+    from valocoach.data.api_models import (
         MMRData as ApiMMR,
     )
 
     fake_settings = _fake_settings(tmp_path)
     account = AccountResponse(
-        puuid="p-ext", region="na", account_level=100, name="External", tag="EX01",
+        puuid="p-ext",
+        region="na",
+        account_level=100,
+        name="External",
+        tag="EX01",
     )
     mmr = ApiMMR(
         name="External",

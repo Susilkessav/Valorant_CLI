@@ -33,7 +33,6 @@ Severity scale
 
 from __future__ import annotations
 
-import json
 import logging
 import math
 from dataclasses import dataclass, field
@@ -67,11 +66,11 @@ class Finding:
     """
 
     severity: Severity
-    category: str           # "duels" | "positioning" | "economy" | "utility" | "clutch"
-    headline: str           # ≤ 80 chars — shown in the LLM prompt header
-    detail: str             # full explanation with specific evidence
-    evidence: dict          # raw numbers the LLM uses to reason
-    root_cause_tag: str     # for redundancy grouping
+    category: str  # "duels" | "positioning" | "economy" | "utility" | "clutch"
+    headline: str  # ≤ 80 chars — shown in the LLM prompt header
+    detail: str  # full explanation with specific evidence
+    evidence: dict  # raw numbers the LLM uses to reason
+    root_cause_tag: str  # for redundancy grouping
     required_fields: list[str] = field(default_factory=list)
 
 
@@ -79,18 +78,50 @@ class Finding:
 # Agent role classification
 # ---------------------------------------------------------------------------
 
-_DUELISTS = frozenset({
-    "Jett", "Reyna", "Raze", "Phoenix", "Neon", "Iso", "Yoru", "Waylay",
-})
-_CONTROLLERS = frozenset({
-    "Omen", "Brimstone", "Astra", "Harbor", "Viper", "Clove",
-})
-_INITIATORS = frozenset({
-    "Sova", "Breach", "Fade", "KAY/O", "Gekko", "Skye", "Tejo",
-})
-_SENTINELS = frozenset({
-    "Cypher", "Killjoy", "Sage", "Chamber", "Deadlock", "Vyse", "Miks",
-})
+_DUELISTS = frozenset(
+    {
+        "Jett",
+        "Reyna",
+        "Raze",
+        "Phoenix",
+        "Neon",
+        "Iso",
+        "Yoru",
+        "Waylay",
+    }
+)
+_CONTROLLERS = frozenset(
+    {
+        "Omen",
+        "Brimstone",
+        "Astra",
+        "Harbor",
+        "Viper",
+        "Clove",
+    }
+)
+_INITIATORS = frozenset(
+    {
+        "Sova",
+        "Breach",
+        "Fade",
+        "KAY/O",
+        "Gekko",
+        "Skye",
+        "Tejo",
+    }
+)
+_SENTINELS = frozenset(
+    {
+        "Cypher",
+        "Killjoy",
+        "Sage",
+        "Chamber",
+        "Deadlock",
+        "Vyse",
+        "Miks",
+    }
+)
 
 # Expected non-ultimate ability casts per round played (role baseline)
 _UTIL_BASELINE: dict[str, float] = {
@@ -162,15 +193,10 @@ def _has_field(match: Match, field_name: str) -> bool:
     """True when at least one kill or round row has a non-NULL value for ``field_name``."""
     if field_name in ("killer_x", "killer_y", "victim_x", "victim_y", "engagement_distance"):
         return any(
-            getattr(k, field_name, None) is not None
-            for rnd in match.rounds
-            for k in rnd.kills
+            getattr(k, field_name, None) is not None for rnd in match.rounds for k in rnd.kills
         )
     if field_name in ("plant_x", "plant_y", "defuse_x", "defuse_y"):
-        return any(
-            getattr(rnd, field_name, None) is not None
-            for rnd in match.rounds
-        )
+        return any(getattr(rnd, field_name, None) is not None for rnd in match.rounds)
     if field_name.startswith("ability_casts"):
         return any(
             getattr(rp, field_name, None) is not None
@@ -221,40 +247,44 @@ def analyze_first_contact(match: Match, puuid: str) -> list[Finding]:
 
     if death_rate >= 0.30:
         sev: Severity = "critical" if death_rate >= 0.45 else "warning"
-        findings.append(Finding(
-            severity=sev,
-            category="duels",
-            headline=f"Died first in {first_deaths}/{rounds_counted} rounds ({death_rate:.0%})",
-            detail=(
-                f"You were the first player to die in {death_rate:.0%} of rounds. "
-                "This typically means over-peeking, taking early contact on off-angles, "
-                "or pushing without utility. Your team loses map control and the round "
-                "momentum immediately. Focus on letting utility land before committing."
-            ),
-            evidence={
-                "first_deaths": first_deaths,
-                "first_bloods": first_bloods,
-                "rounds": rounds_counted,
-                "first_death_rate": round(death_rate, 3),
-            },
-            root_cause_tag="entry_failure",
-        ))
+        findings.append(
+            Finding(
+                severity=sev,
+                category="duels",
+                headline=f"Died first in {first_deaths}/{rounds_counted} rounds ({death_rate:.0%})",
+                detail=(
+                    f"You were the first player to die in {death_rate:.0%} of rounds. "
+                    "This typically means over-peeking, taking early contact on off-angles, "
+                    "or pushing without utility. Your team loses map control and the round "
+                    "momentum immediately. Focus on letting utility land before committing."
+                ),
+                evidence={
+                    "first_deaths": first_deaths,
+                    "first_bloods": first_bloods,
+                    "rounds": rounds_counted,
+                    "first_death_rate": round(death_rate, 3),
+                },
+                root_cause_tag="entry_failure",
+            )
+        )
     elif blood_rate >= 0.25:
-        findings.append(Finding(
-            severity="positive",
-            category="duels",
-            headline=f"First blood in {first_bloods}/{rounds_counted} rounds ({blood_rate:.0%})",
-            detail=(
-                f"You opened {blood_rate:.0%} of rounds with a kill — strong entry fragging. "
-                "This creates 5v4 pressure for your team immediately."
-            ),
-            evidence={
-                "first_bloods": first_bloods,
-                "rounds": rounds_counted,
-                "first_blood_rate": round(blood_rate, 3),
-            },
-            root_cause_tag="entry_success",
-        ))
+        findings.append(
+            Finding(
+                severity="positive",
+                category="duels",
+                headline=f"First blood in {first_bloods}/{rounds_counted} rounds ({blood_rate:.0%})",
+                detail=(
+                    f"You opened {blood_rate:.0%} of rounds with a kill — strong entry fragging. "
+                    "This creates 5v4 pressure for your team immediately."
+                ),
+                evidence={
+                    "first_bloods": first_bloods,
+                    "rounds": rounds_counted,
+                    "first_blood_rate": round(blood_rate, 3),
+                },
+                root_cause_tag="entry_success",
+            )
+        )
 
     return findings
 
@@ -263,14 +293,15 @@ def analyze_first_contact(match: Match, puuid: str) -> list[Finding]:
 # Analyzer 2 — Economy decisions
 # ---------------------------------------------------------------------------
 
+
 def analyze_eco_decisions(match: Match, puuid: str) -> list[Finding]:
     """Detect force-buys against team save or saves against team buy."""
     my_team = _team_of(match, puuid)
     if my_team is None:
         return []
 
-    force_vs_save = 0   # I bought, team saved
-    save_vs_buy = 0     # I saved, team bought
+    force_vs_save = 0  # I bought, team saved
+    save_vs_buy = 0  # I saved, team bought
     rounds_with_eco_data = 0
 
     for rnd in match.rounds:
@@ -279,7 +310,8 @@ def analyze_eco_decisions(match: Match, puuid: str) -> list[Finding]:
             continue
 
         team_rps = [
-            rp for rp in rnd.round_players
+            rp
+            for rp in rnd.round_players
             if rp.puuid != puuid and rp.team == my_team and rp.loadout_value is not None
         ]
         if not team_rps:
@@ -303,39 +335,43 @@ def analyze_eco_decisions(match: Match, puuid: str) -> list[Finding]:
 
     if force_vs_save >= 2:
         sev = "critical" if force_vs_save >= 4 else "warning"
-        findings.append(Finding(
-            severity=sev,
-            category="economy",
-            headline=f"Force-bought while team saved in {force_vs_save} rounds",
-            detail=(
-                f"In {force_vs_save} rounds you spent significantly more than your teammates "
-                "who were saving. This breaks team economy synchronisation — you wasted "
-                "credits on rounds your team couldn't win as a unit and delayed the team "
-                "from hitting a full-buy together."
-            ),
-            evidence={
-                "force_buy_rounds": force_vs_save,
-                "rounds_analysed": rounds_with_eco_data,
-            },
-            root_cause_tag="bad_economy",
-        ))
+        findings.append(
+            Finding(
+                severity=sev,
+                category="economy",
+                headline=f"Force-bought while team saved in {force_vs_save} rounds",
+                detail=(
+                    f"In {force_vs_save} rounds you spent significantly more than your teammates "
+                    "who were saving. This breaks team economy synchronisation — you wasted "
+                    "credits on rounds your team couldn't win as a unit and delayed the team "
+                    "from hitting a full-buy together."
+                ),
+                evidence={
+                    "force_buy_rounds": force_vs_save,
+                    "rounds_analysed": rounds_with_eco_data,
+                },
+                root_cause_tag="bad_economy",
+            )
+        )
 
     if save_vs_buy >= 2:
-        findings.append(Finding(
-            severity="warning",
-            category="economy",
-            headline=f"Under-bought while team full-bought in {save_vs_buy} rounds",
-            detail=(
-                f"In {save_vs_buy} rounds your team went full-buy but you saved credits. "
-                "Playing pistol/sheriff into a full-buy round mismatches your firepower "
-                "with the rest of your team's investment."
-            ),
-            evidence={
-                "under_buy_rounds": save_vs_buy,
-                "rounds_analysed": rounds_with_eco_data,
-            },
-            root_cause_tag="bad_economy",
-        ))
+        findings.append(
+            Finding(
+                severity="warning",
+                category="economy",
+                headline=f"Under-bought while team full-bought in {save_vs_buy} rounds",
+                detail=(
+                    f"In {save_vs_buy} rounds your team went full-buy but you saved credits. "
+                    "Playing pistol/sheriff into a full-buy round mismatches your firepower "
+                    "with the rest of your team's investment."
+                ),
+                evidence={
+                    "under_buy_rounds": save_vs_buy,
+                    "rounds_analysed": rounds_with_eco_data,
+                },
+                root_cause_tag="bad_economy",
+            )
+        )
 
     return findings
 
@@ -343,6 +379,7 @@ def analyze_eco_decisions(match: Match, puuid: str) -> list[Finding]:
 # ---------------------------------------------------------------------------
 # Analyzer 3 — Utility efficiency
 # ---------------------------------------------------------------------------
+
 
 def analyze_utility_efficiency(match: Match, puuid: str) -> list[Finding]:
     """Compare ability casts per round to role baseline."""
@@ -377,48 +414,52 @@ def analyze_utility_efficiency(match: Match, puuid: str) -> list[Finding]:
 
     if avg_non_ult < baseline * 0.5:
         sev: Severity = "critical" if avg_non_ult < baseline * 0.25 else "warning"
-        findings.append(Finding(
-            severity=sev,
-            category="utility",
-            headline=(
-                f"Low utility usage: {avg_non_ult:.1f} casts/round "
-                f"(baseline {baseline:.1f} for {role})"
-            ),
-            detail=(
-                f"As a {role} on {mp.agent_name or 'your agent'}, you're expected to cast "
-                f"utilities ~{baseline:.1f}× per round. You averaged {avg_non_ult:.1f}×. "
-                "Under-using abilities means your kit isn't contributing to round outcomes — "
-                "smoke less, flash less, gather less info than your opponents expect."
-            ),
-            evidence={
-                "avg_non_ult_casts_per_round": round(avg_non_ult, 2),
-                "role_baseline": baseline,
-                "role": role,
-                "agent": mp.agent_name,
-                "total_ult_casts": total_ult,
-                "rounds_analysed": rounds_with_data,
-            },
-            root_cause_tag="low_utility",
-            required_fields=["ability_casts_ability1"],
-        ))
+        findings.append(
+            Finding(
+                severity=sev,
+                category="utility",
+                headline=(
+                    f"Low utility usage: {avg_non_ult:.1f} casts/round "
+                    f"(baseline {baseline:.1f} for {role})"
+                ),
+                detail=(
+                    f"As a {role} on {mp.agent_name or 'your agent'}, you're expected to cast "
+                    f"utilities ~{baseline:.1f}× per round. You averaged {avg_non_ult:.1f}×. "
+                    "Under-using abilities means your kit isn't contributing to round outcomes — "
+                    "smoke less, flash less, gather less info than your opponents expect."
+                ),
+                evidence={
+                    "avg_non_ult_casts_per_round": round(avg_non_ult, 2),
+                    "role_baseline": baseline,
+                    "role": role,
+                    "agent": mp.agent_name,
+                    "total_ult_casts": total_ult,
+                    "rounds_analysed": rounds_with_data,
+                },
+                root_cause_tag="low_utility",
+                required_fields=["ability_casts_ability1"],
+            )
+        )
     elif total_ult == 0 and rounds_with_data >= 5:
-        findings.append(Finding(
-            severity="warning",
-            category="utility",
-            headline="Ultimate never used across the match",
-            detail=(
-                f"You played {rounds_with_data} rounds with data and never used your ultimate. "
-                "Storing ult all game loses free value — use it early once it's ready, "
-                "then re-charge rather than holding indefinitely."
-            ),
-            evidence={
-                "ult_casts": 0,
-                "rounds_analysed": rounds_with_data,
-                "agent": mp.agent_name,
-            },
-            root_cause_tag="low_utility",
-            required_fields=["ability_casts_ultimate"],
-        ))
+        findings.append(
+            Finding(
+                severity="warning",
+                category="utility",
+                headline="Ultimate never used across the match",
+                detail=(
+                    f"You played {rounds_with_data} rounds with data and never used your ultimate. "
+                    "Storing ult all game loses free value — use it early once it's ready, "
+                    "then re-charge rather than holding indefinitely."
+                ),
+                evidence={
+                    "ult_casts": 0,
+                    "rounds_analysed": rounds_with_data,
+                    "agent": mp.agent_name,
+                },
+                root_cause_tag="low_utility",
+                required_fields=["ability_casts_ultimate"],
+            )
+        )
 
     return findings
 
@@ -426,6 +467,7 @@ def analyze_utility_efficiency(match: Match, puuid: str) -> list[Finding]:
 # ---------------------------------------------------------------------------
 # Analyzer 4 — Round timing (when do you die?)
 # ---------------------------------------------------------------------------
+
 
 def analyze_round_timing(match: Match, puuid: str) -> list[Finding]:
     """Detect systematic early deaths (over-peeking) or late deaths."""
@@ -440,31 +482,33 @@ def analyze_round_timing(match: Match, puuid: str) -> list[Finding]:
         return []
 
     median_ms = sorted(death_times)[len(death_times) // 2]
-    early_deaths = sum(1 for t in death_times if t < 20_000)   # < 20 s
+    early_deaths = sum(1 for t in death_times if t < 20_000)  # < 20 s
     early_pct = early_deaths / len(death_times)
 
     findings: list[Finding] = []
 
     if early_pct >= 0.45:
         sev: Severity = "critical" if early_pct >= 0.65 else "warning"
-        findings.append(Finding(
-            severity=sev,
-            category="positioning",
-            headline=f"Dying in first 20s in {early_pct:.0%} of death rounds",
-            detail=(
-                f"{early_pct:.0%} of your deaths occurred within the first 20 seconds of the "
-                f"round (median death at {median_ms/1000:.0f}s). Early deaths are almost always "
-                "overpeeks — pushing into uncleared angles or taking duels before your team "
-                "has planted util. Let smokes/flashes land before stepping onto site."
-            ),
-            evidence={
-                "early_deaths": early_deaths,
-                "total_deaths": len(death_times),
-                "early_death_pct": round(early_pct, 3),
-                "median_death_time_s": round(median_ms / 1000, 1),
-            },
-            root_cause_tag="over_peeking",
-        ))
+        findings.append(
+            Finding(
+                severity=sev,
+                category="positioning",
+                headline=f"Dying in first 20s in {early_pct:.0%} of death rounds",
+                detail=(
+                    f"{early_pct:.0%} of your deaths occurred within the first 20 seconds of the "
+                    f"round (median death at {median_ms / 1000:.0f}s). Early deaths are almost always "
+                    "overpeeks — pushing into uncleared angles or taking duels before your team "
+                    "has planted util. Let smokes/flashes land before stepping onto site."
+                ),
+                evidence={
+                    "early_deaths": early_deaths,
+                    "total_deaths": len(death_times),
+                    "early_death_pct": round(early_pct, 3),
+                    "median_death_time_s": round(median_ms / 1000, 1),
+                },
+                root_cause_tag="over_peeking",
+            )
+        )
 
     return findings
 
@@ -472,6 +516,7 @@ def analyze_round_timing(match: Match, puuid: str) -> list[Finding]:
 # ---------------------------------------------------------------------------
 # Analyzer 5 — Traded deaths
 # ---------------------------------------------------------------------------
+
 
 def analyze_traded_deaths(match: Match, puuid: str) -> list[Finding]:
     """How often are your deaths traded by a teammate?"""
@@ -510,39 +555,43 @@ def analyze_traded_deaths(match: Match, puuid: str) -> list[Finding]:
     findings: list[Finding] = []
 
     if trade_rate < 0.20:
-        findings.append(Finding(
-            severity="warning",
-            category="duels",
-            headline=f"Deaths traded only {trade_rate:.0%} of the time ({traded}/{total_deaths})",
-            detail=(
-                f"Only {trade_rate:.0%} of your {total_deaths} deaths were traded by a teammate "
-                "within 5 seconds. Low trade rates suggest dying in isolated positions, far from "
-                "teammate support, or pushing ahead of your team. Try to take duels within "
-                "trading distance of at least one teammate."
-            ),
-            evidence={
-                "traded_deaths": traded,
-                "total_deaths": total_deaths,
-                "trade_rate": round(trade_rate, 3),
-            },
-            root_cause_tag="solo_hold",
-        ))
+        findings.append(
+            Finding(
+                severity="warning",
+                category="duels",
+                headline=f"Deaths traded only {trade_rate:.0%} of the time ({traded}/{total_deaths})",
+                detail=(
+                    f"Only {trade_rate:.0%} of your {total_deaths} deaths were traded by a teammate "
+                    "within 5 seconds. Low trade rates suggest dying in isolated positions, far from "
+                    "teammate support, or pushing ahead of your team. Try to take duels within "
+                    "trading distance of at least one teammate."
+                ),
+                evidence={
+                    "traded_deaths": traded,
+                    "total_deaths": total_deaths,
+                    "trade_rate": round(trade_rate, 3),
+                },
+                root_cause_tag="solo_hold",
+            )
+        )
     elif trade_rate >= 0.55:
-        findings.append(Finding(
-            severity="positive",
-            category="duels",
-            headline=f"Well-traded deaths — {trade_rate:.0%} traded ({traded}/{total_deaths})",
-            detail=(
-                f"{trade_rate:.0%} of your deaths were traded quickly by teammates. "
-                "You're dying in good positions that your team can capitalise on."
-            ),
-            evidence={
-                "traded_deaths": traded,
-                "total_deaths": total_deaths,
-                "trade_rate": round(trade_rate, 3),
-            },
-            root_cause_tag="trade_success",
-        ))
+        findings.append(
+            Finding(
+                severity="positive",
+                category="duels",
+                headline=f"Well-traded deaths — {trade_rate:.0%} traded ({traded}/{total_deaths})",
+                detail=(
+                    f"{trade_rate:.0%} of your deaths were traded quickly by teammates. "
+                    "You're dying in good positions that your team can capitalise on."
+                ),
+                evidence={
+                    "traded_deaths": traded,
+                    "total_deaths": total_deaths,
+                    "trade_rate": round(trade_rate, 3),
+                },
+                root_cause_tag="trade_success",
+            )
+        )
 
     return findings
 
@@ -550,6 +599,7 @@ def analyze_traded_deaths(match: Match, puuid: str) -> list[Finding]:
 # ---------------------------------------------------------------------------
 # Analyzer 6 — Side split
 # ---------------------------------------------------------------------------
+
 
 def analyze_side_split(match: Match, puuid: str) -> list[Finding]:
     """Compare ATK vs DEF performance within this match.
@@ -617,30 +667,33 @@ def analyze_side_split(match: Match, puuid: str) -> list[Finding]:
     strong_wr = def_wr if weak_side == "attack" else atk_wr
 
     sev: Severity = "critical" if diff >= 0.40 else "warning"
-    return [Finding(
-        severity=sev,
-        category="positioning",
-        headline=f"Strong {strong_side} ({strong_wr:.0%} WR) but weak {weak_side} ({weak_wr:.0%} WR)",
-        detail=(
-            f"Your {strong_side} win rate ({strong_wr:.0%}) significantly outperformed "
-            f"your {weak_side} ({weak_wr:.0%}) this match. "
-            f"{'Attack' if weak_side == 'attack' else 'Defense'} weaknesses often come from "
-            f"{'over-holding angles and not adapting setups' if weak_side == 'defense' else 'poor site execute timing or lack of util coordination'}."
-        ),
-        evidence={
-            "attack_win_rate": round(atk_wr, 3),
-            "defense_win_rate": round(def_wr, 3),
-            "attack_rounds": atk_rounds_played,
-            "defense_rounds": def_rounds_played,
-            "weak_side": weak_side,
-        },
-        root_cause_tag="side_imbalance",
-    )]
+    return [
+        Finding(
+            severity=sev,
+            category="positioning",
+            headline=f"Strong {strong_side} ({strong_wr:.0%} WR) but weak {weak_side} ({weak_wr:.0%} WR)",
+            detail=(
+                f"Your {strong_side} win rate ({strong_wr:.0%}) significantly outperformed "
+                f"your {weak_side} ({weak_wr:.0%}) this match. "
+                f"{'Attack' if weak_side == 'attack' else 'Defense'} weaknesses often come from "
+                f"{'over-holding angles and not adapting setups' if weak_side == 'defense' else 'poor site execute timing or lack of util coordination'}."
+            ),
+            evidence={
+                "attack_win_rate": round(atk_wr, 3),
+                "defense_win_rate": round(def_wr, 3),
+                "attack_rounds": atk_rounds_played,
+                "defense_rounds": def_rounds_played,
+                "weak_side": weak_side,
+            },
+            root_cause_tag="side_imbalance",
+        )
+    ]
 
 
 # ---------------------------------------------------------------------------
 # Analyzer 7 — Clutch moments
 # ---------------------------------------------------------------------------
+
 
 def analyze_clutch_moments(match: Match, puuid: str) -> list[Finding]:
     """Find 1vN situations and compute the win rate."""
@@ -674,12 +727,7 @@ def analyze_clutch_moments(match: Match, puuid: str) -> list[Finding]:
                 else:
                     continue
 
-            if (
-                not entered_clutch
-                and player_alive
-                and team_alive == 1
-                and enemies_alive >= 1
-            ):
+            if not entered_clutch and player_alive and team_alive == 1 and enemies_alive >= 1:
                 entered_clutch = True
                 clutch_opps += 1
                 if won:
@@ -695,38 +743,42 @@ def analyze_clutch_moments(match: Match, puuid: str) -> list[Finding]:
     findings: list[Finding] = []
 
     if clutch_wr < 0.30 and clutch_opps >= 3:
-        findings.append(Finding(
-            severity="warning",
-            category="clutch",
-            headline=f"Low clutch win rate: {clutch_wins}/{clutch_opps} ({clutch_wr:.0%})",
-            detail=(
-                f"You entered {clutch_opps} clutch scenarios (last alive vs 1+ enemies) "
-                f"and converted only {clutch_wins}. In clutch situations: slow down, "
-                "use sound cues, reposition before peeking, and make the enemy take risks."
-            ),
-            evidence={
-                "clutch_wins": clutch_wins,
-                "clutch_opportunities": clutch_opps,
-                "clutch_win_rate": round(clutch_wr, 3),
-            },
-            root_cause_tag="clutch_failure",
-        ))
+        findings.append(
+            Finding(
+                severity="warning",
+                category="clutch",
+                headline=f"Low clutch win rate: {clutch_wins}/{clutch_opps} ({clutch_wr:.0%})",
+                detail=(
+                    f"You entered {clutch_opps} clutch scenarios (last alive vs 1+ enemies) "
+                    f"and converted only {clutch_wins}. In clutch situations: slow down, "
+                    "use sound cues, reposition before peeking, and make the enemy take risks."
+                ),
+                evidence={
+                    "clutch_wins": clutch_wins,
+                    "clutch_opportunities": clutch_opps,
+                    "clutch_win_rate": round(clutch_wr, 3),
+                },
+                root_cause_tag="clutch_failure",
+            )
+        )
     elif clutch_wr >= 0.60 and clutch_opps >= 2:
-        findings.append(Finding(
-            severity="positive",
-            category="clutch",
-            headline=f"Strong clutch performer: {clutch_wins}/{clutch_opps} ({clutch_wr:.0%})",
-            detail=(
-                f"You converted {clutch_wr:.0%} of your clutch opportunities. "
-                "This is a significant strength — stay calm when isolated."
-            ),
-            evidence={
-                "clutch_wins": clutch_wins,
-                "clutch_opportunities": clutch_opps,
-                "clutch_win_rate": round(clutch_wr, 3),
-            },
-            root_cause_tag="clutch_success",
-        ))
+        findings.append(
+            Finding(
+                severity="positive",
+                category="clutch",
+                headline=f"Strong clutch performer: {clutch_wins}/{clutch_opps} ({clutch_wr:.0%})",
+                detail=(
+                    f"You converted {clutch_wr:.0%} of your clutch opportunities. "
+                    "This is a significant strength — stay calm when isolated."
+                ),
+                evidence={
+                    "clutch_wins": clutch_wins,
+                    "clutch_opportunities": clutch_opps,
+                    "clutch_win_rate": round(clutch_wr, 3),
+                },
+                root_cause_tag="clutch_success",
+            )
+        )
 
     return findings
 
@@ -735,8 +787,8 @@ def analyze_clutch_moments(match: Match, puuid: str) -> list[Finding]:
 # Analyzer 8 — Death location clusters (spatial, graceful degradation)
 # ---------------------------------------------------------------------------
 
-_CLUSTER_RADIUS = 300   # coordinate units
-_CLUSTER_MIN = 3        # minimum deaths to call a hotspot
+_CLUSTER_RADIUS = 300  # coordinate units
+_CLUSTER_MIN = 3  # minimum deaths to call a hotspot
 
 
 def _euclidean(x1: int, y1: int, x2: int, y2: int) -> float:
@@ -758,15 +810,13 @@ def analyze_death_locations(match: Match, puuid: str) -> list[Finding]:
     hotspots: list[tuple[tuple[int, int], int]] = []
     for i, (x, y) in enumerate(coords):
         neighbours = sum(
-            1 for j, (x2, y2) in enumerate(coords)
+            1
+            for j, (x2, y2) in enumerate(coords)
             if i != j and _euclidean(x, y, x2, y2) <= _CLUSTER_RADIUS
         )
         if neighbours >= _CLUSTER_MIN - 1:
             # Check this isn't already covered by a previous hotspot
-            already = any(
-                _euclidean(x, y, hx, hy) <= _CLUSTER_RADIUS
-                for (hx, hy), _ in hotspots
-            )
+            already = any(_euclidean(x, y, hx, hy) <= _CLUSTER_RADIUS for (hx, hy), _ in hotspots)
             if not already:
                 hotspots.append(((x, y), neighbours + 1))
 
@@ -774,30 +824,33 @@ def analyze_death_locations(match: Match, puuid: str) -> list[Finding]:
         return []
 
     best_center, best_count = max(hotspots, key=lambda h: h[1])
-    return [Finding(
-        severity="warning",
-        category="positioning",
-        headline=f"Died {best_count}× in the same map area",
-        detail=(
-            f"You died {best_count} times within a tight cluster on the map "
-            f"(centred around coordinates {best_center[0]}, {best_center[1]}). "
-            "Repeatedly dying at the same spot indicates a predictable angle or "
-            "an over-held position. Mix up your approach timing or try a different entry."
-        ),
-        evidence={
-            "cluster_deaths": best_count,
-            "cluster_center": list(best_center),
-            "total_deaths_with_coords": len(coords),
-            "cluster_radius_units": _CLUSTER_RADIUS,
-        },
-        root_cause_tag="over_peeking",
-        required_fields=["victim_x", "victim_y"],
-    )]
+    return [
+        Finding(
+            severity="warning",
+            category="positioning",
+            headline=f"Died {best_count}× in the same map area",
+            detail=(
+                f"You died {best_count} times within a tight cluster on the map "
+                f"(centred around coordinates {best_center[0]}, {best_center[1]}). "
+                "Repeatedly dying at the same spot indicates a predictable angle or "
+                "an over-held position. Mix up your approach timing or try a different entry."
+            ),
+            evidence={
+                "cluster_deaths": best_count,
+                "cluster_center": list(best_center),
+                "total_deaths_with_coords": len(coords),
+                "cluster_radius_units": _CLUSTER_RADIUS,
+            },
+            root_cause_tag="over_peeking",
+            required_fields=["victim_x", "victim_y"],
+        )
+    ]
 
 
 # ---------------------------------------------------------------------------
 # Analyzer 9 — Engagement distance (spatial, graceful degradation)
 # ---------------------------------------------------------------------------
+
 
 def analyze_engagement_distances(match: Match, puuid: str) -> list[Finding]:
     """Compare median engagement distance in wins vs losses."""
@@ -828,45 +881,49 @@ def analyze_engagement_distances(match: Match, puuid: str) -> list[Finding]:
 
     if ratio < 0.55:
         # Winning at long range, losing at close range
-        findings.append(Finding(
-            severity="warning",
-            category="duels",
-            headline=f"Losing close-range duels (won at {median_won:.0f}u, lost at {median_lost:.0f}u)",
-            detail=(
-                f"You win duels at median distance {median_won:.0f} units but lose duels at "
-                f"{median_lost:.0f} units — a significantly closer range. This can mean enemies "
-                "are surprising you around corners. Crosshair placement and pre-aiming corners "
-                "improve close-range outcomes substantially."
-            ),
-            evidence={
-                "median_win_distance": round(median_won, 1),
-                "median_loss_distance": round(median_lost, 1),
-                "kills_with_distance": len(won_distances),
-                "deaths_with_distance": len(lost_distances),
-            },
-            root_cause_tag="crosshair_placement",
-            required_fields=["engagement_distance"],
-        ))
+        findings.append(
+            Finding(
+                severity="warning",
+                category="duels",
+                headline=f"Losing close-range duels (won at {median_won:.0f}u, lost at {median_lost:.0f}u)",
+                detail=(
+                    f"You win duels at median distance {median_won:.0f} units but lose duels at "
+                    f"{median_lost:.0f} units — a significantly closer range. This can mean enemies "
+                    "are surprising you around corners. Crosshair placement and pre-aiming corners "
+                    "improve close-range outcomes substantially."
+                ),
+                evidence={
+                    "median_win_distance": round(median_won, 1),
+                    "median_loss_distance": round(median_lost, 1),
+                    "kills_with_distance": len(won_distances),
+                    "deaths_with_distance": len(lost_distances),
+                },
+                root_cause_tag="crosshair_placement",
+                required_fields=["engagement_distance"],
+            )
+        )
     elif ratio > 1.8:
         # Winning at close range, losing at long range
-        findings.append(Finding(
-            severity="warning",
-            category="duels",
-            headline=f"Losing long-range duels (won at {median_won:.0f}u, lost at {median_lost:.0f}u)",
-            detail=(
-                f"You win close-range fights but lose at longer distances. "
-                f"Consider playing tighter angles or using cover to reduce enemy ADS time. "
-                f"Op/Vandal players will punish wide long-range peeks."
-            ),
-            evidence={
-                "median_win_distance": round(median_won, 1),
-                "median_loss_distance": round(median_lost, 1),
-                "kills_with_distance": len(won_distances),
-                "deaths_with_distance": len(lost_distances),
-            },
-            root_cause_tag="crosshair_placement",
-            required_fields=["engagement_distance"],
-        ))
+        findings.append(
+            Finding(
+                severity="warning",
+                category="duels",
+                headline=f"Losing long-range duels (won at {median_won:.0f}u, lost at {median_lost:.0f}u)",
+                detail=(
+                    "You win close-range fights but lose at longer distances. "
+                    "Consider playing tighter angles or using cover to reduce enemy ADS time. "
+                    "Op/Vandal players will punish wide long-range peeks."
+                ),
+                evidence={
+                    "median_win_distance": round(median_won, 1),
+                    "median_loss_distance": round(median_lost, 1),
+                    "kills_with_distance": len(won_distances),
+                    "deaths_with_distance": len(lost_distances),
+                },
+                root_cause_tag="crosshair_placement",
+                required_fields=["engagement_distance"],
+            )
+        )
 
     return findings
 
@@ -874,6 +931,7 @@ def analyze_engagement_distances(match: Match, puuid: str) -> list[Finding]:
 # ---------------------------------------------------------------------------
 # Analyzer 10 — Plant/defuse site distribution (E3)
 # ---------------------------------------------------------------------------
+
 
 def analyze_plant_defuse_sites(match: Match, puuid: str) -> list[Finding]:
     """E3 — plant and defuse contributions per site this match.
@@ -904,9 +962,7 @@ def analyze_plant_defuse_sites(match: Match, puuid: str) -> list[Finding]:
     severity: Severity = "neutral"
     detail_lines = []
     if plants_per_site:
-        site_str = ", ".join(
-            f"{site}: {n}×" for site, n in sorted(plants_per_site.items())
-        )
+        site_str = ", ".join(f"{site}: {n}×" for site, n in sorted(plants_per_site.items()))
         detail_lines.append(f"Plant distribution: {site_str}.")
         top_site, top_count = max(plants_per_site.items(), key=lambda kv: kv[1])
         if total_plants >= 4 and top_count / total_plants >= 0.75:
@@ -946,16 +1002,17 @@ def analyze_plant_defuse_sites(match: Match, puuid: str) -> list[Finding]:
 # Analyzer 11 — MMR trend (E4, standalone — needs MMR data from separate query)
 # ---------------------------------------------------------------------------
 
+
 def analyze_mmr_trend(mmr_rows: list) -> list[Finding]:
     """E4 — detect significant MMR decline across recent tracked games.
 
     Args:
         mmr_rows: MMRHistory ORM rows, most-recent first (repo.get_mmr_history
-                  returns them in that order). Pass the last 5–10 rows.
+                  returns them in that order). Pass the last 5-10 rows.
 
     Returns a Finding when either:
     - 3 or more consecutive losses (mmr_change < 0 in a row), or
-    - total RR delta is ≤ −50 across the last 5 entries.
+    - total RR delta is <= -50 across the last 5 entries.
 
     Never raises — on any data issue returns [].
     """
@@ -1045,12 +1102,15 @@ def run_analyzers(match: Match, puuid: str) -> list[Finding]:
 # Selector
 # ---------------------------------------------------------------------------
 
+
 def select_top_findings(findings: list[Finding], n: int = 3) -> list[Finding]:
     """Collapse by root_cause_tag, keep highest severity per group, return top N."""
     by_tag: dict[str, Finding] = {}
     for f in findings:
         existing = by_tag.get(f.root_cause_tag)
-        if existing is None or _SEVERITY_RANK[f.severity] > _SEVERITY_RANK.get(existing.severity, 0):
+        if existing is None or _SEVERITY_RANK[f.severity] > _SEVERITY_RANK.get(
+            existing.severity, 0
+        ):
             by_tag[f.root_cause_tag] = f
     collapsed = sorted(by_tag.values(), key=lambda f: _SEVERITY_RANK[f.severity], reverse=True)
     return collapsed[:n]
@@ -1059,6 +1119,7 @@ def select_top_findings(findings: list[Finding], n: int = 3) -> list[Finding]:
 # ---------------------------------------------------------------------------
 # Formatter
 # ---------------------------------------------------------------------------
+
 
 def format_findings_block(findings: list[Finding]) -> str:
     """Format findings as a structured block for LLM injection.

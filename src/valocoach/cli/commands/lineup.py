@@ -21,7 +21,7 @@ def run_lineup(
     """Display lineup suggestions matching the given filters."""
     from valocoach.cli import display
     from valocoach.core.config import load_settings
-    from valocoach.retrieval.lineups import format_lineup_results, search_lineups
+    from valocoach.retrieval.lineups import search_lineups
 
     settings = load_settings()
 
@@ -49,7 +49,6 @@ def run_lineup(
     panel_title = " · ".join(title_parts)
 
     with display.command_frame(panel_title):
-        # Rich's Console.status (not display.status — that doesn't exist).
         with display.console.status("[info]Searching lineup database…[/info]"):
             hits = search_lineups(
                 settings.data_dir,
@@ -64,14 +63,63 @@ def run_lineup(
             display.console.print(
                 "[muted]No lineups found. Try:[/muted]\n"
                 "  [info]valocoach ingest --seed[/info]  [muted]to load the bundled lineup database[/muted]\n"
-                "  [info]valocoach ingest --youtube <video_id>[/info]  [muted]to ingest a YouTube lineup guide[/muted]"
+                "  [info]valocoach ingest --youtube <url>[/info]  [muted]to ingest a YouTube lineup guide[/muted]"
             )
             return
 
-        formatted = format_lineup_results(hits)
-        display.console.print(formatted)
-        display.console.print()
+        _print_lineup_hits(hits)
         display.console.print(
-            f"[muted]{len(hits)} lineup(s) found. "
-            "Use --agent / --map / --site to narrow results.[/muted]"
+            f"[muted]{len(hits)} lineup(s) matched. "
+            "Refine with [bold]--agent[/bold] / [bold]--map[/bold] / [bold]--site[/bold].[/muted]"
         )
+
+
+def _print_lineup_hits(hits: list[dict]) -> None:
+    """Render lineup search results with Rich formatting."""
+    from valocoach.cli import display
+
+    c = display.console
+
+    for i, hit in enumerate(hits, 1):
+        meta = hit["metadata"]
+        agent = meta.get("agent", "?")
+        ability = meta.get("ability") or "ability"
+        map_name = meta.get("map", "?")
+        site = meta.get("site")
+        side = meta.get("side")
+        purpose = meta.get("purpose")
+        channel = meta.get("channel", "?")
+        title = meta.get("title", "?")
+        start = int(meta.get("start_seconds", 0))
+        mins, secs = divmod(start, 60)
+        score = hit.get("distance", 1.0)
+        relevance = max(0, round((1 - score) * 100))
+
+        # ── Header line ───────────────────────────────────────────────────
+        header_parts = [f"[val.red]{agent}[/val.red]", f"[bold]{ability}[/bold]"]
+        if map_name and map_name != "?":
+            header_parts.append(f"[stat.label]{map_name}[/stat.label]")
+        if site:
+            header_parts.append(f"[stat.value]{site} site[/stat.value]")
+        if side:
+            header_parts.append(f"[muted]{side}[/muted]")
+
+        c.print(f"  [stat.value]{i}.[/stat.value]  {' · '.join(header_parts)}", end="")
+        if purpose:
+            c.print(f"  [muted][{purpose}][/muted]")
+        else:
+            c.print()
+
+        # ── Transcript snippet ────────────────────────────────────────────
+        snippet = hit["text"][:160].replace("\n", " ").strip()
+        if len(hit["text"]) > 160:
+            snippet += "…"
+        c.print(f'       [muted]"{snippet}"[/muted]')
+
+        # ── Source line ───────────────────────────────────────────────────
+        if channel != "seed":
+            c.print(
+                f"       [info]▶ {channel}[/info]  [muted]{title}  @{mins}:{secs:02d}[/muted]"
+                f"  [muted]({relevance}% match)[/muted]"
+            )
+        c.print()

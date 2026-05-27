@@ -154,7 +154,9 @@ def run_profile(
         print(json.dumps(payload, indent=2, default=str))
         return
 
-    with display.command_frame("Player Profile", subtitle=f"{resolved_name}#{resolved_tag}", con=con):
+    with display.command_frame(
+        "Player Profile", subtitle=f"{resolved_name}#{resolved_tag}", con=con
+    ):
         # Identity panel
         render_identity_panel(con, player)
 

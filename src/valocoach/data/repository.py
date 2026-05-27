@@ -47,13 +47,11 @@ from valocoach.data.mapper import match_from_details, player_from_account_mmr
 from valocoach.data.orm_models import (
     CoachingNote,
     CoachingSession,
-    Kill,
     Match,
     MatchPlayer,
     MMRHistory,
     Player,
     Round,
-    RoundPlayer,
     SyncLog,
 )
 

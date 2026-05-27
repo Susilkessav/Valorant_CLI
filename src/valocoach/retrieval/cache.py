@@ -146,7 +146,7 @@ def _purge_live_orphans(data_dir: Path) -> int:
         metas = result.get("metadatas", []) or []
         orphan_ids = [
             doc_id
-            for doc_id, meta in zip(ids, metas)
+            for doc_id, meta in zip(ids, metas, strict=False)
             if not isinstance(meta, dict) or "expires_at_unix" not in meta
         ]
         if orphan_ids:

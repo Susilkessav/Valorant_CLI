@@ -71,7 +71,9 @@ def _xy(location: dict) -> tuple[int | None, int | None]:
     )
 
 
-def _engagement_distance(kx: int | None, ky: int | None, vx: int | None, vy: int | None) -> str | None:
+def _engagement_distance(
+    kx: int | None, ky: int | None, vx: int | None, vy: int | None
+) -> str | None:
     """Return Euclidean distance between killer and victim as a TEXT string.
 
     Stored as TEXT to avoid float precision noise in SQLite.  Cast to float

@@ -148,12 +148,8 @@ def run_stats(
                 "result": result,
             },
             "overall": _stats_dict(overall),
-            "by_agent": [
-                {"agent": a.agent, "stats": _stats_dict(a.stats)} for a in per_agent
-            ],
-            "by_map": [
-                {"map": m.map_name, "stats": _stats_dict(m.stats)} for m in per_map
-            ],
+            "by_agent": [{"agent": a.agent, "stats": _stats_dict(a.stats)} for a in per_agent],
+            "by_map": [{"map": m.map_name, "stats": _stats_dict(m.stats)} for m in per_map],
         }
         print(json.dumps(payload, indent=2, default=str))
         return
@@ -189,6 +185,7 @@ def run_stats(
 
         # Recent Form — silent when stable
         from valocoach.stats.baseline import compare_baseline
+
         comparison = compare_baseline(filtered)
         if comparison is not None and comparison.has_anomalies:
             display.render_section(con, "Recent Form")
@@ -204,7 +201,9 @@ def run_stats(
         # Round Mastery — moved up from bottom
         if data.full_matches:
             filtered_match_ids = {mp.match_id for mp in filtered}
-            filtered_full_matches = [m for m in data.full_matches if m.match_id in filtered_match_ids]
+            filtered_full_matches = [
+                m for m in data.full_matches if m.match_id in filtered_match_ids
+            ]
             if filtered_full_matches:
                 round_analysis = analyze_rounds(filtered_full_matches, player.puuid)
                 if round_analysis.rounds > 0:

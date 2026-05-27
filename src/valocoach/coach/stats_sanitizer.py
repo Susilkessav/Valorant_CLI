@@ -24,6 +24,7 @@ Design:
 
 from __future__ import annotations
 
+import contextlib
 import re
 from dataclasses import dataclass
 
@@ -113,10 +114,7 @@ class StatWarning:
     snippet: str
 
     def format(self) -> str:
-        return (
-            f"{self.stat}: model said \"{self.claimed}\" "
-            f"but your real value is {self.actual}"
-        )
+        return f'{self.stat}: model said "{self.claimed}" but your real value is {self.actual}'
 
 
 # ---------------------------------------------------------------------------
@@ -144,10 +142,8 @@ def _extract_real_values(player_context: str) -> dict[str, float]:
     for key, pat in _CONTEXT_PATTERNS.items():
         m = pat.search(player_context)
         if m:
-            try:
+            with contextlib.suppress(ValueError):
                 out[key] = float(m.group(1))
-            except ValueError:
-                pass
     return out
 
 
@@ -159,11 +155,11 @@ def _extract_real_values(player_context: str) -> dict[str, float]:
 # Per-stat tolerance below which a claim is considered "close enough" — we
 # don't want to flag "K/D 0.9" vs "K/D 0.93" or "27%" vs "27.4%".
 _TOLERANCE: dict[str, float] = {
-    "K/D": 0.05,    # absolute K/D delta
-    "ACS": 5.0,     # absolute ACS points
-    "ADR": 5.0,     # absolute ADR points
-    "HS": 2.0,      # absolute percentage points
-    "WR": 3.0,      # absolute percentage points
+    "K/D": 0.05,  # absolute K/D delta
+    "ACS": 5.0,  # absolute ACS points
+    "ADR": 5.0,  # absolute ADR points
+    "HS": 2.0,  # absolute percentage points
+    "WR": 3.0,  # absolute percentage points
 }
 
 

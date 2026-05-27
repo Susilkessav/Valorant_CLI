@@ -444,7 +444,7 @@ class TestPromptTemplates:
         assert set(PROMPT_TEMPLATES.keys()) == set(ALL_INTENTS)
 
     def test_clutch_template_has_decision_tree_section(self):
-        assert "Primary play" in PROMPT_TEMPLATES["clutch"]
+        assert "PRIMARY PLAY" in PROMPT_TEMPLATES["clutch"]
 
     def test_post_plant_template_mentions_spike_timer(self):
         assert "spike" in PROMPT_TEMPLATES["post_plant"].lower()
@@ -457,7 +457,7 @@ class TestPromptTemplates:
 
     def test_stat_analysis_template_no_forced_markdown(self):
         """stat_analysis template must NOT force the 5-section tactical layout."""
-        tactical_sections = ["Pre-round", "Execute", "If it breaks"]
+        tactical_sections = ["PRE-ROUND", "EXECUTE", "IF IT BREAKS"]
         for section in tactical_sections:
             assert section not in PROMPT_TEMPLATES["stat_analysis"], (
                 f"stat_analysis template contains tactical section '{section}'"
@@ -474,7 +474,7 @@ class TestPromptTemplates:
 
     def test_tactical_template_has_all_five_sections(self):
         tmpl = PROMPT_TEMPLATES["tactical"]
-        for section in ["Read", "Pre-round", "Execute", "If it breaks", "Key detail"]:
+        for section in ["READ", "PRE-ROUND", "EXECUTE", "IF IT BREAKS", "KEY DETAIL"]:
             assert section in tmpl, f"tactical template missing section '{section}'"
 
     def test_general_template_no_forced_structure(self):

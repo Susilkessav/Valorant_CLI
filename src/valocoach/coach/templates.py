@@ -125,16 +125,16 @@ PROMPT_TEMPLATES: dict[IntentType, str] = {
 The player is in a clutch situation.  Keep it punchy — they need a decision
 tree, not a lecture.
 
-Respond with **exactly these sections** (use the emoji headers verbatim):
+Respond with **exactly these sections** (use the headers verbatim):
 
-🧠 **Read the round** — What information do they have right now?  (spike planted?
+**READ THE ROUND** — What information do they have right now?  (spike planted?
 time left? enemy positions known?)
 
-🗺️ **Primary play** — The single highest-EV move with exact callout + timing.
+**PRIMARY PLAY** — The single highest-EV move with exact callout + timing.
 
-🔀 **If that fails** — One backup option.  No more.
+**IF THAT FAILS** — One backup option.  No more.
 
-⏱️ **Time check** — Spike timer pressure if relevant; when to stop stalling.
+**TIME CHECK** — Spike timer pressure if relevant; when to stop stalling.
 
 Keep total response under 200 words.  Be direct — no filler sentences.""".strip(),
     # ------------------------------------------------------------------
@@ -146,17 +146,17 @@ The spike is planted.  Focus entirely on post-plant execution.
 
 Respond with **exactly these sections**:
 
-📍 **Hold positions** — Best defensive spots for the planting team, with exact
+**HOLD POSITIONS** — Best defensive spots for the planting team, with exact
 callouts (e.g. "one on Generator, one in Default, one watching CT").
 
-🔮 **Utility hold** — Which exact abilities to hold for post-plant by callout.
+**UTILITY HOLD** — Which exact abilities to hold for post-plant by callout.
 Include cast timing relative to spike timer.
 
-🛡️ **Defuse pressure** — When to contest a defuse attempt vs. letting the
+**DEFUSE PRESSURE** — When to contest a defuse attempt vs. letting the
 clock run.  Give a timer threshold (e.g. "if defuse starts before 10 s,
 challenge; after 10 s, let it go and trade").
 
-🔄 **If they retake** — One re-peek or crossfire setup.
+**IF THEY RETAKE** — One re-peek or crossfire setup.
 
 Keep total response under 220 words.""".strip(),
     # ------------------------------------------------------------------
@@ -168,18 +168,18 @@ The site has been taken.  The player needs a retake plan.
 
 Respond with **exactly these sections**:
 
-⏰ **Rotate timing** — When to leave mid/other site to arrive in time.  Give
+**ROTATE TIMING** — When to leave mid/other site to arrive in time.  Give
 a rough round-timer window (e.g. "rotate at 45 s left").
 
-🚪 **Entry priority** — Which retake angle to enter first and why; who goes first
+**ENTRY PRIORITY** — Which retake angle to enter first and why; who goes first
 if team retake.
 
-💥 **Utility order** — Which abilities clear which corners in sequence.
+**UTILITY ORDER** — Which abilities clear which corners in sequence.
 Be specific: agent, ability name, callout.
 
-🎯 **Trade setup** — How to force a trade if entry is traded out.
+**TRADE SETUP** — How to force a trade if entry is traded out.
 
-⚡ **Spike timer rule** — At what timer to abandon the retake and just defuse.
+**SPIKE TIMER RULE** — At what timer to abandon the retake and just defuse.
 
 Keep total response under 250 words.""".strip(),
     # ------------------------------------------------------------------
@@ -191,18 +191,18 @@ The player has an economy or buy decision question.
 
 Respond with **exactly these sections**:
 
-💰 **Credit read** — Confirm what bracket the team is in (eco / half-buy /
+**CREDIT READ** — Confirm what bracket the team is in (eco / half-buy /
 full-buy) based on what the player described.
 
-🛒 **Recommended buy** — Exact loadout per bracket:
+**RECOMMENDED BUY** — Exact loadout per bracket:
   - Eco (< 2 000 cr): pistol + util or save
   - Half-buy (2 000 – 3 700 cr): Spectre or Sheriff + cheap util
-  - Full-buy (≥ 3 700 cr): Vandal/Phantom + full util
+  - Full-buy (>= 3 700 cr): Vandal/Phantom + full util
 
-📊 **Team economy rule** — When to force for map control vs. saving for the next
+**TEAM ECONOMY RULE** — When to force for map control vs. saving for the next
 full round.  Include the "bank" threshold.
 
-⚠️ **Ult economy** — If the player's agent ult cost is relevant, note when to
+**ULT ECONOMY** — If the player's agent ult cost is relevant, note when to
 spend vs. hold credits for next round.
 
 Keep response under 200 words.  No generic advice about communication.""".strip(),
@@ -218,15 +218,15 @@ When it is absent, explain what metrics matter and why.
 
 Respond with **exactly these sections**:
 
-📈 **Key numbers** — Highlight 2–3 metrics that matter most for their question.
+**KEY NUMBERS** — Highlight 2–3 metrics that matter most for their question.
 Present them as comparisons (vs. rank average, vs. their own recent trend).
 
-🔍 **What this means** — Plain-English interpretation.  Avoid jargon; say
+**WHAT THIS MEANS** — Plain-English interpretation.  Avoid jargon; say
 "you die before dealing damage" not "low KAST".
 
-🎯 **One focus area** — The single biggest lever: what to fix first and why.
+**ONE FOCUS AREA** — The single biggest lever: what to fix first and why.
 
-📋 **Drill suggestion** — A specific custom-game or deathmatch drill that
+**DRILL SUGGESTION** — A specific custom-game or deathmatch drill that
 targets the identified weakness.
 
 Keep response under 250 words.  Do not reprint raw stat tables back at the player.""".strip(),
@@ -240,14 +240,14 @@ Use GROUNDED CONTEXT exclusively — never invent ability names, costs, or coold
 
 Respond with **exactly these sections**:
 
-🎮 **Kit summary** — One sentence per ability (Q, E, C, X) with exact name,
+**KIT SUMMARY** — One sentence per ability (Q, E, C, X) with exact name,
 credit cost or cooldown, and primary use case.
 
-🧩 **When to pick this agent** — Map types / team comps where this agent excels.
+**WHEN TO PICK THIS AGENT** — Map types / team comps where this agent excels.
 
-⚡ **Power combos** — 1–2 ability combos or timing tricks that high-elo players use.
+**POWER COMBOS** — 1–2 ability combos or timing tricks that high-elo players use.
 
-🤝 **Synergies** — One or two agents that pair especially well, and why.
+**SYNERGIES** — One or two agents that pair especially well, and why.
 
 Keep response under 280 words.  Pull all costs and cooldowns from GROUNDED CONTEXT.""".strip(),
     # ------------------------------------------------------------------
@@ -283,17 +283,17 @@ maps — use them to make the practical takeaway personally relevant.
 
 Respond with **exactly these sections**:
 
-🏆 **Current strong picks** — 3–5 agents from the META tier list. For each:
+**CURRENT STRONG PICKS** — 3–5 agents from the META tier list. For each:
 agent name + tier + ONE reason. Only cite ability names if an AGENT block is
 present for that agent.
 
-📉 **Falling off** — 1–2 agents from lower tiers (B or C) OR explicitly nerfed
+**FALLING OFF** — 1–2 agents from lower tiers (B or C) OR explicitly nerfed
 in patch-change rows. Skip this section if neither source has data.
 
-🗺️ **Map influence** — Which maps currently favour which archetypes. Use ONLY
+**MAP INFLUENCE** — Which maps currently favour which archetypes. Use ONLY
 information from map_meta rows in GROUNDED CONTEXT. Skip if absent.
 
-💡 **Practical takeaway** — One actionable recommendation tailored to the
+**PRACTICAL TAKEAWAY** — One actionable recommendation tailored to the
 player's actual agent pool and top maps from PLAYER CONTEXT (if available).
 Name the specific agents from their pool.  If PLAYER CONTEXT is absent, base
 the takeaway on rank / playstyle from the question.
@@ -309,17 +309,17 @@ In multi-turn sessions, build on earlier advice rather than repeating it.
 
 Respond with **exactly these sections**:
 
-🎯 **Read** — Root cause of the problem (not symptoms).
+**READ** — Root cause of the problem (not symptoms).
 
-🛠️ **Pre-round** — Exact utility usage, buy decisions, and positioning before
+**PRE-ROUND** — Exact utility usage, buy decisions, and positioning before
 the barrier drops.
 
-⚔️ **Execute** — Numbered steps with specific callouts, timings, and ability usage.
+**EXECUTE** — Numbered steps with specific callouts, timings, and ability usage.
   Each step: WHO does WHAT, WHERE, and WHEN.
 
-🔄 **If it breaks** — Concrete re-route or retake plan.
+**IF IT BREAKS** — Concrete re-route or retake plan.
 
-💡 **Key detail** — One non-obvious tip that separates ranked players from pros.
+**KEY DETAIL** — One non-obvious tip that separates ranked players from pros.
 
 Keep response under 350 words.  Prioritise specificity over completeness.""".strip(),
     # ------------------------------------------------------------------
@@ -348,19 +348,19 @@ coaching language.
 
 Respond with **exactly these sections**:
 
-🔴 **Critical Pattern** — State the single most damaging habit visible across
+**CRITICAL PATTERN** — State the single most damaging habit visible across
 the findings.  Cite the specific numbers from the evidence (e.g. "You were the
 first to die in 44% of rounds").  One focused paragraph.
 
-📊 **What this cost you** — Translate the evidence into round-outcome language.
+**WHAT THIS COST YOU** — Translate the evidence into round-outcome language.
 Be concrete: e.g. "In a 24-round match, dying first in 44% of rounds forced
 your team into 4v5s on 10+ rounds and is the clearest driver of the loss."
 
-🎯 **Priority drill** — One custom-game or deathmatch drill that directly
+**PRIORITY DRILL** — One custom-game or deathmatch drill that directly
 targets the critical pattern.  Name it, describe the exact setup (duration,
 conditions, success metric), and say how many minutes to run it.
 
-🎮 **Next-match focus** — Two bullet points:
+**NEXT-MATCH FOCUS** — Two bullet points:
   - One mindset cue (what to ask yourself before each peek / buy / rotation).
   - One positioning or utility rule that counteracts the critical pattern.
 

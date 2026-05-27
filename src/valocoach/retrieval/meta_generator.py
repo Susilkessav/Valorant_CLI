@@ -200,9 +200,7 @@ def _compute_tiers(agent_meta_raw: dict, existing_agent_meta: dict) -> tuple[dic
             tier = existing.get("tier", "C")
             pr_str = existing.get("pick_rate", "N/A")
             wr_str = existing.get("win_rate", "N/A")
-            log.debug(
-                "Agent %r missing numeric rates — keeping existing tier %r", agent_name, tier
-            )
+            log.debug("Agent %r missing numeric rates — keeping existing tier %r", agent_name, tier)
 
         tier_list.setdefault(tier, []).append(agent_name)
         formatted[agent_name] = {
@@ -219,6 +217,47 @@ def _compute_tiers(agent_meta_raw: dict, existing_agent_meta: dict) -> tuple[dic
     return tier_list, formatted
 
 
+def _coerce_agent_meta(raw: object) -> dict:
+    """Normalise LLM agent_meta to ``{AgentName: {...}}`` regardless of output format.
+
+    The LLM occasionally returns a list of objects instead of a keyed dict,
+    e.g. ``[{"name": "Sova", "pick_rate_pct": 32.0, ...}, ...]``.
+    We detect this and re-key by the name/agent field so the rest of the
+    pipeline always receives a plain dict.
+    """
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, list):
+        coerced: dict = {}
+        for i, item in enumerate(raw):
+            if not isinstance(item, dict):
+                continue
+            key = item.get("name") or item.get("agent") or item.get("agent_name") or str(i)
+            entry = {k: v for k, v in item.items() if k not in ("name", "agent", "agent_name")}
+            coerced[str(key)] = entry
+        log.warning("LLM returned agent_meta as a list (%d entries) — coerced to dict", len(raw))
+        return coerced
+    log.warning("LLM returned agent_meta of unexpected type %s — ignoring", type(raw).__name__)
+    return {}
+
+
+def _coerce_map_meta(raw: object) -> dict:
+    """Normalise LLM map_meta to ``{MapName: {...}}`` regardless of output format."""
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, list):
+        coerced: dict = {}
+        for i, item in enumerate(raw):
+            if not isinstance(item, dict):
+                continue
+            key = item.get("map") or item.get("name") or item.get("map_name") or str(i)
+            entry = {k: v for k, v in item.items() if k not in ("map", "name", "map_name")}
+            coerced[str(key)] = entry
+        log.warning("LLM returned map_meta as a list (%d entries) — coerced to dict", len(raw))
+        return coerced
+    return {}
+
+
 def _validate(data: dict, existing: dict) -> dict:
     """Merge LLM output with existing meta, computing deterministic tiers (C2).
 
@@ -228,17 +267,15 @@ def _validate(data: dict, existing: dict) -> dict:
     back to existing tier_list so old responses never corrupt the file.
     """
     existing_agent_meta = existing.get("agent_meta", {})
-    raw_agent_meta = data.get("agent_meta", {})
+    # Normalise before touching .values() — LLM sometimes returns a list
+    raw_agent_meta = _coerce_agent_meta(data.get("agent_meta", {}))
 
     if raw_agent_meta:
         # Detect whether ANY agent has numeric rate data.
         has_numeric = any(
             isinstance(v.get("pick_rate_pct"), (int, float))
             or isinstance(v.get("win_rate_pct"), (int, float))
-            or (
-                isinstance(v.get("pick_rate_pct"), str)
-                and "%" not in v["pick_rate_pct"]
-            )
+            or (isinstance(v.get("pick_rate_pct"), str) and "%" not in v["pick_rate_pct"])
             for v in raw_agent_meta.values()
         )
 
@@ -268,10 +305,11 @@ def _validate(data: dict, existing: dict) -> dict:
         if tier not in tier_list:
             tier_list[tier] = existing.get("tier_list", {}).get(tier, [])
 
+    raw_map_meta = _coerce_map_meta(data.get("map_meta"))
     return {
         "tier_list": tier_list,
         "agent_meta": agent_meta,
-        "map_meta": data.get("map_meta") or existing.get("map_meta", {}),
+        "map_meta": raw_map_meta or existing.get("map_meta", {}),
     }
 
 
@@ -306,10 +344,11 @@ def generate_meta_update(
     """
     from valocoach.llm.provider import stream_completion
 
-    # Truncate inputs so we stay within the model's context window.
-    # 6 000 chars ≈ ~1 500 tokens each; the system prompt is ~400 tokens.
-    notes_snippet = (patch_notes_text or "No patch notes available.")[:6_000]
-    stats_snippet = (stats_text or "No stats data available.")[:6_000]
+    # Truncate inputs to stay well within typical local-model context budgets.
+    # ~3 000 chars ≈ 750 tokens each; system prompt ≈ 500 tokens; leaves
+    # ~14 000 tokens of headroom for the response in a 16 384-token window.
+    notes_snippet = (patch_notes_text or "No patch notes available.")[:3_000]
+    stats_snippet = (stats_text or "No stats data available.")[:3_000]
 
     user_message = (
         f"CURRENT PATCH: {patch_version}\n\n"
@@ -331,6 +370,13 @@ def generate_meta_update(
             settings,
             system_prompt=_SYSTEM_PROMPT,
             user_message=user_message,
+            # Meta generation needs a large output — the full agent+map JSON
+            # for 28 agents easily exceeds the default 3 000-token cap.
+            max_tokens=6_000,
+            # Tell Ollama to use a 16 384-token context window so the input
+            # prompt (system + notes + stats ≈ 2 000 tokens) doesn't crowd
+            # out the model's output budget.
+            num_ctx=16_384,
         ):
             tokens.append(token)
     except Exception as exc:
@@ -339,6 +385,15 @@ def generate_meta_update(
 
     raw = "".join(tokens)
     log.debug("LLM raw output: %d chars", len(raw))
+
+    if not raw.strip():
+        log.error(
+            "LLM returned an empty response for meta generation "
+            "(model=%s) — context window may be too small or the model "
+            "timed out.  Keeping existing meta.json unchanged.",
+            settings.ollama_model,
+        )
+        return None
 
     # Try to extract and parse JSON.
     cleaned = _strip_fences(raw)
