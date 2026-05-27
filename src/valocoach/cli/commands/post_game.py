@@ -114,10 +114,10 @@ _SEV_COLOUR = {
     "positive": "[success]",
 }
 _SEV_ICON = {
-    "critical": "🔴",
-    "warning":  "🟡",
-    "neutral":  "⚪",
-    "positive": "🟢",
+    "critical": ">>>",
+    "warning":  " > ",
+    "neutral":  "   ",
+    "positive": " + ",
 }
 
 

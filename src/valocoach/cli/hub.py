@@ -32,7 +32,7 @@ def _patch_lines(settings=None) -> list[str]:
         patch = meta.get("patch", "?")
         updated = meta.get("updated", "?")
         sync_flag = (
-            "  [warning]⚠ refresh in progress[/warning]"
+            "  [warning]! refresh in progress[/warning]"
             if meta.get("sync_in_progress")
             else ""
         )
@@ -49,7 +49,7 @@ def _patch_lines(settings=None) -> list[str]:
                 if stale is None or stale > 21:
                     age = "never checked" if stale is None else f"{stale:.0f}d ago"
                     lines.append(
-                        f"  [warning]⚠ Meta may be outdated ({age})"
+                        f"  [warning]! Meta may be outdated ({age})"
                         " — run [info]valocoach meta-refresh[/info] to update[/warning]"
                     )
         except Exception:

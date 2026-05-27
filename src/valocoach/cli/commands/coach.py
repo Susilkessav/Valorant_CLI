@@ -48,7 +48,7 @@ def _maybe_warn_stale_meta(settings, *, once: bool = False) -> None:
                 "never checked" if stale_days is None else f"{stale_days:.0f}d since last check"
             )
             display.console.print(
-                f"[muted]⚠ Meta info may be outdated ({age_str}) — "
+                f"[muted]! Meta info may be outdated ({age_str}) — "
                 "run [info]valocoach patch --check[/info] to refresh.[/muted]"
             )
             _STALE_META_WARNED = True
@@ -449,7 +449,7 @@ def run_coach(
 
                 lines = [
                     "",
-                    f"[warning]⚠ Ability fact-check — {len(ability_warnings)} "
+                    f"[warning]! Ability fact-check — {len(ability_warnings)} "
                     "claim(s) don't match the canonical agent kit:[/warning]",
                 ]
                 for cat in ("hallucination", "cross_attribution", "weapon", "generic"):
@@ -480,7 +480,7 @@ def run_coach(
             if stat_warnings:
                 stat_lines = [
                     "",
-                    f"[warning]⚠ Stat fact-check — {len(stat_warnings)} "
+                    f"[warning]! Stat fact-check — {len(stat_warnings)} "
                     "numeric claim(s) don't match your real PLAYER CONTEXT:[/warning]",
                 ]
                 for w in stat_warnings[:8]:

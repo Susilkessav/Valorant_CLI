@@ -62,13 +62,13 @@ class SyncResult:
         lines = [
             f"Patch:          {self.patch_version}"
             + (" (new)" if self.is_new_patch else " (unchanged)"),
-            f"Patch notes:    {'✓' if self.patch_notes_scraped else '✗'}",
-            f"Ranked stats:   {'✓' if self.ranked_stats_scraped else '✗'}",
-            f"Pro stats:      {'✓' if self.pro_stats_scraped else '✗'}",
+            f"Patch notes:    {'ok' if self.patch_notes_scraped else 'no'}",
+            f"Ranked stats:   {'ok' if self.ranked_stats_scraped else 'no'}",
+            f"Pro stats:      {'ok' if self.pro_stats_scraped else 'no'}",
             f"YouTube chunks: {self.youtube_chunks_ingested}",
-            f"Meta regen:     {'✓' if self.meta_regenerated else '✗'}",
+            f"Meta regen:     {'ok' if self.meta_regenerated else 'no'}",
             f"meta.json:      {'written' if self.meta_written else 'not written'}",
-            f"Re-ingested:    {'✓' if self.meta_ingested else '✗'}",
+            f"Re-ingested:    {'ok' if self.meta_ingested else 'no'}",
         ]
         if self.errors:
             lines.append("Errors:")

@@ -30,10 +30,10 @@ def _is_known_agent(name: str) -> bool:
 
 
 _TIER_HEADERS: dict[str, str] = {
-    "S": "🏆 S-Tier",
-    "A": "🥈 A-Tier",
-    "B": "🥉 B-Tier",
-    "C": "▫ C-Tier",
+    "S": "S-Tier",
+    "A": "A-Tier",
+    "B": "B-Tier",
+    "C": "C-Tier",
 }
 
 
@@ -76,12 +76,12 @@ def format_tier_list_panel() -> str:
 
         META — Patch 10.08 · updated 2025-04
 
-        🏆 S-Tier
+        S-Tier
           • Omen (Controller) — Shrouded Step, Paranoia, Dark Cover, From the Shadows
             pick ~18% · win ~51%
           • Viper (Controller) — Snake Bite, Poison Cloud, Toxic Screen, Viper's Pit
           ...
-        🥈 A-Tier
+        A-Tier
           ...
     """
     meta = get_meta()

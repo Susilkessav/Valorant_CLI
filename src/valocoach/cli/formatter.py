@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 # Formatting primitives
 # ---------------------------------------------------------------------------
 
-WARN_PREFIX: Final[str] = "⚠ "
+WARN_PREFIX: Final[str] = "! "
 
 def fmt_pct(ratio: float) -> str:
     return f"{ratio * 100:.1f}%"

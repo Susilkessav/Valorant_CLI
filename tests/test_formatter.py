@@ -193,7 +193,7 @@ class TestWarnCell:
 
     def test_warn_prefix_constant_matches_glyph(self) -> None:
         """Changing WARN_PREFIX in formatter must be reflected here."""
-        assert WARN_PREFIX.strip() == "⚠"
+        assert WARN_PREFIX.strip() == "!"
 
 
 # ---------------------------------------------------------------------------

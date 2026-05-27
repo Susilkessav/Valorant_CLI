@@ -97,8 +97,8 @@ def _detect_tilt(rows: list[MatchPlayer]) -> str | None:
         e_pct = round(early_wr * 100)
         l_pct = round(late_wr * 100)
         return (
-            f"⚠ Session tilt ({n} games in last 8h): "
-            f"WR dropped {e_pct}% → {l_pct}% — consider a break."
+            f"! Session tilt ({n} games in last 8h): "
+            f"WR dropped {e_pct}% -> {l_pct}% — consider a break."
         )
     return None
 
@@ -123,11 +123,11 @@ def _pct(ratio: float) -> str:
 
 
 def _warn(stat: object) -> str:
-    """Return '⚠' when a StatResult is unreliable, '' otherwise."""
+    """Return '!' when a StatResult is unreliable, '' otherwise."""
     from valocoach.stats.calculator import StatResult  # avoid circular at module level
 
     if isinstance(stat, StatResult) and not stat.is_reliable:
-        return "⚠"
+        return "!"
     return ""
 
 
@@ -139,7 +139,7 @@ def _format_round_line(analysis: RoundAnalysis, matches: int) -> str | None:
     for real signal.
 
     Reliability comes directly from StatResult.is_reliable — no manual
-    threshold math here. Each metric carries its own ⚠ flag.
+    threshold math here. Each metric carries its own reliability flag.
     """
     if analysis.rounds == 0:
         return None

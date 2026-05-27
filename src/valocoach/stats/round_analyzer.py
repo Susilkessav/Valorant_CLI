@@ -647,7 +647,7 @@ def clutch_stat(analysis: RoundAnalysis, matches: int) -> StatResult:
         matches_used=matches,
         rounds_used=analysis.rounds,
         is_reliable=rel and not no_opps,
-        warning=warn or ("⚠ no clutch situations in sample" if no_opps else None),
+        warning=warn or ("! no clutch situations in sample" if no_opps else None),
     )
 
 
@@ -662,7 +662,7 @@ def trade_efficiency_stat(analysis: RoundAnalysis, matches: int) -> StatResult:
         matches_used=matches,
         rounds_used=analysis.rounds,
         is_reliable=rel and not no_deaths,
-        warning=warn or ("⚠ no deaths in sample" if no_deaths else None),
+        warning=warn or ("! no deaths in sample" if no_deaths else None),
     )
 
 
@@ -677,7 +677,7 @@ def trade_participation_stat(analysis: RoundAnalysis, matches: int) -> StatResul
         matches_used=matches,
         rounds_used=analysis.rounds,
         is_reliable=rel and not no_teammate_deaths,
-        warning=warn or ("⚠ no teammate deaths in sample" if no_teammate_deaths else None),
+        warning=warn or ("! no teammate deaths in sample" if no_teammate_deaths else None),
     )
 
 
