@@ -32,9 +32,7 @@ def _patch_lines(settings=None) -> list[str]:
         patch = meta.get("patch", "?")
         updated = meta.get("updated", "?")
         sync_flag = (
-            "  [warning]⚠ refresh in progress[/warning]"
-            if meta.get("sync_in_progress")
-            else ""
+            "  [warning]! refresh in progress[/warning]" if meta.get("sync_in_progress") else ""
         )
         lines = [
             f"  [heading]Patch[/heading] [info]{patch}[/info]"
@@ -49,7 +47,7 @@ def _patch_lines(settings=None) -> list[str]:
                 if stale is None or stale > 21:
                     age = "never checked" if stale is None else f"{stale:.0f}d ago"
                     lines.append(
-                        f"  [warning]⚠ Meta may be outdated ({age})"
+                        f"  [warning]! Meta may be outdated ({age})"
                         " — run [info]valocoach meta-refresh[/info] to update[/warning]"
                     )
         except Exception:
@@ -86,7 +84,9 @@ def _player_lines(settings) -> list[str]:
             if data and data.rows:
                 # Use total row count as a proxy — loader caps at `limit` but
                 # we only need to know "any data exists" for the hub line.
-                match_note = "[muted]match history synced — run [info]valocoach stats[/info] to view[/muted]"
+                match_note = (
+                    "[muted]match history synced — run [info]valocoach stats[/info] to view[/muted]"
+                )
             else:
                 match_note = "[muted]no match history — run [info]valocoach sync[/info][/muted]"
         except Exception:
@@ -124,6 +124,7 @@ def show_hub(settings=None) -> None:
     if settings is None:
         try:
             from valocoach.core.config import load_settings
+
             settings = load_settings()
         except Exception:
             settings = None

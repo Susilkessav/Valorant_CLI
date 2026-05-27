@@ -3,7 +3,7 @@
 For ``meta`` and ``agent_info`` intents the LLM consistently fabricates
 ability names (Riftwalk, Sonic Blast, Dark Visage, Sonic Boom, …) even with
 21 KB of grounded context.  The root cause is that the model's training
-prior dominates the prompt at 8B–14B scale.
+prior dominates the prompt at 8B-14B scale.
 
 We solve it structurally: the agent listing, role labels, and ability rosters
 come from ``agents.json`` + ``meta.json`` (100% accurate, no LLM), and the
@@ -30,10 +30,10 @@ def _is_known_agent(name: str) -> bool:
 
 
 _TIER_HEADERS: dict[str, str] = {
-    "S": "🏆 S-Tier",
-    "A": "🥈 A-Tier",
-    "B": "🥉 B-Tier",
-    "C": "▫ C-Tier",
+    "S": "S-Tier",
+    "A": "A-Tier",
+    "B": "B-Tier",
+    "C": "C-Tier",
 }
 
 
@@ -76,12 +76,12 @@ def format_tier_list_panel() -> str:
 
         META — Patch 10.08 · updated 2025-04
 
-        🏆 S-Tier
+        S-Tier
           • Omen (Controller) — Shrouded Step, Paranoia, Dark Cover, From the Shadows
             pick ~18% · win ~51%
           • Viper (Controller) — Snake Bite, Poison Cloud, Toxic Screen, Viper's Pit
           ...
-        🥈 A-Tier
+        A-Tier
           ...
     """
     meta = get_meta()
@@ -235,8 +235,7 @@ def format_personalised_takeaway(settings) -> str | None:
             else:
                 badge = "new — not yet in knowledge base"
             aligned.append(
-                f"{a.agent} ({badge}, {a.stats.matches}g, "
-                f"{a.stats.win_rate * 100:.0f}% WR)"
+                f"{a.agent} ({badge}, {a.stats.matches}g, {a.stats.win_rate * 100:.0f}% WR)"
             )
         lines.append(f"  • Agent pool: {', '.join(aligned)}.")
 

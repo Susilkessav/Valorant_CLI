@@ -16,7 +16,6 @@ from valocoach.coach.sanitizer import (
     validate_ability_claims,
 )
 
-
 # ---------------------------------------------------------------------------
 # Correct attributions — must NOT trigger
 # ---------------------------------------------------------------------------
@@ -246,15 +245,13 @@ def test_section_scan_flags_nerve_gas_under_viper() -> None:
     )
     warnings = validate_ability_claims(text)
     assert any(
-        w.claimed_ability.lower() == "nerve gas" and w.category == "hallucination"
-        for w in warnings
+        w.claimed_ability.lower() == "nerve gas" and w.category == "hallucination" for w in warnings
     )
 
 
 def test_section_scan_flags_disruptor_under_killjoy() -> None:
     text = (
-        "Killjoy (Sentinel):\n"
-        "  - Key Abilities: Disruptor (area denial), Smoke (vision control).\n"
+        "Killjoy (Sentinel):\n  - Key Abilities: Disruptor (area denial), Smoke (vision control).\n"
     )
     warnings = validate_ability_claims(text)
     assert any(w.claimed_ability.lower() == "disruptor" for w in warnings)

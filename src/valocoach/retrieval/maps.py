@@ -63,10 +63,11 @@ def format_map_context(name: str) -> str | None:
     if last_verified:
         try:
             from valocoach.retrieval.meta import get_meta
+
             current_patch = get_meta().get("patch", "")
             if current_patch and last_verified != current_patch:
                 lines.append(
-                    f"⚠ Map data last verified for patch {last_verified} — "
+                    f"NOTE: Map data last verified for patch {last_verified} — "
                     f"callouts may be outdated for patch {current_patch}."
                 )
                 log.debug(

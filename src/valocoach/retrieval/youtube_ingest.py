@@ -1,4 +1,4 @@
-"""YouTube ingest pipeline — Phase D (D2–D5).
+"""YouTube ingest pipeline -- Phase D (D2-D5).
 
 Orchestrates deduplication, time-window chunking, anchor-based relevance
 filtering, optional LLM summarisation, and vector-store upsert for a single
@@ -52,8 +52,8 @@ class CandidateChunk:
 
     start_seconds: int
     text: str
-    category: str   # e.g. "lineups", "map_tactics", "off_topic"
-    score: float    # cosine similarity to best anchor
+    category: str  # e.g. "lineups", "map_tactics", "off_topic"
+    score: float  # cosine similarity to best anchor
     lineup_metadata: dict | None = None
     # None = kept.  Set to one of "off_topic" | "low_score" | "unknown" when dropped.
     drop_reason: str | None = None
@@ -232,30 +232,92 @@ def get_classifier() -> AnchorClassifier:
 # checked after the embedding classifier — a chunk that scores just below
 # RELEVANCE_THRESHOLD but contains several of these keywords gets a second
 # chance rather than being silently dropped.
-_LINEUP_KEYWORDS: frozenset[str] = frozenset({
-    "lineup", "lineups", "stand here", "aim here", "aim at", "aim there",
-    "one bounce", "two bounce", "post plant", "post-plant", "post-plant",
-    "molly", "molotov", "incendiary", "dart", "recon bolt", "shock bolt",
-    "owl drone", "seeker", "alarmbot", "killjoy", "cypher", "chamber",
-    "smoke", "wall", "barrier", "turret", "tripwire", "trap",
-    "bounce", "bounces", "throw from", "land on", "lands on",
-    "right here", "stand on", "position", "ledge", "corner",
-    "post plant", "pre plant", "retake", "site clear",
-    "revealing", "reveal", "scan",
-})
+_LINEUP_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "lineup",
+        "lineups",
+        "stand here",
+        "aim here",
+        "aim at",
+        "aim there",
+        "one bounce",
+        "two bounce",
+        "post plant",
+        "post-plant",
+        "molly",
+        "molotov",
+        "incendiary",
+        "dart",
+        "recon bolt",
+        "shock bolt",
+        "owl drone",
+        "seeker",
+        "alarmbot",
+        "killjoy",
+        "cypher",
+        "chamber",
+        "smoke",
+        "wall",
+        "barrier",
+        "turret",
+        "tripwire",
+        "trap",
+        "bounce",
+        "bounces",
+        "throw from",
+        "land on",
+        "lands on",
+        "right here",
+        "stand on",
+        "position",
+        "ledge",
+        "corner",
+        "pre plant",
+        "retake",
+        "site clear",
+        "revealing",
+        "reveal",
+        "scan",
+    }
+)
 
 # Agent names — presence strongly suggests tactical lineup content
-_AGENT_NAMES: frozenset[str] = frozenset({
-    "sova", "viper", "brimstone", "omen", "astra", "harbor",
-    "killjoy", "cypher", "sage", "chamber", "deadlock", "vyse",
-    "breach", "skye", "fade", "gekko", "kayo", "kay/o",
-    "jett", "phoenix", "reyna", "raze", "neon", "yoru", "iso",
-    "clove", "tejo", "waylay",
-})
+_AGENT_NAMES: frozenset[str] = frozenset(
+    {
+        "sova",
+        "viper",
+        "brimstone",
+        "omen",
+        "astra",
+        "harbor",
+        "killjoy",
+        "cypher",
+        "sage",
+        "chamber",
+        "deadlock",
+        "vyse",
+        "breach",
+        "skye",
+        "fade",
+        "gekko",
+        "kayo",
+        "kay/o",
+        "jett",
+        "phoenix",
+        "reyna",
+        "raze",
+        "neon",
+        "yoru",
+        "iso",
+        "clove",
+        "tejo",
+        "waylay",
+    }
+)
 
 
 def _keyword_lineup_boost(text: str) -> float:
-    """Return 0.0–1.0 based on tactical keyword density.
+    """Return 0.0-1.0 based on tactical keyword density.
 
     3 or more keyword hits → score of 1.0 (full boost).  Used as a safety
     net for chunks that embed slightly below RELEVANCE_THRESHOLD but are
@@ -280,9 +342,7 @@ def _should_keep_as_lineup(category: str, score: float, text: str) -> bool:
     if category == "lineups" and score >= RELEVANCE_THRESHOLD:
         return True
     boost = _keyword_lineup_boost(text)
-    if boost >= 0.7:
-        return True
-    return False
+    return boost >= 0.7
 
 
 # ---------------------------------------------------------------------------
@@ -399,7 +459,7 @@ def analyze_youtube_video(
 ) -> YouTubeIngestPlan:
     """Classify a YouTube video and extract lineup metadata without writing to ChromaDB.
 
-    Runs steps 1–4 of the full pipeline (validate, dedup check, transcript
+    Runs steps 1-4 of the full pipeline (validate, dedup check, transcript
     fetch, anchor classification) plus LLM metadata extraction for any chunk
     classified as ``lineups``.  Nothing is written to ChromaDB.
 
@@ -423,7 +483,10 @@ def analyze_youtube_video(
     # D2: dedup check
     already = is_video_ingested(data_dir, video_id)
     if already and not force:
-        log.info("YouTube %s already ingested — skipping analyze (pass force=True to re-analyse)", video_id)
+        log.info(
+            "YouTube %s already ingested — skipping analyze (pass force=True to re-analyse)",
+            video_id,
+        )
         return YouTubeIngestPlan(
             video_id=video_id,
             title="",
@@ -464,7 +527,9 @@ def analyze_youtube_video(
             drop_reason = "off_topic"
         elif category == "unknown":
             drop_reason = "unknown"
-        elif not _should_keep_as_lineup(category, score, chunk.text) and score < RELEVANCE_THRESHOLD:
+        elif (
+            not _should_keep_as_lineup(category, score, chunk.text) and score < RELEVANCE_THRESHOLD
+        ):
             # Neither the embedding threshold nor the keyword boost saved it
             drop_reason = "low_score"
 
@@ -476,20 +541,24 @@ def analyze_youtube_video(
 
         if drop_reason:
             dropped_counts[drop_reason] = dropped_counts.get(drop_reason, 0) + 1
-            candidates.append(CandidateChunk(
-                start_seconds=chunk.start_seconds,
-                text=chunk.text,
-                category=category,
-                score=score,
-                drop_reason=drop_reason,
-            ))
+            candidates.append(
+                CandidateChunk(
+                    start_seconds=chunk.start_seconds,
+                    text=chunk.text,
+                    category=category,
+                    score=score,
+                    drop_reason=drop_reason,
+                )
+            )
         else:
-            candidates.append(CandidateChunk(
-                start_seconds=chunk.start_seconds,
-                text=chunk.text,
-                category=category,
-                score=score,
-            ))
+            candidates.append(
+                CandidateChunk(
+                    start_seconds=chunk.start_seconds,
+                    text=chunk.text,
+                    category=category,
+                    score=score,
+                )
+            )
 
     kept = [c for c in candidates if c.drop_reason is None]
     lineup_chunks = [c for c in kept if c.category == "lineups"]
@@ -505,7 +574,12 @@ def analyze_youtube_video(
                     chunk.text, settings, video_title=title
                 )
             except Exception as exc:
-                log.debug("G2: metadata extraction failed for %s@%ds: %s", video_id, chunk.start_seconds, exc)
+                log.debug(
+                    "G2: metadata extraction failed for %s@%ds: %s",
+                    video_id,
+                    chunk.start_seconds,
+                    exc,
+                )
                 chunk.lineup_metadata = {}
 
     if dropped_counts.get("unknown", 0):
@@ -584,7 +658,9 @@ def apply_youtube_ingest_plan(
             try:
                 vec = embed_one(embed_text)
                 coll = get_collection(data_dir, LIVE_COLLECTION)
-                coll.upsert(ids=[doc_id], documents=[embed_text], embeddings=[vec], metadatas=[metadata])
+                coll.upsert(
+                    ids=[doc_id], documents=[embed_text], embeddings=[vec], metadatas=[metadata]
+                )
                 lineup_count += 1
                 log.info(
                     "G1: upserted lineup chunk %s (agent=%s map=%s)",
@@ -598,20 +674,22 @@ def apply_youtube_ingest_plan(
 
         texts.append(embed_text)
         ids.append(f"youtube:{plan.video_id}:{chunk.start_seconds}")
-        metadatas.append({
-            "type": "youtube",
-            "video_id": plan.video_id,
-            "title": plan.title,
-            "channel": plan.channel,
-            "source": f"https://www.youtube.com/watch?v={plan.video_id}",
-            "start_seconds": chunk.start_seconds,
-            "category": chunk.category,
-            "anchor_score": round(chunk.score, 4),
-            "summarized": summarize,
-            "raw_text": chunk.text[:500],
-            "expires_at_unix": expires_at_unix,
-            "expected_chunks": total_kept,
-        })
+        metadatas.append(
+            {
+                "type": "youtube",
+                "video_id": plan.video_id,
+                "title": plan.title,
+                "channel": plan.channel,
+                "source": f"https://www.youtube.com/watch?v={plan.video_id}",
+                "start_seconds": chunk.start_seconds,
+                "category": chunk.category,
+                "anchor_score": round(chunk.score, 4),
+                "summarized": summarize,
+                "raw_text": chunk.text[:500],
+                "expires_at_unix": expires_at_unix,
+                "expected_chunks": total_kept,
+            }
+        )
 
     n = _upsert_batch(data_dir, texts, ids, metadatas, collection_name=LIVE_COLLECTION)
     total = n + lineup_count
@@ -649,7 +727,10 @@ def ingest_youtube_video(
     plan = analyze_youtube_video(data_dir, url, settings, force=force)
     if plan.skipped_reason:
         if plan.skipped_reason == "already_ingested":
-            log.info("YouTube %s already ingested — skipping (pass force=True to re-ingest)", plan.video_id)
+            log.info(
+                "YouTube %s already ingested — skipping (pass force=True to re-ingest)",
+                plan.video_id,
+            )
         elif plan.skipped_reason == "no_transcript":
             log.warning("No transcript chunks retrieved for %s", plan.video_id)
         elif plan.skipped_reason == "invalid_url":
@@ -665,9 +746,9 @@ def ingest_youtube_video(
 
 __all__ = [
     "ANCHOR_PHRASES",
+    "RELEVANCE_THRESHOLD",
     "AnchorClassifier",
     "CandidateChunk",
-    "RELEVANCE_THRESHOLD",
     "YouTubeIngestPlan",
     "analyze_youtube_video",
     "apply_youtube_ingest_plan",

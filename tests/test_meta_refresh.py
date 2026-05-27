@@ -63,9 +63,7 @@ class TestRunMetaRefresh:
     def test_install_cron_calls_install_cron(self):
         from valocoach.cli.commands.meta_refresh import run_meta_refresh
 
-        with patch(
-            "valocoach.cli.commands.meta_refresh._install_cron"
-        ) as mock_install:
+        with patch("valocoach.cli.commands.meta_refresh._install_cron") as mock_install:
             run_meta_refresh(install_cron=True)
 
         mock_install.assert_called_once()
@@ -216,7 +214,9 @@ class TestInstallCron:
         """When marker already in crontab, display.info is called."""
         from valocoach.cli.commands.meta_refresh import _CRON_MARKER, _install_cron
 
-        existing_crontab = f"0 8 * * * /bin/some-other-cmd\n0 8 * * * valocoach meta-refresh  {_CRON_MARKER}\n"
+        existing_crontab = (
+            f"0 8 * * * /bin/some-other-cmd\n0 8 * * * valocoach meta-refresh  {_CRON_MARKER}\n"
+        )
 
         with (
             patch("pathlib.Path.exists", return_value=True),
@@ -329,10 +329,12 @@ class TestRunOnce:
         This exercises the _on_step closure (lines 81-82, 92-93) which only
         runs when run_meta_sync actually invokes the on_step callback.
         """
+
         async def _fake(settings, *, on_step=None, **kwargs):
             if on_step is not None:
                 on_step("patch_check", "start")  # fires the closure
             return result
+
         return _fake
 
     async def test_run_once_calls_run_meta_sync(self):
@@ -342,9 +344,14 @@ class TestRunOnce:
         result = _make_sync_result(is_new_patch=False, meta_regenerated=False, meta_written=False)
 
         with (
-            patch("valocoach.core.config.load_settings", return_value=MagicMock(data_dir=MagicMock())),
+            patch(
+                "valocoach.core.config.load_settings", return_value=MagicMock(data_dir=MagicMock())
+            ),
             patch("valocoach.data.database.ensure_db", new_callable=AsyncMock),
-            patch("valocoach.retrieval.meta_sync.run_meta_sync", self._meta_sync_that_fires_callback(result)),
+            patch(
+                "valocoach.retrieval.meta_sync.run_meta_sync",
+                self._meta_sync_that_fires_callback(result),
+            ),
             patch("valocoach.cli.commands.meta_refresh._render_result"),
             patch("valocoach.cli.display.console"),
             patch("valocoach.cli.display.warn"),
@@ -365,7 +372,9 @@ class TestRunOnce:
             return result
 
         with (
-            patch("valocoach.core.config.load_settings", return_value=MagicMock(data_dir=MagicMock())),
+            patch(
+                "valocoach.core.config.load_settings", return_value=MagicMock(data_dir=MagicMock())
+            ),
             patch("valocoach.data.database.ensure_db", new_callable=AsyncMock),
             patch("valocoach.retrieval.meta_sync.run_meta_sync", _fake),
             patch("valocoach.cli.commands.meta_refresh._render_result"),
@@ -383,9 +392,14 @@ class TestRunOnce:
         result = _make_sync_result()
 
         with (
-            patch("valocoach.core.config.load_settings", return_value=MagicMock(data_dir=MagicMock())),
+            patch(
+                "valocoach.core.config.load_settings", return_value=MagicMock(data_dir=MagicMock())
+            ),
             patch("valocoach.data.database.ensure_db", new_callable=AsyncMock),
-            patch("valocoach.retrieval.meta_sync.run_meta_sync", self._meta_sync_that_fires_callback(result)),
+            patch(
+                "valocoach.retrieval.meta_sync.run_meta_sync",
+                self._meta_sync_that_fires_callback(result),
+            ),
             patch("valocoach.cli.commands.meta_refresh._render_result"),
             patch("valocoach.cli.display.console"),
             patch("valocoach.cli.display.warn") as mock_warn,
@@ -404,11 +418,13 @@ class TestRunOnce:
         async def _fake(settings, *, on_step=None, **kwargs):
             if on_step:
                 on_step("patch_check", "start")  # updates msg
-                on_step("patch_check", "done")   # non-start — skips update
+                on_step("patch_check", "done")  # non-start — skips update
             return result
 
         with (
-            patch("valocoach.core.config.load_settings", return_value=MagicMock(data_dir=MagicMock())),
+            patch(
+                "valocoach.core.config.load_settings", return_value=MagicMock(data_dir=MagicMock())
+            ),
             patch("valocoach.data.database.ensure_db", new_callable=AsyncMock),
             patch("valocoach.retrieval.meta_sync.run_meta_sync", _fake),
             patch("valocoach.cli.commands.meta_refresh._render_result"),
@@ -416,4 +432,3 @@ class TestRunOnce:
             patch("valocoach.cli.display.warn"),
         ):
             await _run_once(force=False, dry_run=False, youtube=None)
-

@@ -14,8 +14,7 @@ from valocoach.retrieval.scrapers import ScrapedContent
 log = logging.getLogger(__name__)
 
 _OEMBED_URL = (
-    "https://www.youtube.com/oembed"
-    "?url=https://www.youtube.com/watch?v={video_id}&format=json"
+    "https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json"
 )
 _DEFAULT_WINDOW_SECONDS = 60  # D3: 1-minute windows — finer granularity for lineup guides
 
@@ -179,7 +178,11 @@ def fetch_transcript_chunks(
     except Exception as exc:
         exc_str = str(exc)
         # youtube_transcript_api raises RequestBlocked / IpBlocked with this text
-        if "blocked" in exc_str.lower() or "requestblocked" in exc_str.lower() or "ipblocked" in exc_str.lower():
+        if (
+            "blocked" in exc_str.lower()
+            or "requestblocked" in exc_str.lower()
+            or "ipblocked" in exc_str.lower()
+        ):
             log.debug("YouTube transcript request blocked for %s", video_id)
             return [], "ip_blocked"
         # NoTranscriptFound — no transcript in the requested language

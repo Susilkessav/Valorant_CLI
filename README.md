@@ -853,6 +853,12 @@ riot_region = "na"       # na | eu | ap | kr | latam | br
 
 henrikdev_api_key = ""   # https://docs.henrikdev.xyz/authentication
 
+# Optional — enables Tavily-backed web search and JS-page extraction.
+# Without this, the built-in trafilatura scraper is used instead.
+# Free tier: 1 000 credits/month  →  https://tavily.com
+# Used by: meta-refresh (stats), ingest --url (JS-heavy sites like tracker.gg)
+tavily_api_key = ""
+
 ollama_model     = "qwen3:8b"
 ollama_host      = "http://localhost:11434"
 llm_temperature  = 0.6

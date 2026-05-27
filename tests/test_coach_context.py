@@ -596,7 +596,7 @@ def test_format_context_includes_round_line_when_analysis_present() -> None:
         aces=1,
     )
     # 30 rows so match-count thresholds pass; 700 rounds clears every
-    # round-count floor → no ⚠ anywhere on this line.
+    # round-count floor → no reliability flag anywhere on this line.
     rows = [_mp(match_id=f"m-{i}") for i in range(30)]
     out = _format_context(_player(), rows, round_analysis=analysis)
     round_line = next(line for line in out.splitlines() if "Round play" in line)
@@ -605,11 +605,11 @@ def test_format_context_includes_round_line_when_analysis_present() -> None:
     assert "Traded deaths 50.0%" in round_line
     assert "1xAce" in round_line
     assert "3x3K" in round_line
-    assert "⚠" not in round_line
+    assert "!" not in round_line
 
 
 def test_format_context_round_line_tags_thin_sample() -> None:
-    """Below matches+rounds floor → individual metrics get a ⚠ tag but
+    """Below matches+rounds floor → individual metrics get a '!' tag but
     the line still renders (LLM should see the data, down-weighted)."""
     analysis = _round_analysis(
         rounds=50,  # well below KAST's 200-round floor
@@ -621,7 +621,7 @@ def test_format_context_round_line_tags_thin_sample() -> None:
     rows = [_mp(match_id=f"m-{i}") for i in range(5)]  # 5 matches — thin
     out = _format_context(_player(), rows, round_analysis=analysis)
     round_line = next(line for line in out.splitlines() if "Round play" in line)
-    assert "⚠" in round_line
+    assert "!" in round_line
 
 
 # ---------------------------------------------------------------------------

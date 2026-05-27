@@ -580,7 +580,7 @@ class CoachingNote(Base):
     session: Mapped[CoachingSession] = relationship(back_populates="notes")
 
     def __repr__(self) -> str:
-        state = "✓" if self.resolved else "○"
+        state = "done" if self.resolved else "open"
         prio = {1: "low", 2: "med", 3: "high"}.get(self.priority, "?")
         return f"<CoachingNote {state} [{prio}] [{self.category}] {self.body[:40]!r}>"
 

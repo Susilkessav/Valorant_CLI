@@ -50,7 +50,7 @@ class SyncResult:
     meta_regenerated: bool = False
     meta_written: bool = False
     meta_ingested: bool = False
-    patch_diff_extracted: bool = False   # C3 — set when patch changes are extracted
+    patch_diff_extracted: bool = False  # C3 — set when patch changes are extracted
 
     errors: list[str] = field(default_factory=list)
 
@@ -62,13 +62,13 @@ class SyncResult:
         lines = [
             f"Patch:          {self.patch_version}"
             + (" (new)" if self.is_new_patch else " (unchanged)"),
-            f"Patch notes:    {'✓' if self.patch_notes_scraped else '✗'}",
-            f"Ranked stats:   {'✓' if self.ranked_stats_scraped else '✗'}",
-            f"Pro stats:      {'✓' if self.pro_stats_scraped else '✗'}",
+            f"Patch notes:    {'ok' if self.patch_notes_scraped else 'no'}",
+            f"Ranked stats:   {'ok' if self.ranked_stats_scraped else 'no'}",
+            f"Pro stats:      {'ok' if self.pro_stats_scraped else 'no'}",
             f"YouTube chunks: {self.youtube_chunks_ingested}",
-            f"Meta regen:     {'✓' if self.meta_regenerated else '✗'}",
+            f"Meta regen:     {'ok' if self.meta_regenerated else 'no'}",
             f"meta.json:      {'written' if self.meta_written else 'not written'}",
-            f"Re-ingested:    {'✓' if self.meta_ingested else '✗'}",
+            f"Re-ingested:    {'ok' if self.meta_ingested else 'no'}",
         ]
         if self.errors:
             lines.append("Errors:")
@@ -143,7 +143,7 @@ async def run_meta_sync(
     try:
         from valocoach.retrieval.scrapers.patch_notes import fetch_patch_notes
 
-        content = fetch_patch_notes(patch_version)
+        content = fetch_patch_notes(patch_version, settings)
         if content:
             patch_notes_text = content.text
             result.patch_notes_scraped = True
@@ -182,14 +182,14 @@ async def run_meta_sync(
     try:
         from valocoach.retrieval.scrapers.meta_stats import fetch_all_stats
 
-        stats = fetch_all_stats()
+        stats = fetch_all_stats(settings)
         stats_text = stats.combined
         result.ranked_stats_scraped = bool(stats.ranked_text)
         result.pro_stats_scraped = bool(stats.pro_text)
         _step(
             "stats_scrape",
-            f"ranked={'ok' if result.ranked_stats_scraped else 'fail'}, "
-            f"pro={'ok' if result.pro_stats_scraped else 'fail'}",
+            f"ranked={stats.ranked_source if result.ranked_stats_scraped else 'fail'}, "
+            f"pro={stats.pro_source if result.pro_stats_scraped else 'fail'}",
         )
 
         # Cache and ingest the combined stats so the coach can also

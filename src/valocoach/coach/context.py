@@ -22,6 +22,8 @@ Separation of concerns:
 
 from __future__ import annotations
 
+from datetime import UTC
+
 from valocoach.core.config import Settings
 from valocoach.data.loader import load_player_data
 from valocoach.data.orm_models import MatchPlayer, Player
@@ -44,6 +46,7 @@ from valocoach.stats.round_analyzer import (
     trade_efficiency_stat,
 )
 
+
 def _detect_tilt(rows: list[MatchPlayer]) -> str | None:
     """E5 — detect WR decline in the back half of the current gaming session.
 
@@ -57,12 +60,12 @@ def _detect_tilt(rows: list[MatchPlayer]) -> str | None:
     ≥ 20pp from the first half to the second half of the window.
     """
     from datetime import datetime as _dt
-    from datetime import timedelta, timezone
+    from datetime import timedelta
 
     # Rolling window: anchor to "now" in UTC (started_at is stored as UTC ISO).
     # 8 hours is wide enough to capture an evening session but narrow enough
     # to exclude yesterday's games.
-    now = _dt.now(tz=timezone.utc)
+    now = _dt.now(tz=UTC)
     cutoff = (now - timedelta(hours=8)).isoformat()
 
     def _row_started_at(r: MatchPlayer) -> str:
@@ -78,7 +81,7 @@ def _detect_tilt(rows: list[MatchPlayer]) -> str | None:
         key=_row_started_at,
     )
     # Threshold lowered from 6 to 4 because most casual ranked sessions are
-    # 3–5 matches.  At ≥6 the detector basically never fired for non-pro
+    # 3-5 matches.  At >=6 the detector basically never fired for non-pro
     # play.  Four is the minimum that still gives a 2 / 2 split with
     # meaningful per-half win-rate signal.
     if len(today_rows) < 4:
@@ -97,8 +100,8 @@ def _detect_tilt(rows: list[MatchPlayer]) -> str | None:
         e_pct = round(early_wr * 100)
         l_pct = round(late_wr * 100)
         return (
-            f"⚠ Session tilt ({n} games in last 8h): "
-            f"WR dropped {e_pct}% → {l_pct}% — consider a break."
+            f"! Session tilt ({n} games in last 8h): "
+            f"WR dropped {e_pct}% -> {l_pct}% — consider a break."
         )
     return None
 
@@ -123,11 +126,11 @@ def _pct(ratio: float) -> str:
 
 
 def _warn(stat: object) -> str:
-    """Return '⚠' when a StatResult is unreliable, '' otherwise."""
+    """Return '!' when a StatResult is unreliable, '' otherwise."""
     from valocoach.stats.calculator import StatResult  # avoid circular at module level
 
     if isinstance(stat, StatResult) and not stat.is_reliable:
-        return "⚠"
+        return "!"
     return ""
 
 
@@ -139,7 +142,7 @@ def _format_round_line(analysis: RoundAnalysis, matches: int) -> str | None:
     for real signal.
 
     Reliability comes directly from StatResult.is_reliable — no manual
-    threshold math here. Each metric carries its own ⚠ flag.
+    threshold math here. Each metric carries its own reliability flag.
     """
     if analysis.rounds == 0:
         return None
@@ -193,8 +196,8 @@ def _format_context(
     top_n: int = DEFAULT_TOP_N,
     round_analysis: RoundAnalysis | None = None,
     baseline_comparison: BaselineComparison | None = None,
-    per_map_analysis: dict[str, RoundAnalysis] | None = None,   # E1
-    weapon_splits: list[WeaponSplit] | None = None,               # E2
+    per_map_analysis: dict[str, RoundAnalysis] | None = None,  # E1
+    weapon_splits: list[WeaponSplit] | None = None,  # E2
 ) -> str:
     """Render a compact context block for the LLM prompt.
 
@@ -287,8 +290,7 @@ def _format_context(
                 and map_ra.defense_win_rate is not None
             ):
                 side_str = (
-                    f" · ATK {_pct(map_ra.attack_win_rate)}"
-                    f"/{_pct(map_ra.defense_win_rate)} DEF"
+                    f" · ATK {_pct(map_ra.attack_win_rate)}/{_pct(map_ra.defense_win_rate)} DEF"
                 )
             lines.append(
                 f"- {m.map_name} ({s.matches}g{split_thin}): "
@@ -298,10 +300,7 @@ def _format_context(
     # E2: weapon HS% — only when we have meaningful data
     if weapon_splits:
         top_weapons = weapon_splits[:4]  # at most 4
-        weapon_str = " · ".join(
-            f"{w.weapon} {_pct(w.hs_pct)}"
-            for w in top_weapons
-        )
+        weapon_str = " · ".join(f"{w.weapon} {_pct(w.hs_pct)}" for w in top_weapons)
         lines.append(f"Weapon HS%: {weapon_str}")
 
     # E5: session tilt detector
@@ -361,15 +360,11 @@ def build_stats_context(
 
     # E1: per-map ATK/DEF split
     per_map_analysis = (
-        analyze_rounds_per_map(data.full_matches, data.player.puuid)
-        if data.full_matches
-        else None
+        analyze_rounds_per_map(data.full_matches, data.player.puuid) if data.full_matches else None
     )
     # E2: weapon HS%
     weapon_splits = (
-        compute_weapon_stats(data.full_matches, data.player.puuid)
-        if data.full_matches
-        else None
+        compute_weapon_stats(data.full_matches, data.player.puuid) if data.full_matches else None
     )
 
     return _format_context(

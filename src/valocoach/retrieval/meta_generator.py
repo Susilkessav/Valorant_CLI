@@ -200,9 +200,7 @@ def _compute_tiers(agent_meta_raw: dict, existing_agent_meta: dict) -> tuple[dic
             tier = existing.get("tier", "C")
             pr_str = existing.get("pick_rate", "N/A")
             wr_str = existing.get("win_rate", "N/A")
-            log.debug(
-                "Agent %r missing numeric rates — keeping existing tier %r", agent_name, tier
-            )
+            log.debug("Agent %r missing numeric rates — keeping existing tier %r", agent_name, tier)
 
         tier_list.setdefault(tier, []).append(agent_name)
         formatted[agent_name] = {
@@ -234,17 +232,10 @@ def _coerce_agent_meta(raw: object) -> dict:
         for i, item in enumerate(raw):
             if not isinstance(item, dict):
                 continue
-            key = (
-                item.get("name")
-                or item.get("agent")
-                or item.get("agent_name")
-                or str(i)
-            )
+            key = item.get("name") or item.get("agent") or item.get("agent_name") or str(i)
             entry = {k: v for k, v in item.items() if k not in ("name", "agent", "agent_name")}
             coerced[str(key)] = entry
-        log.warning(
-            "LLM returned agent_meta as a list (%d entries) — coerced to dict", len(raw)
-        )
+        log.warning("LLM returned agent_meta as a list (%d entries) — coerced to dict", len(raw))
         return coerced
     log.warning("LLM returned agent_meta of unexpected type %s — ignoring", type(raw).__name__)
     return {}
@@ -262,9 +253,7 @@ def _coerce_map_meta(raw: object) -> dict:
             key = item.get("map") or item.get("name") or item.get("map_name") or str(i)
             entry = {k: v for k, v in item.items() if k not in ("map", "name", "map_name")}
             coerced[str(key)] = entry
-        log.warning(
-            "LLM returned map_meta as a list (%d entries) — coerced to dict", len(raw)
-        )
+        log.warning("LLM returned map_meta as a list (%d entries) — coerced to dict", len(raw))
         return coerced
     return {}
 
@@ -286,10 +275,7 @@ def _validate(data: dict, existing: dict) -> dict:
         has_numeric = any(
             isinstance(v.get("pick_rate_pct"), (int, float))
             or isinstance(v.get("win_rate_pct"), (int, float))
-            or (
-                isinstance(v.get("pick_rate_pct"), str)
-                and "%" not in v["pick_rate_pct"]
-            )
+            or (isinstance(v.get("pick_rate_pct"), str) and "%" not in v["pick_rate_pct"])
             for v in raw_agent_meta.values()
         )
 

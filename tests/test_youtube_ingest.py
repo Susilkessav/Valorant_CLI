@@ -13,7 +13,6 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-
 # ---------------------------------------------------------------------------
 # D1 — oEmbed metadata
 # ---------------------------------------------------------------------------
@@ -132,7 +131,7 @@ class TestWindowEntries:
         entries = [_make_entry(i * 30, f"text_{i}") for i in range(10)]
         windows = _window_entries(entries, window_seconds=60)
 
-        # 10 entries × 30s = 300s total; 60s windows → should have ~5 windows
+        # 10 entries x 30s = 300s total; 60s windows -> should have ~5 windows
         assert len(windows) >= 4
         # Each window start should be non-decreasing
         starts = [w[0] for w in windows]
@@ -219,7 +218,7 @@ class TestAnchorClassifier:
             "valocoach.retrieval.embedder.embed_one",
             return_value=off_topic_vec.tolist(),
         ):
-            cat, score = clf.classify("like and subscribe to the channel")
+            cat, _score = clf.classify("like and subscribe to the channel")
 
         assert cat == "off_topic"
 
@@ -237,9 +236,7 @@ class TestIsVideoIngested:
         mock_coll.get.return_value = {"ids": []}
 
         # get_collection is imported from valocoach.retrieval.vector_store inside the function
-        with patch(
-            "valocoach.retrieval.vector_store.get_collection", return_value=mock_coll
-        ):
+        with patch("valocoach.retrieval.vector_store.get_collection", return_value=mock_coll):
             assert is_video_ingested(MagicMock(), "abc12345678") is False
 
     def test_returns_true_when_video_id_found(self):
@@ -248,9 +245,7 @@ class TestIsVideoIngested:
         mock_coll = MagicMock()
         mock_coll.get.return_value = {"ids": ["youtube:abc12345678:0"]}
 
-        with patch(
-            "valocoach.retrieval.vector_store.get_collection", return_value=mock_coll
-        ):
+        with patch("valocoach.retrieval.vector_store.get_collection", return_value=mock_coll):
             assert is_video_ingested(MagicMock(), "abc12345678") is True
 
     def test_returns_false_on_chroma_error(self):

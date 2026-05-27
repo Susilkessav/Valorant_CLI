@@ -43,9 +43,24 @@ from valocoach.retrieval.agents import _load as _load_agents
 # these, we flag it as "weapon, not an ability" rather than "hallucination".
 _WEAPONS: frozenset[str] = frozenset(
     {
-        "vandal", "phantom", "operator", "ghost", "sheriff", "spectre",
-        "stinger", "guardian", "marshal", "outlaw", "bulldog", "judge",
-        "frenzy", "shorty", "classic", "bucky", "ares", "odin",
+        "vandal",
+        "phantom",
+        "operator",
+        "ghost",
+        "sheriff",
+        "spectre",
+        "stinger",
+        "guardian",
+        "marshal",
+        "outlaw",
+        "bulldog",
+        "judge",
+        "frenzy",
+        "shorty",
+        "classic",
+        "bucky",
+        "ares",
+        "odin",
     }
 )
 
@@ -55,11 +70,28 @@ _WEAPONS: frozenset[str] = frozenset(
 # Paranoia, not "Flash"; Cloudburst, not "Smoke").
 _GENERIC_UTIL: frozenset[str] = frozenset(
     {
-        "smoke", "smokes", "smoke screen", "smokescreen",
-        "flash", "flashes", "flashbang", "flashbangs",
-        "wall", "walls", "molly", "mollies",
-        "dash", "blitz", "scorch", "blade", "pulse", "fireburst",
-        "tectonic", "disruptor", "disruption", "annihilation",
+        "smoke",
+        "smokes",
+        "smoke screen",
+        "smokescreen",
+        "flash",
+        "flashes",
+        "flashbang",
+        "flashbangs",
+        "wall",
+        "walls",
+        "molly",
+        "mollies",
+        "dash",
+        "blitz",
+        "scorch",
+        "blade",
+        "pulse",
+        "fireburst",
+        "tectonic",
+        "disruptor",
+        "disruption",
+        "annihilation",
         # NOTE: "Annihilation" IS Deadlock's ult but the model sometimes
         # writes it for other sentinels too — handled by cross-attribution
         # check (real_owner lookup) before this generic fallback.
@@ -70,8 +102,17 @@ _GENERIC_UTIL: frozenset[str] = frozenset(
 # (``Maps: Split, Ascent, Bind.``) and would otherwise be flagged.
 _MAPS: frozenset[str] = frozenset(
     {
-        "ascent", "bind", "haven", "split", "icebox", "breeze",
-        "fracture", "pearl", "lotus", "sunset", "abyss",
+        "ascent",
+        "bind",
+        "haven",
+        "split",
+        "icebox",
+        "breeze",
+        "fracture",
+        "pearl",
+        "lotus",
+        "sunset",
+        "abyss",
     }
 )
 
@@ -80,28 +121,92 @@ _MAPS: frozenset[str] = frozenset(
 _DESCRIPTORS: frozenset[str] = frozenset(
     {
         # Role / kit category labels — never an ability claim
-        "duelist", "controller", "initiator", "sentinel",
-        "ultimate", "ult", "abilities", "ability", "kit", "role",
+        "duelist",
+        "controller",
+        "initiator",
+        "sentinel",
+        "ultimate",
+        "ult",
+        "abilities",
+        "ability",
+        "kit",
+        "role",
         # Game-state / strategy nouns
-        "playstyle", "mobility", "damage", "vision", "control",
-        "rotation", "site", "spike", "plant", "defuse",
-        "high", "low", "mid", "long", "tier", "rank", "meta",
-        "burst", "lockdown", "anti-op", "denial",
+        "playstyle",
+        "mobility",
+        "damage",
+        "vision",
+        "control",
+        "rotation",
+        "site",
+        "spike",
+        "plant",
+        "defuse",
+        "high",
+        "low",
+        "mid",
+        "long",
+        "tier",
+        "rank",
+        "meta",
+        "burst",
+        "lockdown",
+        "anti-op",
+        "denial",
         # Section / pronoun / connective words
-        "map", "maps", "key", "why", "your", "his", "her", "their",
-        "use", "uses", "using", "prioritize", "consider",
-        "team", "teams", "teammate", "teammates",
-        "good", "solid", "strong", "weak", "average",
+        "map",
+        "maps",
+        "key",
+        "why",
+        "your",
+        "his",
+        "her",
+        "their",
+        "use",
+        "uses",
+        "using",
+        "prioritize",
+        "consider",
+        "team",
+        "teams",
+        "teammate",
+        "teammates",
+        "good",
+        "solid",
+        "strong",
+        "weak",
+        "average",
         # Multi-word connectives that can leak through bigram partials
-        "from", "the", "of", "and", "with", "for",
+        "from",
+        "the",
+        "of",
+        "and",
+        "with",
+        "for",
         # Generic English nouns that appear in qwen3:8b's "Area denial",
         # "Crowd control", "Final Tips", etc.
-        "area", "crowd", "final", "tips", "tip", "fun", "easy",
-        "great", "ideal", "synergy", "synergies", "split-push",
-        "counter", "anti", "pro", "ranked",
+        "area",
+        "crowd",
+        "final",
+        "tips",
+        "tip",
+        "fun",
+        "easy",
+        "great",
+        "ideal",
+        "synergy",
+        "synergies",
+        "split-push",
+        "counter",
+        "anti",
+        "pro",
+        "ranked",
         # Section headers the model tends to emit
-        "agents", "summary", "context",
-        "recommendations", "strategies",
+        "agents",
+        "summary",
+        "context",
+        "recommendations",
+        "strategies",
         # NOTE: weapon names (Vandal, Phantom, Operator, Ghost, ...) used to
         # be duplicated here, but they belong solely to ``_WEAPONS`` so we
         # can correctly flag claims like "Key Abilities: Vandal" as
@@ -138,13 +243,10 @@ class AbilityWarning:
         if self.category == "cross_attribution":
             return f"\"{ag}'s {ab}\" — {ab} is {self.real_owner}'s ability"
         if self.category == "weapon":
-            return f"\"{ag}'s {ab}\" — {ab} is a weapon, not an ability"
+            return f'"{ag}\'s {ab}" — {ab} is a weapon, not an ability'
         if self.category == "generic":
-            return (
-                f"\"{ag}'s {ab}\" — {ab} is a generic descriptor, "
-                "not a specific Valorant ability"
-            )
-        return f"\"{ag}'s {ab}\" — {ab} is not a Valorant ability"
+            return f'"{ag}\'s {ab}" — {ab} is a generic descriptor, not a specific Valorant ability'
+        return f'"{ag}\'s {ab}" — {ab} is not a Valorant ability'
 
 
 # ---------------------------------------------------------------------------
@@ -155,11 +257,11 @@ class AbilityWarning:
 @lru_cache(maxsize=1)
 def _index() -> tuple[
     dict[str, set[str]],  # agent_lower -> {ability_lower}
-    dict[str, str],       # ability_lower -> canonical agent name
-    list[str],            # canonical agent names, longest-first
-    re.Pattern[str],      # agent header pattern
-    re.Pattern[str],      # direct-attribution pattern
-    re.Pattern[str],      # broad TitleCase-phrase pattern
+    dict[str, str],  # ability_lower -> canonical agent name
+    list[str],  # canonical agent names, longest-first
+    re.Pattern[str],  # agent header pattern
+    re.Pattern[str],  # direct-attribution pattern
+    re.Pattern[str],  # broad TitleCase-phrase pattern
 ]:
     agents = _load_agents()
     agent_abilities: dict[str, set[str]] = {}
@@ -204,7 +306,14 @@ def _index() -> tuple[
         r"(?:\s+[A-Z][a-zA-Z'’/-]{2,}){0,2})\b"
     )
 
-    return agent_abilities, ability_owner, sorted_names, header_pattern, direct_pattern, broad_pattern
+    return (
+        agent_abilities,
+        ability_owner,
+        sorted_names,
+        header_pattern,
+        direct_pattern,
+        broad_pattern,
+    )
 
 
 def _agent_name_lookup(name: str, agent_names: list[str]) -> str:
@@ -283,7 +392,9 @@ _ABILITY_LIST_HEADER = re.compile(
     r"(?i)(?:^|\n)\s*(?:[-•*▪]\s*)?(?:key\s+)?abilit(?:y|ies)\s*[:=]\s*(.+?)(?:\n|$)"
 )
 _KIT_LIST_HEADER = re.compile(r"(?i)(?:^|\n)\s*(?:[-•*▪]\s*)?kit\s*[:=]\s*(.+?)(?:\n|$)")
-_LIST_ITEM = re.compile(r"([A-Z][\w’'/-]*(?:\s+(?:the|de|of)\s+[A-Z][\w’'/-]*)?(?:\s+[A-Z][\w’'/-]*){0,2})")
+_LIST_ITEM = re.compile(
+    r"([A-Z][\w’'/-]*(?:\s+(?:the|de|of)\s+[A-Z][\w’'/-]*)?(?:\s+[A-Z][\w’'/-]*){0,2})"
+)
 
 
 def _scan_section(

@@ -159,7 +159,7 @@ class SyncOrchestrator:
             resume_mode = await self._check_resume(account.puuid, sync_log_id)
             if resume_mode:
                 self._con.print(
-                    "[yellow]⚡ Previous sync was interrupted — "
+                    "[yellow]~ Previous sync was interrupted — "
                     "resuming (scanning all matches to find gaps).[/yellow]"
                 )
 
@@ -202,7 +202,7 @@ class SyncOrchestrator:
             raise SyncError(f"Cannot resolve player {name}#{tag}: {exc}") from exc
 
         self._con.print(
-            f"  [green]✓[/green]  {account.name}#{account.tag}  "
+            f"  [green]ok[/green]  {account.name}#{account.tag}  "
             f"[dim]{mmr.current_data.currenttierpatched}[/dim]"
         )
         return account, mmr

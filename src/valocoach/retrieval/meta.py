@@ -73,6 +73,7 @@ def format_meta_context(
             agent = get_agent(name)
             return f"{name} ({agent['role']})" if agent else name
     except Exception:
+
         def _label(name: str) -> str:
             return name
 

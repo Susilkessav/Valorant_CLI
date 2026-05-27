@@ -6,8 +6,6 @@ import logging
 
 import typer
 
-log = logging.getLogger(__name__)
-
 from valocoach.cli import display
 from valocoach.cli.formatter import render_open_notes
 from valocoach.coach.session_manager import (
@@ -18,6 +16,8 @@ from valocoach.coach.session_manager import (
     resolve_coaching_note,
 )
 from valocoach.core.config import load_settings
+
+log = logging.getLogger(__name__)
 
 _INTENT_TO_CATEGORY: dict[str, str] = {
     "clutch": "tactical",

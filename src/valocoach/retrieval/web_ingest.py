@@ -48,7 +48,7 @@ class WebIngestResult:
     url: str
     title: str
     domain: str
-    skipped_reason: str | None = None   # "scrape_failed" | "no_chunks"
+    skipped_reason: str | None = None  # "scrape_failed" | "no_chunks"
     fetched_count: int = 0
     kept_count: int = 0
     lineup_count: int = 0
@@ -66,7 +66,7 @@ class WebIngestResult:
 def ingest_web_url(
     data_dir: Path,
     url: str,
-    settings: "Settings",
+    settings: Settings,
     *,
     force: bool = False,
 ) -> WebIngestResult:
@@ -89,14 +89,18 @@ def ingest_web_url(
 
     # ── 1. Scrape ─────────────────────────────────────────────────────────
     try:
-        content = scrape_url(url, source="web")
+        content = scrape_url(url, source="web", settings=settings)
     except Exception as exc:
         log.debug("web_ingest: scrape failed for %s: %s", url, exc)
-        return WebIngestResult(url=url, title="", domain=_domain(url), skipped_reason="scrape_failed")
+        return WebIngestResult(
+            url=url, title="", domain=_domain(url), skipped_reason="scrape_failed"
+        )
 
     if content is None:
         log.debug("web_ingest: no content extracted from %s", url)
-        return WebIngestResult(url=url, title="", domain=_domain(url), skipped_reason="scrape_failed")
+        return WebIngestResult(
+            url=url, title="", domain=_domain(url), skipped_reason="scrape_failed"
+        )
 
     title = content.title or url
     domain = _domain(url)
@@ -136,18 +140,20 @@ def ingest_web_url(
         if drop_reason:
             dropped_counts[drop_reason] = dropped_counts.get(drop_reason, 0) + 1
 
-        chunk_records.append({
-            "text": text,
-            "category": category,
-            "score": score,
-            "drop_reason": drop_reason,
-            "lineup_metadata": None,
-            "chunk_index": chunk.chunk_index,
-        })
+        chunk_records.append(
+            {
+                "text": text,
+                "category": category,
+                "score": score,
+                "drop_reason": drop_reason,
+                "lineup_metadata": None,
+                "chunk_index": chunk.chunk_index,
+            }
+        )
 
     kept = [r for r in chunk_records if r["drop_reason"] is None]
     lineup_records = [r for r in kept if r["category"] == "lineups"]
-    web_records    = [r for r in kept if r["category"] != "lineups"]
+    web_records = [r for r in kept if r["category"] != "lineups"]
 
     # ── 4. LLM metadata for lineup chunks ─────────────────────────────────
     if lineup_records:
@@ -168,17 +174,32 @@ def ingest_web_url(
     total_kept = len(kept)
 
     lineup_upserted = _upsert_lineup_chunks(
-        data_dir, lineup_records, url=url, title=title, domain=domain,
-        url_hash=url_hash, expires_at=expires_at, total_kept=total_kept,
+        data_dir,
+        lineup_records,
+        url=url,
+        title=title,
+        domain=domain,
+        url_hash=url_hash,
+        expires_at=expires_at,
+        total_kept=total_kept,
     )
     web_upserted = _upsert_web_chunks(
-        data_dir, web_records, url=url, title=title, domain=domain,
-        url_hash=url_hash, expires_at=expires_at, total_kept=total_kept,
+        data_dir,
+        web_records,
+        url=url,
+        title=title,
+        domain=domain,
+        url_hash=url_hash,
+        expires_at=expires_at,
+        total_kept=total_kept,
     )
 
     log.info(
         "web_ingest: %s — %d lineup + %d web chunk(s) from %r",
-        domain, lineup_upserted, web_upserted, title,
+        domain,
+        lineup_upserted,
+        web_upserted,
+        title,
     )
 
     return WebIngestResult(
@@ -230,13 +251,17 @@ def _upsert_lineup_chunks(
             **{k: v for k, v in meta_fields.items() if v is not None},
         }
         try:
-            vec  = embed_one(rec["text"])
+            vec = embed_one(rec["text"])
             coll = get_collection(data_dir, LIVE_COLLECTION)
-            coll.upsert(ids=[doc_id], documents=[rec["text"]], embeddings=[vec], metadatas=[metadata])
+            coll.upsert(
+                ids=[doc_id], documents=[rec["text"]], embeddings=[vec], metadatas=[metadata]
+            )
             upserted += 1
             log.info(
                 "web_ingest: lineup chunk %s (agent=%s map=%s)",
-                doc_id, meta_fields.get("agent"), meta_fields.get("map"),
+                doc_id,
+                meta_fields.get("agent"),
+                meta_fields.get("map"),
             )
         except Exception as exc:
             log.warning("web_ingest: failed to upsert lineup chunk %s: %s", doc_id, exc)
@@ -262,8 +287,8 @@ def _upsert_web_chunks(
     if not records:
         return 0
 
-    texts     = [r["text"] for r in records]
-    ids       = [f"web:{url_hash}:{r['chunk_index']}" for r in records]
+    texts = [r["text"] for r in records]
+    ids = [f"web:{url_hash}:{r['chunk_index']}" for r in records]
     metadatas = [
         {
             "type": "web",
@@ -288,6 +313,7 @@ def _upsert_web_chunks(
 def _domain(url: str) -> str:
     """Extract a readable domain label from a URL."""
     import re as _re
+
     m = _re.search(r"https?://(?:www\.)?([^/]+)", url)
     return m.group(1) if m else url
 

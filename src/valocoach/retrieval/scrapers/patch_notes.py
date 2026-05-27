@@ -4,13 +4,17 @@ Patch notes URLs follow a predictable pattern based on the major.minor
 version number, so we can construct the URL automatically when a new
 patch version is detected by the patch tracker.
 
-F4 — Multi-source fallback chain
----------------------------------
+F4 — Multi-source fallback chain (+ optional Tavily)
+------------------------------------------------------
 fetch_patch_notes() tries sources in order and returns the first success:
 
   1. playvalorant.com  (official, most structured)
   2. liquipedia.net    (reliable mirror, often up before official)
   3. Reddit r/VALORANT (crowd-sourced; top post of patch day)
+  4. Tavily search     (only when tavily_api_key is configured — best for
+                        newly published pages that haven't propagated to
+                        Liquipedia/Reddit yet, or when playvalorant.com
+                        has unusual URL structures on a new patch)
 
 Each fallback is logged at INFO level so operators can see which source
 was used.
@@ -170,17 +174,43 @@ def _fetch_reddit(major: str, minor: str) -> ScrapedContent | None:
 # ---------------------------------------------------------------------------
 
 
-def fetch_patch_notes(version: str) -> ScrapedContent | None:
+def _fetch_tavily(major: str, minor: str, settings) -> ScrapedContent | None:
+    """Search for patch notes via Tavily (source 4 in the fallback chain).
+
+    Only called when ``settings.tavily_api_key`` is configured.  Useful
+    when playvalorant.com has an unexpected URL structure, Liquipedia hasn't
+    mirrored yet, or Reddit search is rate-limited.
+    """
+    from valocoach.retrieval.scrapers import tavily_client as tv
+
+    if not tv.is_configured(settings):
+        return None
+
+    query = f"Valorant patch notes {major}.{minor} full agent changes"
+    log.info("Trying fallback source 4 (Tavily search): %r", query)
+    return tv.search(
+        query,
+        settings,
+        search_depth="advanced",
+        max_results=3,
+        include_domains=["playvalorant.com", "liquipedia.net", "dotesports.com"],
+        source="patch_note",
+    )
+
+
+def fetch_patch_notes(version: str, settings=None) -> ScrapedContent | None:
     """Fetch the official patch notes page for a given game version.
 
     Tries multiple sources in order (F4 fallback chain):
       1. playvalorant.com
       2. liquipedia.net
       3. Reddit r/VALORANT search
+      4. Tavily search (only when ``settings.tavily_api_key`` is set)
 
     Args:
-        version: Raw game version string from the HenrikDev API,
-                 e.g. ``"release-10.09-shipping-12-9876543"``.
+        version:  Raw game version string from the HenrikDev API,
+                  e.g. ``"release-10.09-shipping-12-9876543"``.
+        settings: App settings.  Pass to enable Tavily as source 4.
 
     Returns:
         :class:`~valocoach.retrieval.scrapers.ScrapedContent` with the
@@ -193,7 +223,8 @@ def fetch_patch_notes(version: str) -> ScrapedContent | None:
 
     major, minor = parsed
 
-    for fetch_fn in (_fetch_playvalorant, _fetch_liquipedia, _fetch_reddit):
+    static_fetchers = (_fetch_playvalorant, _fetch_liquipedia, _fetch_reddit)
+    for fetch_fn in static_fetchers:
         try:
             result = fetch_fn(major, minor)
         except Exception as exc:
@@ -204,7 +235,17 @@ def fetch_patch_notes(version: str) -> ScrapedContent | None:
             log.info("Patch notes fetched via %s for %s.%s", fetch_fn.__name__, major, minor)
             return result
 
-    log.warning(
-        "All patch notes sources failed for version %r (%s.%s)", version, major, minor
-    )
+    # Source 4: Tavily (only when configured)
+    if settings is not None:
+        try:
+            result = _fetch_tavily(major, minor, settings)
+        except Exception as exc:
+            log.warning("Tavily patch notes fetcher failed: %s", exc)
+            result = None
+
+        if result is not None:
+            log.info("Patch notes fetched via Tavily for %s.%s", major, minor)
+            return result
+
+    log.warning("All patch notes sources failed for version %r (%s.%s)", version, major, minor)
     return None

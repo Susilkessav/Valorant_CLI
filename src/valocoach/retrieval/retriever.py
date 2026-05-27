@@ -175,5 +175,3 @@ def retrieve_static(
         sources=list(dict.fromkeys(sources)),  # deduplicate, preserve order
         patch_version=None,
     )
-
-

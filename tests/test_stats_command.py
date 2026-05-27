@@ -110,6 +110,7 @@ def _mp(
 def _capture_console() -> Console:
     """A Console that writes to a string buffer, no ANSI, stable width."""
     from valocoach.cli.display import THEME
+
     return Console(file=StringIO(), force_terminal=False, width=120, theme=THEME)
 
 

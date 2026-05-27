@@ -35,16 +35,16 @@ from valocoach.core.parser import Situation
 # ---------------------------------------------------------------------------
 
 FIELDS_BY_INTENT: dict[str, tuple[str, ...]] = {
-    "tactical":      ("map", "side", "agent"),
-    "clutch":        ("side", "agent"),
-    "post_plant":    ("map", "agent", "side"),
-    "retake":        ("map", "agent", "side"),
-    "economy":       ("side", "score"),
-    "agent_info":    ("agent",),
-    "meta":          (),          # deterministic — never ask anything
-    "stat_analysis": (),          # pulls from DB — no user input needed
-    "post_game":     (),          # pre-populated by the post-game pipeline
-    "general":       ("agent", "map"),
+    "tactical": ("map", "side", "agent"),
+    "clutch": ("side", "agent"),
+    "post_plant": ("map", "agent", "side"),
+    "retake": ("map", "agent", "side"),
+    "economy": ("side", "score"),
+    "agent_info": ("agent",),
+    "meta": (),  # deterministic — never ask anything
+    "stat_analysis": (),  # pulls from DB — no user input needed
+    "post_game": (),  # pre-populated by the post-game pipeline
+    "general": ("agent", "map"),
 }
 
 MAX_QUESTIONS = 3
@@ -138,8 +138,8 @@ def should_elicit(situation: Situation, raw_text: str, intent: str = "general") 
         return False
 
     field_values: dict[str, object] = {
-        "map":   situation.map,
-        "side":  situation.side,
+        "map": situation.map,
+        "side": situation.side,
         "agent": situation.primary_agent,
         "score": situation.score,
     }
@@ -214,8 +214,7 @@ def _print_header() -> None:
     display.console.print()
     display.console.rule("[heading]Context needed[/heading]", style="dim")
     display.console.print(
-        "  [muted]A quick question or two for better advice  "
-        "(Enter to skip)[/muted]"
+        "  [muted]A quick question or two for better advice  (Enter to skip)[/muted]"
     )
     display.console.print()
 
@@ -244,8 +243,8 @@ def run_elicitation(
     from valocoach.cli import display
 
     # Start from what we already know
-    elicited_map   = map_  or parsed.map
-    elicited_side  = side  or parsed.side
+    elicited_map = map_ or parsed.map
+    elicited_side = side or parsed.side
     elicited_agent = agent or parsed.primary_agent
     elicited_score = parsed.score
 
@@ -256,8 +255,8 @@ def run_elicitation(
     # Determine which relevant fields are still missing
     still_missing = []
     field_values: dict[str, object] = {
-        "map":   elicited_map,
-        "side":  elicited_side,
+        "map": elicited_map,
+        "side": elicited_side,
         "agent": elicited_agent,
         "score": elicited_score,
     }
@@ -299,7 +298,9 @@ def run_elicitation(
                 if resolved:
                     elicited_agent = resolved
                 else:
-                    display.warn(f"Agent '{ans}' not recognised — proceeding without agent context.")
+                    display.warn(
+                        f"Agent '{ans}' not recognised — proceeding without agent context."
+                    )
             questions_asked += 1
 
         elif field == "score":
@@ -318,9 +319,9 @@ def run_elicitation(
     enriched = parsed.model_copy(
         update={
             "agents": agents,
-            "map":    elicited_map,
-            "side":   elicited_side,
-            "score":  elicited_score,
+            "map": elicited_map,
+            "side": elicited_side,
+            "score": elicited_score,
         }
     )
 

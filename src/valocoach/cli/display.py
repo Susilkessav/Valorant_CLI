@@ -78,7 +78,7 @@ def info(msg: str) -> None:
 
 
 def warn(msg: str) -> None:
-    console.print(f"[warning]⚠[/warning]  {msg}")
+    console.print(f"[warning]![/warning]  {msg}")
 
 
 def error(msg: str) -> None:
@@ -141,7 +141,7 @@ def command_frame(title: str, subtitle: str | None = None, con: Console | None =
 
 def coach_panel(
     content: str,
-    title: str = "🎯 Coach",
+    title: str = "Coach",
     subtitle: str | None = None,
 ) -> Panel:
     """Build the coaching response panel. Used inside Live for streaming."""
@@ -156,7 +156,7 @@ def coach_panel(
 
 def stream_to_panel(
     token_stream: Iterator[str],
-    title: str = "🎯 Coach",
+    title: str = "Coach",
     subtitle: str | None = None,
     refresh_per_second: int = 8,
 ) -> str:

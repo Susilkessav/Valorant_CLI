@@ -27,11 +27,11 @@ Reliability:
     They mark the smallest match count at which a metric is *statistically
     meaningful* — anything below is noisy enough that a naive display
     misleads the user. `reliability_flags(stats)` returns a per-metric
-    bool map so presentation layers can tag thin numbers with ⚠️ without
+    bool map so presentation layers can tag thin numbers with [!] without
     having to know the thresholds themselves.
 
     Why the upper end of each BUILD_PLAN.md range?
-        The spec gives ranges (e.g. ACS "10-15"). We pick the top so ⚠️
+        The spec gives ranges (e.g. ACS "10-15"). We pick the top so [!]
         means "genuinely unreliable" rather than "a bit thin". A new user
         seeing warnings for a couple weeks is a better failure mode than
         a long-tenured user mistaking small-sample noise for real trend.
@@ -112,9 +112,9 @@ def _check_threshold(metric: str, matches: int, rounds: int = 0) -> tuple[bool, 
     min_m: int = thresh.get("matches") or 0
     min_r: int | None = thresh.get("rounds")
     if matches < min_m:
-        return False, f"⚠ {matches}/{min_m} matches — stat may be unreliable"
+        return False, f"! {matches}/{min_m} matches — stat may be unreliable"
     if min_r and rounds < min_r:
-        return False, f"⚠ {rounds}/{min_r} rounds — stat may be unreliable"
+        return False, f"! {rounds}/{min_r} rounds — stat may be unreliable"
     return True, None
 
 
@@ -225,7 +225,7 @@ def reliability_flags(stats: PlayerStats, *, is_split: bool = False) -> dict[str
                    ``win_rate_split``.
 
     Empty input (matches=0) returns every flag ``False`` so an empty
-    profile card renders with consistent ⚠️ behaviour instead of mixing
+    profile card renders with consistent [!] behaviour instead of mixing
     "no warning" and "warning" cells arbitrarily.
     """
     m = stats.matches
@@ -406,17 +406,19 @@ def _extract_api_entries(
         if not isinstance(match, MatchData):
             continue
         player = next(
-            (p for p in match.players.all_players
-             if p.name.lower() == name_lower and p.tag.lower() == tag_lower),
+            (
+                p
+                for p in match.players.all_players
+                if p.name.lower() == name_lower and p.tag.lower() == tag_lower
+            ),
             None,
         )
         if player is None:
             continue
 
         team = player.team
-        won = (
-            (team == "Red" and match.teams.red.has_won)
-            or (team == "Blue" and match.teams.blue.has_won)
+        won = (team == "Red" and match.teams.red.has_won) or (
+            team == "Blue" and match.teams.blue.has_won
         )
 
         s = player.stats
@@ -431,20 +433,22 @@ def _extract_api_entries(
                 if rs.puuid == player.puuid
             )
 
-        entries.append(_ApiMatchEntry(
-            agent=player.character,
-            map_name=match.metadata.map_name,
-            rounds_played=match.metadata.rounds_played or 1,
-            won=won,
-            score=s.score,
-            kills=s.kills,
-            deaths=s.deaths,
-            assists=s.assists,
-            headshots=s.headshots,
-            bodyshots=s.bodyshots,
-            legshots=s.legshots,
-            damage_dealt=damage,
-        ))
+        entries.append(
+            _ApiMatchEntry(
+                agent=player.character,
+                map_name=match.metadata.map_name,
+                rounds_played=match.metadata.rounds_played or 1,
+                won=won,
+                score=s.score,
+                kills=s.kills,
+                deaths=s.deaths,
+                assists=s.assists,
+                headshots=s.headshots,
+                bodyshots=s.bodyshots,
+                legshots=s.legshots,
+                damage_dealt=damage,
+            )
+        )
     return entries
 
 

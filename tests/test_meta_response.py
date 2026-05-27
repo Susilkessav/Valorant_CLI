@@ -29,7 +29,6 @@ from valocoach.coach.meta_response import (
 from valocoach.retrieval.agents import list_agent_names
 from valocoach.retrieval.meta import get_meta
 
-
 # ---------------------------------------------------------------------------
 # Tier-list panel: every tier-list agent represented with real abilities
 # ---------------------------------------------------------------------------

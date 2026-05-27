@@ -92,7 +92,7 @@ is that anything longer starts counting accidental timing as a trade."""
 #
 # Source: BUILD_PLAN.md § "Sample-size thresholds for statistical
 # reliability". Values pick the upper end of each BUILD_PLAN range so a
-# ⚠ flag means "genuinely unreliable", not "a bit thin".
+# reliability flag means "genuinely unreliable", not "a bit thin".
 #
 # `rounds: None` means "no round-count requirement for this metric"
 # (win-rate is binary per match — rounds don't add information).
