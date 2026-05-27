@@ -89,7 +89,7 @@ def ingest_web_url(
 
     # ── 1. Scrape ─────────────────────────────────────────────────────────
     try:
-        content = scrape_url(url, source="web")
+        content = scrape_url(url, source="web", settings=settings)
     except Exception as exc:
         log.debug("web_ingest: scrape failed for %s: %s", url, exc)
         return WebIngestResult(url=url, title="", domain=_domain(url), skipped_reason="scrape_failed")

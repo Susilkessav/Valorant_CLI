@@ -34,6 +34,7 @@ dependencies = [
     "youtube-transcript-api>=0.6.0",
     # week 5 — interactive REPL
     "prompt-toolkit>=3.0.50",
+    "tavily-python>=0.7.24",
 ]
 
 [project.optional-dependencies]

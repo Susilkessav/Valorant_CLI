@@ -143,7 +143,7 @@ async def run_meta_sync(
     try:
         from valocoach.retrieval.scrapers.patch_notes import fetch_patch_notes
 
-        content = fetch_patch_notes(patch_version)
+        content = fetch_patch_notes(patch_version, settings)
         if content:
             patch_notes_text = content.text
             result.patch_notes_scraped = True
@@ -182,14 +182,14 @@ async def run_meta_sync(
     try:
         from valocoach.retrieval.scrapers.meta_stats import fetch_all_stats
 
-        stats = fetch_all_stats()
+        stats = fetch_all_stats(settings)
         stats_text = stats.combined
         result.ranked_stats_scraped = bool(stats.ranked_text)
         result.pro_stats_scraped = bool(stats.pro_text)
         _step(
             "stats_scrape",
-            f"ranked={'ok' if result.ranked_stats_scraped else 'fail'}, "
-            f"pro={'ok' if result.pro_stats_scraped else 'fail'}",
+            f"ranked={stats.ranked_source if result.ranked_stats_scraped else 'fail'}, "
+            f"pro={stats.pro_source if result.pro_stats_scraped else 'fail'}",
         )
 
         # Cache and ingest the combined stats so the coach can also
