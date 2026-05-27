@@ -4,8 +4,6 @@ import logging
 import re
 
 from valocoach.cli import display
-
-log = logging.getLogger(__name__)
 from valocoach.coach import build_stats_context
 from valocoach.coach.intent import classify_intent
 from valocoach.coach.templates import PANEL_TITLES, PROMPT_TEMPLATES
@@ -14,6 +12,8 @@ from valocoach.core.context_budget import fit_prompt
 from valocoach.core.parser import Situation, parse_situation
 from valocoach.llm.provider import stream_completion
 from valocoach.retrieval import format_agent_context, format_map_context
+
+log = logging.getLogger(__name__)
 
 _META_SENSITIVE_INTENTS: frozenset[str] = frozenset({"meta", "agent_info"})
 _PATCH_STALE_THRESHOLD_DAYS: int = 21

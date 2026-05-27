@@ -4,7 +4,6 @@ import logging
 
 import typer
 
-from valocoach import __version__
 from valocoach.cli import display
 
 log = logging.getLogger(__name__)

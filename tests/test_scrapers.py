@@ -541,14 +541,14 @@ class TestFetchPatchNotesFallback:
         import json as _json
 
         # Use a non-playvalorant, non-liquipedia URL so fake_scrape can distinguish it
-        _ARTICLE_URL = "https://valorant.fandom.com/wiki/Patch_10.09"
+        _article_url = "https://valorant.fandom.com/wiki/Patch_10.09"
         fake_reddit_response = _json.dumps({
             "data": {
                 "children": [
                     {
                         "data": {
                             "title": "VALORANT Patch Notes 10.09",
-                            "url": _ARTICLE_URL,
+                            "url": _article_url,
                             "is_self": False,
                             "permalink": "/r/VALORANT/comments/abc/patch_10_09/",
                         }

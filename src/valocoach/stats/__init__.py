@@ -42,11 +42,6 @@ from valocoach.stats.calculator import (
     compute_player_stats,
     reliability_flags,
 )
-from valocoach.stats.round_analyzer import (
-    WeaponSplit,
-    analyze_rounds_per_map,
-    compute_weapon_stats,
-)
 from valocoach.stats.filters import (
     apply_filters,
     filter_by_agent,
@@ -59,13 +54,13 @@ from valocoach.stats.filters import (
     recent_form,
     split_by_result,
 )
+from valocoach.stats.round_analyzer import (
+    WeaponSplit,
+    analyze_rounds_per_map,
+    compute_weapon_stats,
+)
 
 __all__ = [
-    # round_analyzer extras (E1/E2)
-    "WeaponSplit",
-    "analyze_rounds_per_map",
-    "compute_weapon_stats",
-    # calculator
     "MIN_MATCHES_ACS",
     "MIN_MATCHES_ADR",
     "MIN_MATCHES_FB",
@@ -73,19 +68,20 @@ __all__ = [
     "MIN_MATCHES_KD",
     "MIN_MATCHES_WIN_RATE_SPLIT",
     "AgentStats",
-    # baseline
     "Anomaly",
     "BaselineComparison",
     "MapStats",
     "PlayerStats",
     "StatResult",
+    "WeaponSplit",
     "_check_threshold",
-    # filters
+    "analyze_rounds_per_map",
     "apply_filters",
     "compare_baseline",
     "compute_per_agent",
     "compute_per_map",
     "compute_player_stats",
+    "compute_weapon_stats",
     "detect_anomalies",
     "filter_by_agent",
     "filter_by_map",

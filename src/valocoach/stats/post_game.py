@@ -33,7 +33,6 @@ Severity scale
 
 from __future__ import annotations
 
-import json
 import logging
 import math
 from dataclasses import dataclass, field
@@ -854,9 +853,9 @@ def analyze_engagement_distances(match: Match, puuid: str) -> list[Finding]:
             category="duels",
             headline=f"Losing long-range duels (won at {median_won:.0f}u, lost at {median_lost:.0f}u)",
             detail=(
-                f"You win close-range fights but lose at longer distances. "
-                f"Consider playing tighter angles or using cover to reduce enemy ADS time. "
-                f"Op/Vandal players will punish wide long-range peeks."
+                "You win close-range fights but lose at longer distances. "
+                "Consider playing tighter angles or using cover to reduce enemy ADS time. "
+                "Op/Vandal players will punish wide long-range peeks."
             ),
             evidence={
                 "median_win_distance": round(median_won, 1),
@@ -951,11 +950,11 @@ def analyze_mmr_trend(mmr_rows: list) -> list[Finding]:
 
     Args:
         mmr_rows: MMRHistory ORM rows, most-recent first (repo.get_mmr_history
-                  returns them in that order). Pass the last 5–10 rows.
+                  returns them in that order). Pass the last 5-10 rows.
 
     Returns a Finding when either:
     - 3 or more consecutive losses (mmr_change < 0 in a row), or
-    - total RR delta is ≤ −50 across the last 5 entries.
+    - total RR delta is <= -50 across the last 5 entries.
 
     Never raises — on any data issue returns [].
     """

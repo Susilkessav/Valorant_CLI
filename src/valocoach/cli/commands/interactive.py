@@ -14,8 +14,6 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-log = logging.getLogger(__name__)
-
 from valocoach.cli import display
 from valocoach.coach.match_context import SessionMatchContext
 from valocoach.coach.session_manager import (
@@ -35,6 +33,8 @@ from valocoach.core.session_store import (
     save_session,
     session_summary,
 )
+
+log = logging.getLogger(__name__)
 
 _SLASH_HELP: dict[str, str] = {
     # ── Match context ──────────────────────────────────────────────────
@@ -99,7 +99,13 @@ def _handle_context_slash(
     match_ctx: SessionMatchContext,
 ) -> None:
     """Handle match-context slash commands that write to ``match_ctx``."""
-    from valocoach.coach.elicitation import _match_agent, _match_map, _match_score, _SIDE_MAP, _ECON_MAP
+    from valocoach.coach.elicitation import (
+        _ECON_MAP,
+        _SIDE_MAP,
+        _match_agent,
+        _match_map,
+        _match_score,
+    )
 
     arg = raw_input.strip()[len(cmd):].strip()
 

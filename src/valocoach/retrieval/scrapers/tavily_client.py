@@ -26,7 +26,7 @@ Credit costs (Tavily pricing as of 2025)
 
 Typical ValoCoach usage per ``meta-refresh`` run:
   ~2 searches (ranked stats + pro stats) + 1 search (patch notes fallback)
-  = ~3–4 credits per refresh — well within the free tier.
+  = ~3-4 credits per refresh -- well within the free tier.
 
 Public API
 ----------
@@ -49,12 +49,12 @@ from valocoach.retrieval.scrapers import ScrapedContent
 log = logging.getLogger(__name__)
 
 
-def is_configured(settings: "Settings") -> bool:
+def is_configured(settings: Settings) -> bool:
     """Return True when a Tavily API key is present in settings."""
     return bool(getattr(settings, "tavily_api_key", ""))
 
 
-def _client(settings: "Settings"):
+def _client(settings: Settings):
     """Return a TavilyClient, or raise ImportError / ValueError on misconfiguration."""
     try:
         from tavily import TavilyClient  # type: ignore[import]
@@ -72,7 +72,7 @@ def _client(settings: "Settings"):
 
 def search(
     query: str,
-    settings: "Settings",
+    settings: Settings,
     *,
     search_depth: str = "advanced",
     max_results: int = 3,
@@ -159,7 +159,7 @@ def search(
 
 def extract(
     url: str,
-    settings: "Settings",
+    settings: Settings,
     *,
     extract_depth: str = "advanced",
     source: str = "web",

@@ -66,7 +66,7 @@ class WebIngestResult:
 def ingest_web_url(
     data_dir: Path,
     url: str,
-    settings: "Settings",
+    settings: Settings,
     *,
     force: bool = False,
 ) -> WebIngestResult:

@@ -22,6 +22,8 @@ Separation of concerns:
 
 from __future__ import annotations
 
+from datetime import UTC
+
 from valocoach.core.config import Settings
 from valocoach.data.loader import load_player_data
 from valocoach.data.orm_models import MatchPlayer, Player
@@ -44,6 +46,7 @@ from valocoach.stats.round_analyzer import (
     trade_efficiency_stat,
 )
 
+
 def _detect_tilt(rows: list[MatchPlayer]) -> str | None:
     """E5 — detect WR decline in the back half of the current gaming session.
 
@@ -57,12 +60,12 @@ def _detect_tilt(rows: list[MatchPlayer]) -> str | None:
     ≥ 20pp from the first half to the second half of the window.
     """
     from datetime import datetime as _dt
-    from datetime import timedelta, timezone
+    from datetime import timedelta
 
     # Rolling window: anchor to "now" in UTC (started_at is stored as UTC ISO).
     # 8 hours is wide enough to capture an evening session but narrow enough
     # to exclude yesterday's games.
-    now = _dt.now(tz=timezone.utc)
+    now = _dt.now(tz=UTC)
     cutoff = (now - timedelta(hours=8)).isoformat()
 
     def _row_started_at(r: MatchPlayer) -> str:
@@ -78,7 +81,7 @@ def _detect_tilt(rows: list[MatchPlayer]) -> str | None:
         key=_row_started_at,
     )
     # Threshold lowered from 6 to 4 because most casual ranked sessions are
-    # 3–5 matches.  At ≥6 the detector basically never fired for non-pro
+    # 3-5 matches.  At >=6 the detector basically never fired for non-pro
     # play.  Four is the minimum that still gives a 2 / 2 split with
     # meaningful per-half win-rate signal.
     if len(today_rows) < 4:

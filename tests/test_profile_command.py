@@ -827,11 +827,15 @@ def _api_match(
     from valocoach.data.api_models import (
         MatchData,
         MatchMetadata,
-        MatchPlayer as ApiMatchPlayer,
         MatchPlayers,
         MatchTeams,
-        PlayerStats as ApiPlayerStats,
         TeamResult,
+    )
+    from valocoach.data.api_models import (
+        MatchPlayer as ApiMatchPlayer,
+    )
+    from valocoach.data.api_models import (
+        PlayerStats as ApiPlayerStats,
     )
 
     player = ApiMatchPlayer(
@@ -949,6 +953,8 @@ def test_render_lookup_identity_panel_shows_rank_and_region() -> None:
         AccountResponse,
         CurrentRankData,
         HighestRank,
+    )
+    from valocoach.data.api_models import (
         MMRData as ApiMMR,
     )
 
@@ -1048,11 +1054,15 @@ def test_compute_per_agent_from_api_multiple_agents() -> None:
     from valocoach.data.api_models import (
         MatchData,
         MatchMetadata,
-        MatchPlayer as ApiMatchPlayer,
         MatchPlayers,
         MatchTeams,
-        PlayerStats as ApiPlayerStats,
         TeamResult,
+    )
+    from valocoach.data.api_models import (
+        MatchPlayer as ApiMatchPlayer,
+    )
+    from valocoach.data.api_models import (
+        PlayerStats as ApiPlayerStats,
     )
     from valocoach.stats.calculator import compute_per_agent_from_api
 
@@ -1084,6 +1094,8 @@ def test_run_profile_falls_back_to_lookup_on_db_miss(tmp_path) -> None:
         AccountResponse,
         CurrentRankData,
         HighestRank,
+    )
+    from valocoach.data.api_models import (
         MMRData as ApiMMR,
     )
 

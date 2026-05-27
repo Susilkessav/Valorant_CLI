@@ -20,8 +20,6 @@ import logging
 import sys
 from pathlib import Path
 
-log = logging.getLogger(__name__)
-
 import typer
 
 from valocoach.cli import display
@@ -34,6 +32,7 @@ from valocoach.stats.post_game import (
     select_top_findings,
 )
 
+log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # DB loading helper
@@ -142,7 +141,7 @@ def _render_findings_panel(findings: list[Finding], match) -> None:
 
         display.console.print(f"[heading]Top {len(findings)} finding(s):[/heading]")
         display.console.print()
-        for i, f in enumerate(findings, 1):
+        for _i, f in enumerate(findings, 1):
             colour = _SEV_COLOUR.get(f.severity, "[muted]")
             end_colour = colour.replace("[", "[/")
             icon = _SEV_ICON.get(f.severity, "•")

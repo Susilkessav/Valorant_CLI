@@ -331,7 +331,7 @@ def _print_youtube_plan(plan: object) -> None:
 
     if plan.skipped_reason == "already_ingested":
         c.print(
-            f"[warning]Video already in the knowledge base — use [bold]--force[/bold] to re-ingest.[/warning]"
+            "[warning]Video already in the knowledge base — use [bold]--force[/bold] to re-ingest.[/warning]"
         )
         return
 
@@ -466,11 +466,11 @@ def _do_add_lineup(data_dir: Path, settings: object) -> None:
     """Interactively prompt the user for a lineup entry and write it to ChromaDB."""
     from valocoach.cli import display
     from valocoach.retrieval.lineups import (
+        _CANONICAL_AGENTS,
+        _CANONICAL_MAPS,
         _canon_agent,
         _canon_map,
         _canon_site,
-        _CANONICAL_AGENTS,
-        _CANONICAL_MAPS,
     )
 
     c = display.console

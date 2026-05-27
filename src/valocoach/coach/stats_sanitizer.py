@@ -24,6 +24,7 @@ Design:
 
 from __future__ import annotations
 
+import contextlib
 import re
 from dataclasses import dataclass
 
@@ -144,10 +145,8 @@ def _extract_real_values(player_context: str) -> dict[str, float]:
     for key, pat in _CONTEXT_PATTERNS.items():
         m = pat.search(player_context)
         if m:
-            try:
+            with contextlib.suppress(ValueError):
                 out[key] = float(m.group(1))
-            except ValueError:
-                pass
     return out
 
 

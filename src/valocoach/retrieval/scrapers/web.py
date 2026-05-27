@@ -26,7 +26,7 @@ def scrape_url(
     url: str,
     source: str = "web",
     timeout: int = 20,
-    settings: "Settings | None" = None,
+    settings: Settings | None = None,
 ) -> ScrapedContent | None:
     """Fetch a URL and extract its main text content.
 

@@ -1,4 +1,4 @@
-"""YouTube ingest pipeline — Phase D (D2–D5).
+"""YouTube ingest pipeline -- Phase D (D2-D5).
 
 Orchestrates deduplication, time-window chunking, anchor-based relevance
 filtering, optional LLM summarisation, and vector-store upsert for a single
@@ -234,13 +234,12 @@ def get_classifier() -> AnchorClassifier:
 # chance rather than being silently dropped.
 _LINEUP_KEYWORDS: frozenset[str] = frozenset({
     "lineup", "lineups", "stand here", "aim here", "aim at", "aim there",
-    "one bounce", "two bounce", "post plant", "post-plant", "post-plant",
-    "molly", "molotov", "incendiary", "dart", "recon bolt", "shock bolt",
+    "one bounce", "two bounce", "post plant", "post-plant", "molly", "molotov", "incendiary", "dart", "recon bolt", "shock bolt",
     "owl drone", "seeker", "alarmbot", "killjoy", "cypher", "chamber",
     "smoke", "wall", "barrier", "turret", "tripwire", "trap",
     "bounce", "bounces", "throw from", "land on", "lands on",
     "right here", "stand on", "position", "ledge", "corner",
-    "post plant", "pre plant", "retake", "site clear",
+    "pre plant", "retake", "site clear",
     "revealing", "reveal", "scan",
 })
 
@@ -255,7 +254,7 @@ _AGENT_NAMES: frozenset[str] = frozenset({
 
 
 def _keyword_lineup_boost(text: str) -> float:
-    """Return 0.0–1.0 based on tactical keyword density.
+    """Return 0.0-1.0 based on tactical keyword density.
 
     3 or more keyword hits → score of 1.0 (full boost).  Used as a safety
     net for chunks that embed slightly below RELEVANCE_THRESHOLD but are
@@ -280,9 +279,7 @@ def _should_keep_as_lineup(category: str, score: float, text: str) -> bool:
     if category == "lineups" and score >= RELEVANCE_THRESHOLD:
         return True
     boost = _keyword_lineup_boost(text)
-    if boost >= 0.7:
-        return True
-    return False
+    return boost >= 0.7
 
 
 # ---------------------------------------------------------------------------
@@ -399,7 +396,7 @@ def analyze_youtube_video(
 ) -> YouTubeIngestPlan:
     """Classify a YouTube video and extract lineup metadata without writing to ChromaDB.
 
-    Runs steps 1–4 of the full pipeline (validate, dedup check, transcript
+    Runs steps 1-4 of the full pipeline (validate, dedup check, transcript
     fetch, anchor classification) plus LLM metadata extraction for any chunk
     classified as ``lineups``.  Nothing is written to ChromaDB.
 
@@ -665,9 +662,9 @@ def ingest_youtube_video(
 
 __all__ = [
     "ANCHOR_PHRASES",
+    "RELEVANCE_THRESHOLD",
     "AnchorClassifier",
     "CandidateChunk",
-    "RELEVANCE_THRESHOLD",
     "YouTubeIngestPlan",
     "analyze_youtube_video",
     "apply_youtube_ingest_plan",

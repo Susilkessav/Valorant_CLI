@@ -3,7 +3,7 @@
 For ``meta`` and ``agent_info`` intents the LLM consistently fabricates
 ability names (Riftwalk, Sonic Blast, Dark Visage, Sonic Boom, …) even with
 21 KB of grounded context.  The root cause is that the model's training
-prior dominates the prompt at 8B–14B scale.
+prior dominates the prompt at 8B-14B scale.
 
 We solve it structurally: the agent listing, role labels, and ability rosters
 come from ``agents.json`` + ``meta.json`` (100% accurate, no LLM), and the

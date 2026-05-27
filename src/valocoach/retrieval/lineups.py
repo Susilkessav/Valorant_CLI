@@ -535,7 +535,7 @@ def search_lineups(
     metas = (results.get("metadatas") or [[]])[0]
     dists = (results.get("distances") or [[]])[0]
 
-    for text, meta, dist in zip(docs, metas, dists):
+    for text, meta, dist in zip(docs, metas, dists, strict=False):
         if dist <= 0.55:  # generous threshold — lineup queries are specific
             hits.append({"text": text, "metadata": meta, "distance": dist})
 
@@ -579,10 +579,10 @@ def format_lineup_results(hits: list[dict]) -> str:
 
 
 __all__ = [
+    "_infer_from_title",
     "extract_lineup_metadata",
     "format_lineup_results",
     "ingest_lineup_chunk",
     "ingest_seed_lineups",
     "search_lineups",
-    "_infer_from_title",
 ]

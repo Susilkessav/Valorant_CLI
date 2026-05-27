@@ -184,8 +184,6 @@ def _regex_extract(text: str) -> tuple[dict[str, list[dict]], dict[str, list[dic
         m = _HEADING_RE.match(stripped)
         if m:
             candidate = m.group(1).strip()
-            # Normalise KAY/O
-            candidate_norm = candidate.upper().replace("/", "/")
 
             # Check agent (case-insensitive)
             found_agent = next(

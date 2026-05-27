@@ -13,7 +13,7 @@ Calibration status (2026-05)
 ----------------------------
 Bounding boxes below are ESTIMATED from publicly-available Valorant mapping
 resources and community tooling.  They should be considered v1 approximations.
-Once real coordinate data has been collected (2–3 weeks of synced matches with
+Once real coordinate data has been collected (2-3 weeks of synced matches with
 Phase A columns populated), run ``scripts/calibrate_zones.py`` to refine them.
 
 Adding new maps

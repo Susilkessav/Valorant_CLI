@@ -411,7 +411,8 @@ def render_lookup_identity_panel(
     mmr: object,
 ) -> None:
     """Render identity panel from live API data — mirrors render_identity_panel."""
-    from valocoach.data.api_models import AccountResponse, MMRData as ApiMMR
+    from valocoach.data.api_models import AccountResponse
+    from valocoach.data.api_models import MMRData as ApiMMR
 
     if not isinstance(account, AccountResponse) or not isinstance(mmr, ApiMMR):
         return

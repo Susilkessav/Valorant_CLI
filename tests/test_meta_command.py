@@ -98,6 +98,7 @@ def _render_table(table) -> str:
     from io import StringIO
 
     from rich.console import Console
+
     from valocoach.cli.display import THEME
 
     buf = Console(file=StringIO(), force_terminal=False, width=120, theme=THEME)

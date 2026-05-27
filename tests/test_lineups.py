@@ -13,7 +13,6 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-
 # ---------------------------------------------------------------------------
 # G2 — LLM metadata extraction
 # ---------------------------------------------------------------------------
@@ -21,9 +20,10 @@ from unittest.mock import MagicMock, patch
 
 class TestExtractLineupMetadata:
     def test_parses_valid_llm_json(self):
-        from valocoach.retrieval.lineups import extract_lineup_metadata
 
-        fake_llm_response = json.dumps({
+        # fake_llm_response would be passed to extract_lineup_metadata in real use;
+        # here we mock the function itself so only the return value matters.
+        _ = json.dumps({
             "agent": "Sova",
             "ability": "Recon Bolt",
             "map": "Ascent",
@@ -191,7 +191,6 @@ class TestFormatLineupResults:
 class TestLineupsSeedData:
     def test_seed_file_exists_and_has_entries(self):
         import json
-        from pathlib import Path
 
         seed_path = (
             Path(__file__).parent.parent
@@ -207,7 +206,6 @@ class TestLineupsSeedData:
 
     def test_all_seed_entries_have_required_fields(self):
         import json
-        from pathlib import Path
 
         seed_path = (
             Path(__file__).parent.parent
@@ -247,10 +245,9 @@ class TestLineupsSeedData:
 
 class TestSuggestLineupsForLowUtil:
     def test_returns_none_for_non_util_agent(self):
-        from types import SimpleNamespace
 
-        from valocoach.stats.post_game import Finding
         from valocoach.cli.commands.post_game import _suggest_lineups_for_low_util
+        from valocoach.stats.post_game import Finding
 
         findings = [
             Finding(
@@ -266,8 +263,8 @@ class TestSuggestLineupsForLowUtil:
         assert result is None  # Jett is not in _UTIL_HEAVY_AGENTS
 
     def test_returns_none_when_no_low_utility_finding(self):
-        from valocoach.stats.post_game import Finding
         from valocoach.cli.commands.post_game import _suggest_lineups_for_low_util
+        from valocoach.stats.post_game import Finding
 
         findings = [
             Finding(
@@ -283,8 +280,8 @@ class TestSuggestLineupsForLowUtil:
         assert result is None  # no low_utility finding
 
     def test_returns_lineup_block_for_sova_with_low_utility(self):
-        from valocoach.stats.post_game import Finding
         from valocoach.cli.commands.post_game import _suggest_lineups_for_low_util
+        from valocoach.stats.post_game import Finding
 
         findings = [
             Finding(

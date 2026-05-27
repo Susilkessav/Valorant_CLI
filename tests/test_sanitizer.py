@@ -16,7 +16,6 @@ from valocoach.coach.sanitizer import (
     validate_ability_claims,
 )
 
-
 # ---------------------------------------------------------------------------
 # Correct attributions — must NOT trigger
 # ---------------------------------------------------------------------------

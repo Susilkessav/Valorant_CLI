@@ -68,9 +68,9 @@ class SessionMatchContext:
 
     def set_side(self, value: str) -> None:
         """Normalise and store side."""
-        _SIDE = {"attack": "attack", "atk": "attack", "offense": "attack",
+        _side = {"attack": "attack", "atk": "attack", "offense": "attack",
                  "defense": "defense", "def": "defense", "defend": "defense"}
-        self.side = _SIDE.get(value.lower(), value.lower())
+        self.side = _side.get(value.lower(), value.lower())
 
     def flip_side(self) -> None:
         """Toggle attack ↔ defense (used at half-time with /half)."""
@@ -207,7 +207,7 @@ class SessionMatchContext:
         })
 
     @classmethod
-    def from_json(cls, data: str) -> "SessionMatchContext":
+    def from_json(cls, data: str) -> SessionMatchContext:
         d = json.loads(data)
         score = d.get("score")
         return cls(
