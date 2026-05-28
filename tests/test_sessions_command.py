@@ -88,7 +88,7 @@ class TestRunSessionsList:
             mock_display.info = lambda msg: output_lines.append(str(msg))
             run_sessions_list()
 
-        assert any("valocoach interactive" in line for line in output_lines)
+        assert any("valocoach coach" in line for line in output_lines)
 
     def test_renders_sessions_table_when_sessions_present(self):
         sessions = [_session(session_id=3, title="Post-plant drill")]

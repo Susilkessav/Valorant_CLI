@@ -15,54 +15,17 @@ from valocoach.retrieval import format_agent_context, format_map_context
 
 log = logging.getLogger(__name__)
 
+# Staleness warnings now live in an LLM-free module so pure local-DB commands
+# (stats, profile) can import them without dragging in LiteLLM.  Re-exported
+# here for backward compatibility with existing imports.
+from valocoach.coach.staleness import (  # noqa: E402
+    maybe_warn_stale_meta as _maybe_warn_stale_meta,
+)
+from valocoach.coach.staleness import (  # noqa: E402,F401
+    warn_stale_meta_once,
+)
+
 _META_SENSITIVE_INTENTS: frozenset[str] = frozenset({"meta", "agent_info"})
-_PATCH_STALE_THRESHOLD_DAYS: int = 21
-
-
-_STALE_META_WARNED: bool = False
-
-
-def _maybe_warn_stale_meta(settings, *, once: bool = False) -> None:
-    """Print a one-liner if the cached patch is older than the threshold.
-
-    Used by both the LLM path (post-stream warning) and the deterministic
-    meta path (printed before the early return) so the warning fires on
-    every meta-sensitive answer regardless of which code path produced it.
-
-    Args:
-        once: when True, suppresses the warning after it has fired once
-              in the current process.  Lets non-meta entrypoints
-              (``stats``, ``profile``, ``coach`` for non-meta intents)
-              show it without bombarding the user inside a single
-              interactive session.
-    """
-    global _STALE_META_WARNED
-    if once and _STALE_META_WARNED:
-        return
-    try:
-        from valocoach.retrieval.patch_tracker import get_patch_staleness_days
-
-        stale_days = get_patch_staleness_days(settings.data_dir)
-        if stale_days is None or stale_days > _PATCH_STALE_THRESHOLD_DAYS:
-            age_str = (
-                "never checked" if stale_days is None else f"{stale_days:.0f}d since last check"
-            )
-            display.console.print(
-                f"[muted]! Meta info may be outdated ({age_str}) — "
-                "run [info]valocoach patch --check[/info] to refresh.[/muted]"
-            )
-            _STALE_META_WARNED = True
-    except Exception:
-        log.debug("patch staleness check failed", exc_info=True)
-
-
-def warn_stale_meta_once(settings) -> None:
-    """Public entry: fire the staleness warning at most once per process.
-
-    Called by non-coach commands (``stats``, ``profile``) so the user sees
-    the staleness signal even on workflows that never touch the coach.
-    """
-    _maybe_warn_stale_meta(settings, once=True)
 
 
 # Team-roster questions ("who was in my team", "list teammates") — the schema
@@ -232,6 +195,26 @@ def run_coach(
 
     # Classify intent BEFORE elicitation so we only ask relevant questions.
     intent = force_intent if force_intent is not None else classify_intent(parsed, situation)
+
+    # Gate the LLM HERE — after intent classification but before elicitation
+    # and retrieval.  The "meta" intent is answered deterministically (no LLM),
+    # so it must keep working when Ollama is down.  Every other intent needs
+    # the model, so fail fast with an actionable error rather than asking
+    # elicitation questions and doing retrieval work that we'll throw away.
+    # The REPL and post-game flows run their own preflight before calling us;
+    # this is the authoritative gate for the one-shot ``coach "..."`` path.
+    if intent != "meta":
+        from valocoach.core.preflight import check_ollama
+
+        ollama_result = check_ollama(settings)
+        if not ollama_result.ok:
+            import typer
+
+            display.error_with_hint(
+                ollama_result.message,
+                ollama_result.hint or "Start Ollama with: ollama serve",
+            )
+            raise typer.Exit(1)
 
     if not no_elicit:
         from valocoach.coach.elicitation import run_elicitation, should_elicit

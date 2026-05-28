@@ -95,8 +95,28 @@ def run_ingest(
             )
 
 
+def _require_embeddings() -> None:
+    """Exit cleanly if the embedding model isn't reachable.
+
+    Every ingest path embeds text via Ollama.  Without this guard, an
+    Ollama-down failure surfaces inconsistently — ``--seed`` caught it and
+    exited cleanly, but ``--corpus`` raised an uncaught traceback mid-loop.
+    A single shared preflight makes the failure mode uniform and actionable.
+    """
+    from valocoach.retrieval.embedder import is_available
+
+    if not is_available():
+        display.error_with_hint(
+            "Ingest needs the embedding model, but it isn't reachable.",
+            "Start Ollama (ollama serve) and pull the model: ollama pull nomic-embed-text",
+        )
+        raise typer.Exit(1)
+
+
 def _do_seed(data_dir: Path) -> None:
     from valocoach.retrieval.ingester import ingest_knowledge_base
+
+    _require_embeddings()
 
     with Progress(
         SpinnerColumn(),
@@ -237,6 +257,8 @@ def _print_web_result(result: object) -> None:
 def _do_corpus(data_dir: Path, corpus_root: Path | None = None) -> None:
     from valocoach.retrieval.ingester import ingest_text
 
+    _require_embeddings()
+
     if corpus_root is None:
         corpus_root = Path(__file__).resolve().parents[4] / "corpus"
     if not corpus_root.exists():
@@ -267,14 +289,18 @@ def _do_corpus(data_dir: Path, corpus_root: Path | None = None) -> None:
             text = path.read_text(encoding="utf-8")
             folder = path.parent.name.rstrip("s")
             doc_type = folder if folder in ("agent", "map", "meta", "concept") else "web"
-            n = ingest_text(
-                data_dir,
-                text,
-                doc_type=doc_type,
-                name=path.stem,
-                source=str(path),
-                extra_metadata={"content_type": path.parent.name, "ttl_tier": "stable"},
-            )
+            try:
+                n = ingest_text(
+                    data_dir,
+                    text,
+                    doc_type=doc_type,
+                    name=path.stem,
+                    source=str(path),
+                    extra_metadata={"content_type": path.parent.name, "ttl_tier": "stable"},
+                )
+            except Exception as e:
+                display.error(f"Corpus ingest failed on {path.name}: {e}")
+                raise typer.Exit(1) from e
             total += n
             progress.advance(task)
 

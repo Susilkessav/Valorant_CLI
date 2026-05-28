@@ -111,7 +111,9 @@ class HenrikClient:
     ) -> None:
         if not settings.henrikdev_api_key:
             raise ConfigError(
-                "HENRIKDEV_API_KEY is not configured — run `valocoach config set-key`"
+                "HENRIKDEV_API_KEY is not configured — run `valocoach config init`, "
+                "then add your key to ~/.valocoach/config.toml "
+                "(or set VALOCOACH_HENRIKDEV_API_KEY)."
             )
         self._settings = settings
         self.throttle = throttle_seconds

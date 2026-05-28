@@ -89,9 +89,9 @@ Commands are organized into four groups visible in `--help`:
 
 | Group | Commands |
 |---|---|
-| **Coaching** | `coach`, `interactive`, `notes`, `sessions`, `lineup` |
-| **Performance** | `stats`, `profile`, `post-game` |
-| **Data** | `sync`, `ingest`, `index` |
+| **Coaching** | `coach`, `lineup`, `post-game`, `notes`, `sessions` |
+| **Performance** | `stats`, `profile` |
+| **Data** | `sync`, `ingest` |
 | **Game Info** | `meta`, `meta-refresh`, `agents-refresh`, `patch` |
 
 ## Configuration
@@ -228,10 +228,10 @@ fact-check panel.
 
 ### Interactive mode
 
-Use `interactive` for a multi-turn coaching session.
+Run `coach` with no arguments to open a multi-turn coaching REPL.
 
 ```bash
-uv run valocoach interactive
+uv run valocoach coach
 ```
 
 The REPL keeps recent conversation turns in memory so follow-up questions build on
@@ -527,7 +527,6 @@ Options:
 |---|---|
 | `--force` | Run even when no new patch is detected. |
 | `--dry-run` | Execute all steps but don't write `meta.json` or re-ingest. |
-| `--watch` | Run continuously: check daily, full sync on new patch. |
 | `--install-cron` | Write a crontab entry to run daily patch checks at 08:00. |
 | `--youtube URL` | Also ingest a YouTube transcript as part of the sync. |
 
@@ -537,7 +536,6 @@ Examples:
 uv run valocoach meta-refresh
 uv run valocoach meta-refresh --force
 uv run valocoach meta-refresh --dry-run
-uv run valocoach meta-refresh --watch
 uv run valocoach meta-refresh --install-cron
 uv run valocoach meta-refresh --youtube "https://www.youtube.com/watch?v=VIDEO_ID"
 ```
@@ -649,12 +647,10 @@ uv run valocoach ingest --clear
 uv run valocoach ingest --seed
 ```
 
-### Index
-
-Embeds static markdown corpus files from `corpus/`.
+Embed static markdown corpus files from `corpus/` with the `--corpus` flag:
 
 ```bash
-uv run valocoach index
+uv run valocoach ingest --corpus
 ```
 
 ### Patch
@@ -678,7 +674,7 @@ uv run valocoach patch --check
 | Goal | Command |
 |---|---|
 | Get advice now | `uv run valocoach coach "retaking B on Bind as Sova"` |
-| Start a multi-turn session | `uv run valocoach interactive` |
+| Start a multi-turn session | `uv run valocoach coach` |
 | Debrief your last match | `uv run valocoach post-game` |
 | Look up a lineup | `uv run valocoach lineup Sova --map Ascent --site A` |
 | Add a note during session | `/note work on smoke timings` |
@@ -807,7 +803,8 @@ The default sync path is incremental, so repeated smaller syncs are safe.
 
 ## Current Limitations
 
-- `coach` and `interactive` require Ollama preflight to pass.
+- `coach` requires Ollama to be running for LLM answers; deterministic
+  intents (e.g. meta/tier-list questions) work even when Ollama is down.
 - Synced stats require HenrikDev data and a configured Riot ID.
 - Live scraped meta quality depends on source availability.
 - `config show` may print `henrikdev_api_key`; redact before sharing output.

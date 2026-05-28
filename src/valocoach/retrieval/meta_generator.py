@@ -377,6 +377,13 @@ def generate_meta_update(
             # prompt (system + notes + stats ≈ 2 000 tokens) doesn't crowd
             # out the model's output budget.
             num_ctx=16_384,
+            # Disable the reasoning phase.  qwen3 (and other thinking models)
+            # otherwise burn the entire 6 000-token budget on reasoning_content
+            # before producing any JSON, so the provider — which only yields
+            # ``content`` — collects an empty string and meta.json is never
+            # updated.  This is a pure structured-extraction call, so the
+            # <think> phase adds no value here anyway.
+            think=False,
         ):
             tokens.append(token)
     except Exception as exc:

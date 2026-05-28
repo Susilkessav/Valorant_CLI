@@ -111,10 +111,10 @@ def _round_player(puuid: str, *, team: str = _TEAM, **kwargs) -> SimpleNamespace
     rp.survived = kwargs.get("survived", True)
     rp.was_afk = False
     rp.stayed_in_spawn = False
-    rp.ability_casts_grenade = kwargs.get("ability_casts_grenade", None)
-    rp.ability_casts_ability1 = kwargs.get("ability_casts_ability1", None)
-    rp.ability_casts_ability2 = kwargs.get("ability_casts_ability2", None)
-    rp.ability_casts_ultimate = kwargs.get("ability_casts_ultimate", None)
+    rp.ability_casts_grenade = kwargs.get("ability_casts_grenade")
+    rp.ability_casts_ability1 = kwargs.get("ability_casts_ability1")
+    rp.ability_casts_ability2 = kwargs.get("ability_casts_ability2")
+    rp.ability_casts_ultimate = kwargs.get("ability_casts_ultimate")
     return rp
 
 
@@ -150,7 +150,7 @@ def _match_player(puuid: str, *, team: str = _TEAM, **kwargs) -> SimpleNamespace
     mp = SimpleNamespace()
     mp.puuid = puuid
     mp.team = team
-    mp.team_id = team   # Some analyzers use team_id
+    mp.team_id = team  # Some analyzers use team_id
     mp.agent_name = kwargs.get("agent_name", "Jett")
     mp.won = kwargs.get("won", False)
     mp.kills = kwargs.get("kills", 10)
@@ -273,13 +273,16 @@ def _scenario_low_utility() -> tuple[SimpleNamespace, str]:
     rounds = []
     for i in range(20):
         # Omen baseline=1.2 casts/round; give 0 non-ult casts
-        rp = [_round_player(
-            _PUUID, team=_TEAM,
-            ability_casts_grenade=0,
-            ability_casts_ability1=0,
-            ability_casts_ability2=0,
-            ability_casts_ultimate=0,
-        )]
+        rp = [
+            _round_player(
+                _PUUID,
+                team=_TEAM,
+                ability_casts_grenade=0,
+                ability_casts_ability1=0,
+                ability_casts_ability2=0,
+                ability_casts_ultimate=0,
+            )
+        ]
         rounds.append(_round(i, _TEAM, [], round_players=rp))
     return _build_match(rounds, players), _PUUID
 
@@ -294,9 +297,13 @@ def _scenario_average_match() -> tuple[SimpleNamespace, str]:
     ]
     rounds = []
     for i in range(20):
-        kills = [_kill(_PUUID, enemy_puuid, t_ms=8000) if i % 5 == 0
-                 else _kill(enemy_puuid, _PUUID, t_ms=8000) if i % 5 == 1
-                 else _kill(f"teammate-{i % 4}", enemy_puuid, t_ms=7000)]
+        kills = [
+            _kill(_PUUID, enemy_puuid, t_ms=8000)
+            if i % 5 == 0
+            else _kill(enemy_puuid, _PUUID, t_ms=8000)
+            if i % 5 == 1
+            else _kill(f"teammate-{i % 4}", enemy_puuid, t_ms=7000)
+        ]
         won = _TEAM if i % 2 == 0 else _ENEMY_TEAM
         rounds.append(_round(i, won, kills))
     return _build_match(rounds, players), _PUUID
@@ -473,9 +480,7 @@ def main() -> None:
         help=f"Path to post_game_cases YAML (default: {DEFAULT_CASES.name}).",
     )
     parser.add_argument("--fail-fast", action="store_true", help="Stop after the first failure.")
-    parser.add_argument(
-        "--output", metavar="FILE", help="Write full results as JSON to this file."
-    )
+    parser.add_argument("--output", metavar="FILE", help="Write full results as JSON to this file.")
     args = parser.parse_args()
 
     cases_path = Path(args.cases)

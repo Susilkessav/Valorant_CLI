@@ -28,9 +28,7 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     with op.batch_alter_table("coaching_sessions") as batch_op:
-        batch_op.add_column(
-            sa.Column("match_context_json", sa.Text(), nullable=True)
-        )
+        batch_op.add_column(sa.Column("match_context_json", sa.Text(), nullable=True))
 
 
 def downgrade() -> None:
