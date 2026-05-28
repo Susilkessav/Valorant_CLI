@@ -808,6 +808,5 @@ The default sync path is incremental, so repeated smaller syncs are safe.
 - Synced stats require HenrikDev data and a configured Riot ID.
 - Live scraped meta quality depends on source availability.
 - `config show` may print `henrikdev_api_key`; redact before sharing output.
-- `config init` may not create every optional key; add missing TOML keys manually.
 - Most workflows assume one configured player, although the schema can store
   multiple players.

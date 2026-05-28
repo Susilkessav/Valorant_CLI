@@ -97,27 +97,62 @@ def load_settings() -> Settings:
     return settings
 
 
+# Fields the starter config always leaves blank for the user to fill in.
+# These are identity / secret values that have no sensible shared default —
+# we never want to bake an env-derived secret into the on-disk file.
+_USER_SUPPLIED_FIELDS: frozenset[str] = frozenset(
+    {"riot_name", "riot_tag", "henrikdev_api_key", "tavily_api_key"}
+)
+
+
+def default_config_values() -> dict[str, object]:
+    """Build the full starter-config mapping from the ``Settings`` model.
+
+    Derived from ``Settings.model_fields`` rather than a hand-maintained dict
+    so EVERY field is written — including ``data_dir`` and any field added in
+    the future — and the file never ends up with missing/blank keys that the
+    user would have to discover and add by hand.
+
+    Defaults come from the field declarations (not a live ``Settings()``,
+    which would absorb env / ``.env`` values and could leak a secret into the
+    file).  Identity/secret fields are forced blank.  ``Path`` values are
+    stringified so ``tomli_w`` can serialise them.
+    """
+    from pydantic_core import PydanticUndefined
+
+    values: dict[str, object] = {}
+    for name, field in Settings.model_fields.items():
+        if name in _USER_SUPPLIED_FIELDS:
+            values[name] = ""
+            continue
+
+        if field.default is not PydanticUndefined:
+            value = field.default
+        elif field.default_factory is not None:
+            value = field.default_factory()  # type: ignore[call-arg]
+        else:
+            value = ""
+
+        # TOML has no Path type — store filesystem paths as strings.
+        if isinstance(value, Path):
+            value = str(value)
+        values[name] = value
+
+    return values
+
+
 def write_default_config() -> Path:
     """Write a starter config.toml the user can edit.
 
     Settings() reads this file on every load via TomlConfigSettingsSource,
     so edits take effect on the next CLI invocation — no env-var juggling
-    required.
+    required.  The file is written with every settings key present (blank for
+    identity/secret fields, sensible defaults for the rest) so there are no
+    hidden keys the user has to add manually.
     """
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     if CONFIG_PATH.exists():
         return CONFIG_PATH
-    defaults = {
-        "riot_name": "",
-        "riot_tag": "",
-        "riot_region": "na",
-        "henrikdev_api_key": "",
-        "tavily_api_key": "",
-        "ollama_model": "qwen3:8b",
-        "ollama_host": "http://localhost:11434",
-        "llm_temperature": 0.6,
-        "llm_max_tokens": 3000,
-    }
     with CONFIG_PATH.open("wb") as f:
-        tomli_w.dump(defaults, f)
+        tomli_w.dump(default_config_values(), f)
     return CONFIG_PATH
