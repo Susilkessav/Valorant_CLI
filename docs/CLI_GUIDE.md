@@ -308,7 +308,7 @@ uv run valocoach lineup Brimstone --map Haven
 ```
 
 Results show the agent, ability, map, site, purpose, and (for video-sourced
-entries) a `📹 channel "title" @ mm:ss` reference so you can find the clip.
+entries) a channel + title + timestamp reference so you can find the clip.
 
 Options:
 
@@ -322,7 +322,12 @@ Options:
 
 Filters are canonical-case normalised on both write (ingest) and read
 (query), so `--agent sova`, `--agent Sova`, and `--agent SOVA` all match the
-same entries. If no hits return, broaden the filters or omit `--query`.
+same entries. Unknown agents, maps, or sites are rejected up front with a
+clear suggestion — `valocoach lineup Sovax` exits non-zero rather than
+silently returning "no lineups found". Likewise, an unreachable embedding
+model surfaces an actionable error and exits non-zero so an Ollama outage
+isn't mistaken for an empty library. If filters are valid and the library
+genuinely has nothing matching, results are empty and the exit code is `0`.
 
 ## Post-Game Debrief
 

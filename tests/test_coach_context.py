@@ -24,7 +24,6 @@ from valocoach.core.preflight import CheckResult
 from valocoach.data.orm_models import Match, MatchPlayer, Player
 from valocoach.stats.round_analyzer import RoundAnalysis
 
-
 # ---------------------------------------------------------------------------
 # Auto-mock the Ollama preflight for the whole module.
 #
@@ -47,6 +46,7 @@ def _ollama_up():
         return_value=CheckResult(ok=True, message="ollama ok", hint=""),
     ):
         yield
+
 
 # ---------------------------------------------------------------------------
 # Fixture builders
