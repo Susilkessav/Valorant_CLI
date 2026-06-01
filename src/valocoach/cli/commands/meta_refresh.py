@@ -96,23 +96,46 @@ async def _run_once(
             on_step=_on_step,
         )
 
-    _render_result(result, dry_run=dry_run)
+    ok = _render_result(result, dry_run=dry_run)
+    if not ok:
+        raise typer.Exit(1)
 
 
-def _render_result(result: object, *, dry_run: bool) -> None:
-    """Print a Rich-formatted summary of the sync result."""
+def _render_result(result: object, *, dry_run: bool) -> bool:
+    """Print a Rich-formatted summary of the sync result.
+
+    Returns ``True`` on success and ``False`` on a hard failure (e.g. the
+    patch check itself failed), so the caller can set a nonzero exit code.
+    """
     from valocoach.retrieval.meta_sync import SyncResult
 
     r: SyncResult = result  # type: ignore[assignment]
 
     display.console.print()
 
+    # Patch check failed → patch_version is left as "unknown".  This is NOT the
+    # same as "up to date" — reporting it as such hides a real failure (e.g. a
+    # missing API key or a network error).  Surface it honestly and signal a
+    # nonzero exit.
+    patch_check_failed = r.patch_version == "unknown" or any(
+        "patch check failed" in e.lower() for e in r.errors
+    )
+    if patch_check_failed:
+        display.error("Could not determine the current patch — patch check failed.")
+        for err in r.errors:
+            display.warn(err)
+        display.console.print(
+            "[muted]Verify henrikdev_api_key in ~/.valocoach/config.toml and your "
+            "connection, then retry.[/muted]"
+        )
+        return False
+
     if not r.is_new_patch and not r.meta_regenerated:
         display.info(
             f"No new patch detected ([bold]{r.patch_version}[/bold]). "
             "Meta is already up to date.  Use [bold]--force[/bold] to refresh anyway."
         )
-        return
+        return True
 
     patch_label = (
         f"[stat.good]{r.patch_version}[/stat.good] (new patch)"
@@ -129,8 +152,8 @@ def _render_result(result: object, *, dry_run: bool) -> None:
         ("meta.json", r.meta_written),
         ("Re-ingest KB", r.meta_ingested),
     ]
-    for label, ok in rows:
-        icon = "[success]✔[/success]" if ok else "[muted]–[/muted]"
+    for label, step_ok in rows:
+        icon = "[success]✔[/success]" if step_ok else "[muted]–[/muted]"
         display.console.print(f"  {icon}  {label}")
 
     if r.youtube_chunks_ingested:
@@ -160,8 +183,19 @@ def _render_result(result: object, *, dry_run: bool) -> None:
                 f"meta.json updated for patch [bold]{r.patch_version}[/bold]. "
                 "Coaching responses will use the new tier list immediately."
             )
-    elif r.is_new_patch or r.meta_regenerated:
+        return True
+
+    # A dry run intentionally skips the meta.json write, so "not written" is
+    # the expected, successful outcome there.
+    if dry_run and not r.errors:
+        display.info("Dry run complete — no files were modified.")
+        return True
+
+    if r.is_new_patch or r.meta_regenerated:
         display.warn("Sync completed with errors — meta.json was not updated.")
+        return False
+
+    return not r.errors
 
 
 # ---------------------------------------------------------------------------

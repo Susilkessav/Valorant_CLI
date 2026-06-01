@@ -89,9 +89,9 @@ Commands are organized into four groups visible in `--help`:
 
 | Group | Commands |
 |---|---|
-| **Coaching** | `coach`, `interactive`, `notes`, `sessions`, `lineup` |
-| **Performance** | `stats`, `profile`, `post-game` |
-| **Data** | `sync`, `ingest`, `index` |
+| **Coaching** | `coach`, `lineup`, `post-game`, `notes`, `sessions` |
+| **Performance** | `stats`, `profile` |
+| **Data** | `sync`, `ingest` |
 | **Game Info** | `meta`, `meta-refresh`, `agents-refresh`, `patch` |
 
 ## Configuration
@@ -228,10 +228,10 @@ fact-check panel.
 
 ### Interactive mode
 
-Use `interactive` for a multi-turn coaching session.
+Run `coach` with no arguments to open a multi-turn coaching REPL.
 
 ```bash
-uv run valocoach interactive
+uv run valocoach coach
 ```
 
 The REPL keeps recent conversation turns in memory so follow-up questions build on
@@ -308,7 +308,7 @@ uv run valocoach lineup Brimstone --map Haven
 ```
 
 Results show the agent, ability, map, site, purpose, and (for video-sourced
-entries) a `📹 channel "title" @ mm:ss` reference so you can find the clip.
+entries) a channel + title + timestamp reference so you can find the clip.
 
 Options:
 
@@ -322,7 +322,12 @@ Options:
 
 Filters are canonical-case normalised on both write (ingest) and read
 (query), so `--agent sova`, `--agent Sova`, and `--agent SOVA` all match the
-same entries. If no hits return, broaden the filters or omit `--query`.
+same entries. Unknown agents, maps, or sites are rejected up front with a
+clear suggestion — `valocoach lineup Sovax` exits non-zero rather than
+silently returning "no lineups found". Likewise, an unreachable embedding
+model surfaces an actionable error and exits non-zero so an Ollama outage
+isn't mistaken for an empty library. If filters are valid and the library
+genuinely has nothing matching, results are empty and the exit code is `0`.
 
 ## Post-Game Debrief
 
@@ -343,10 +348,10 @@ ground truth for the debrief.
 
 The debrief is laid out as:
 
-1. **🔴 Critical Pattern** — single most damaging habit, with numbers.
-2. **📊 What this cost you** — round-outcome translation.
-3. **🎯 Priority drill** — one custom-game or DM drill that targets it.
-4. **🎮 Next-match focus** — one mindset cue + one rule.
+1. **Critical Pattern** — single most damaging habit, with numbers.
+2. **What this cost you** — round-outcome translation.
+3. **Priority drill** — one custom-game or DM drill that targets it.
+4. **Next-match focus** — one mindset cue + one rule.
 
 When a `low_utility` finding fires on a util-heavy agent (Sova, Viper,
 KAY/O, Brimstone, Omen, Fade, Cypher, Killjoy), the debrief also injects a
@@ -359,7 +364,8 @@ schema migration.
 
 ## Coaching Sessions
 
-Sessions are the saved conversation histories from `interactive` mode.
+Sessions are the saved conversation histories from the interactive REPL
+(`valocoach coach` with no arguments).
 
 ```bash
 uv run valocoach sessions list
@@ -371,7 +377,7 @@ Sub-commands:
 | Sub-command | Meaning |
 |---|---|
 | `sessions list` | Show saved sessions with date, turn count, and topic. |
-| `sessions close <id>` | Archive a session so it no longer appears in the list. |
+| `sessions close <id>` | Archive a session so it no longer appears in the list. Exits non-zero with an actionable error if `<id>` doesn't exist (no more silent "closed" on bad input). |
 
 ## Syncing Match History
 
@@ -527,7 +533,6 @@ Options:
 |---|---|
 | `--force` | Run even when no new patch is detected. |
 | `--dry-run` | Execute all steps but don't write `meta.json` or re-ingest. |
-| `--watch` | Run continuously: check daily, full sync on new patch. |
 | `--install-cron` | Write a crontab entry to run daily patch checks at 08:00. |
 | `--youtube URL` | Also ingest a YouTube transcript as part of the sync. |
 
@@ -537,10 +542,15 @@ Examples:
 uv run valocoach meta-refresh
 uv run valocoach meta-refresh --force
 uv run valocoach meta-refresh --dry-run
-uv run valocoach meta-refresh --watch
 uv run valocoach meta-refresh --install-cron
 uv run valocoach meta-refresh --youtube "https://www.youtube.com/watch?v=VIDEO_ID"
 ```
+
+Hard failures (patch check failed, tier-list LLM produced no JSON, etc.) now
+exit non-zero and print an actionable hint — they're no longer reported as
+"meta is already up to date". The dry-run path exits `0` when every step
+succeeded but no files were written; it exits non-zero if any step actually
+failed.
 
 ### Agents refresh
 
@@ -649,12 +659,10 @@ uv run valocoach ingest --clear
 uv run valocoach ingest --seed
 ```
 
-### Index
-
-Embeds static markdown corpus files from `corpus/`.
+Embed static markdown corpus files from `corpus/` with the `--corpus` flag:
 
 ```bash
-uv run valocoach index
+uv run valocoach ingest --corpus
 ```
 
 ### Patch
@@ -678,7 +686,7 @@ uv run valocoach patch --check
 | Goal | Command |
 |---|---|
 | Get advice now | `uv run valocoach coach "retaking B on Bind as Sova"` |
-| Start a multi-turn session | `uv run valocoach interactive` |
+| Start a multi-turn session | `uv run valocoach coach` |
 | Debrief your last match | `uv run valocoach post-game` |
 | Look up a lineup | `uv run valocoach lineup Sova --map Ascent --site A` |
 | Add a note during session | `/note work on smoke timings` |
@@ -709,6 +717,23 @@ uv run valocoach patch --check
 
 If `data_dir` is set in config, the database and ChromaDB paths move under that
 directory.
+
+## Exit Codes
+
+ValoCoach commands aim to be script-friendly: success is `0`, failure is
+non-zero, and "nothing matched but the command worked" stays at `0`. The
+table below documents the contract.
+
+| Exit | Meaning |
+|---|---|
+| `0` | Command succeeded. Includes "no results" cases (empty `lineup` query, no new patch detected, no open notes). |
+| `1` | A required service is unreachable (Ollama down for an LLM-driven command, embedding model down for a lineup/ingest call), config is missing (`patch --check` without `henrikdev_api_key`), the requested entity doesn't exist (`sessions close 999`), or a sub-step in a multi-step pipeline (`meta-refresh`) failed. |
+| `2` | Invalid CLI usage — Typer reports the bad flag/argument. Includes unknown agent/map/site passed to `lineup`. |
+
+Meta intent (e.g. `valocoach coach "what's the current meta"`) is
+deterministic: it runs and exits `0` even when Ollama is down, because the
+answer never calls the model. Every other coaching intent requires Ollama
+and exits `1` if the preflight check fails.
 
 ## Troubleshooting
 
@@ -762,10 +787,25 @@ HenrikDev can see recent matches for the account.
 
 ### Missing HenrikDev API key
 
-`sync` and `patch --check` require `henrikdev_api_key`:
+`sync` and `patch --check` require `henrikdev_api_key`. Without it, both
+commands now exit non-zero with a hint pointing at `config init`; `patch
+--check` used to silently print a warning and exit `0`, which scripts
+mistook for "patch up to date".
 
 ```toml
 henrikdev_api_key = "hdev-..."
+```
+
+### Embedding model unavailable for `lineup` / `ingest`
+
+`lineup` and `ingest` need the embedding model (`nomic-embed-text` by
+default). When it isn't reachable they exit non-zero with a hint, instead
+of returning an empty result set that looks identical to a real "no
+matches" outcome:
+
+```bash
+ollama serve
+ollama pull nomic-embed-text
 ```
 
 ### Empty vector store
@@ -807,10 +847,10 @@ The default sync path is incremental, so repeated smaller syncs are safe.
 
 ## Current Limitations
 
-- `coach` and `interactive` require Ollama preflight to pass.
+- `coach` requires Ollama to be running for LLM answers; deterministic
+  intents (e.g. meta/tier-list questions) work even when Ollama is down.
 - Synced stats require HenrikDev data and a configured Riot ID.
 - Live scraped meta quality depends on source availability.
 - `config show` may print `henrikdev_api_key`; redact before sharing output.
-- `config init` may not create every optional key; add missing TOML keys manually.
 - Most workflows assume one configured player, although the schema can store
   multiple players.

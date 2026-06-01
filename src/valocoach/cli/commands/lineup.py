@@ -19,11 +19,60 @@ def run_lineup(
     n_results: int,
 ) -> None:
     """Display lineup suggestions matching the given filters."""
+    import typer
+
     from valocoach.cli import display
     from valocoach.core.config import load_settings
+    from valocoach.retrieval.agents import get_agent
+    from valocoach.retrieval.embedder import is_available
     from valocoach.retrieval.lineups import search_lineups
+    from valocoach.retrieval.maps import get_map
 
     settings = load_settings()
+
+    # ── Validate filters up front ─────────────────────────────────────────
+    # Reject unknown agents/maps/sites with an actionable error instead of
+    # silently returning "no lineups found" (which looks identical to a real
+    # empty result and hides the typo).  get_agent/get_map are case-insensitive
+    # and fuzzy; when they match we forward the canonical name so the metadata
+    # filter lines up with the stored, canonicalised values.
+    if agent is not None:
+        matched_agent = get_agent(agent)
+        if matched_agent is None:
+            raise typer.BadParameter(
+                f"Unknown agent {agent!r}. Check spelling — e.g. Sova, Viper, KAY/O.",
+                param_hint="AGENT",
+            )
+        agent = matched_agent["name"]
+
+    if map_name is not None:
+        matched_map = get_map(map_name)
+        if matched_map is None:
+            raise typer.BadParameter(
+                f"Unknown map {map_name!r}. Try one of: Ascent, Bind, Haven, "
+                "Icebox, Lotus, Pearl, Split, Sunset, Abyss.",
+                param_hint="--map",
+            )
+        map_name = matched_map["name"]
+
+    if site is not None and site.strip().upper() not in {"A", "B", "C", "MID"}:
+        raise typer.BadParameter(
+            f"Unknown site {site!r}. Use A, B, C, or Mid.",
+            param_hint="--site",
+        )
+
+    # ── Infrastructure preflight ──────────────────────────────────────────
+    # Lineup search is embedding-backed.  If the embedding model is down, the
+    # search would fail and return [] — indistinguishable from "no matches".
+    # Surface the real cause and exit nonzero so the user fixes Ollama rather
+    # than assuming the lineup database is empty.
+    if not is_available():
+        display.error_with_hint(
+            "Lineup search is unavailable — the embedding model isn't reachable.",
+            "Start Ollama (ollama serve) and ensure nomic-embed-text is pulled: "
+            "ollama pull nomic-embed-text",
+        )
+        raise typer.Exit(1)
 
     # Build a natural language query from the filters if no explicit query given
     if query:

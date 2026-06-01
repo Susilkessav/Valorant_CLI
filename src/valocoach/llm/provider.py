@@ -21,6 +21,7 @@ def stream_completion(
     stop: list[str] | None = None,
     max_tokens: int | None = None,
     num_ctx: int | None = None,
+    think: bool | None = None,
 ) -> Iterator[str]:
     """Yield content tokens from the LLM as they stream in.
 
@@ -36,6 +37,18 @@ def stream_completion(
                                Inserted between the system message and the
                                current user message so the model sees full
                                multi-turn context.
+        think:                 Reasoning toggle for thinking models (qwen3,
+                               deepseek-r1, …) served via Ollama.  Pass
+                               ``False`` for structured-output calls (e.g.
+                               JSON extraction): reasoning models otherwise
+                               spend the entire ``max_tokens`` budget emitting
+                               ``reasoning_content`` (the ``<think>`` block),
+                               which this function does NOT yield — so the
+                               caller collects an empty string.  Leave ``None``
+                               to use the model's default (thinking on for
+                               qwen3), which is correct for conversational
+                               coaching where the reasoning improves answers.
+                               Ignored for non-Ollama providers.
     """
     model = settings.ollama_model
     is_ollama_model = model.startswith("ollama/")
@@ -63,6 +76,11 @@ def stream_completion(
         # Pass through when the caller explicitly requests a larger window.
         if num_ctx is not None:
             completion_kwargs["options"] = {"num_ctx": num_ctx}
+        # Disable (or force) the reasoning phase for thinking models.  Without
+        # this, qwen3 emits its entire answer as reasoning_content tokens and
+        # the content stream stays empty — see ``think`` arg docs above.
+        if think is not None:
+            completion_kwargs["think"] = think
     if stop:
         completion_kwargs["stop"] = stop
 
@@ -80,12 +98,22 @@ def call_llm(
     user: str,
     settings: Settings,
     max_tokens: int | None = None,
+    think: bool | None = None,
 ) -> str:
     """Non-streaming LLM call — returns the full response as a string.
 
     Convenience wrapper for cases where streaming is not needed (e.g. structured
     metadata extraction).  Pass ``max_tokens`` to cap the response length — useful
     for structured extraction calls that should never produce more than a short JSON.
+
+    Args:
+        think: Reasoning toggle for thinking models (qwen3, deepseek-r1, …)
+               served via Ollama.  Pass ``False`` for structured-output calls:
+               reasoning models otherwise spend the entire ``max_tokens``
+               budget emitting ``reasoning_content`` (the ``<think>`` block),
+               which never reaches ``message.content`` — so this function
+               returns ``""``.  Leave ``None`` for the model's default
+               (thinking on for qwen3).  Ignored for non-Ollama providers.
 
     Returns empty string on any error.
     """
@@ -109,6 +137,8 @@ def call_llm(
         }
         if is_ollama_model:
             completion_kwargs["api_base"] = settings.ollama_host
+            if think is not None:
+                completion_kwargs["think"] = think
 
         response = litellm.completion(**completion_kwargs)
         return response.choices[0].message.content or ""

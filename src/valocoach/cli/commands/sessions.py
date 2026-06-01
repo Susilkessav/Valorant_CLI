@@ -45,5 +45,11 @@ def run_sessions_list(*, limit: int = _DEFAULT_LIMIT) -> None:
 
 def run_sessions_close(session_id: int) -> None:
     settings = load_settings()
-    close_coaching_session(settings, session_id)
+    closed = close_coaching_session(settings, session_id)
+    if not closed:
+        display.error_with_hint(
+            f"No coaching session #{session_id} found.",
+            "List existing sessions with:  valocoach sessions list",
+        )
+        raise typer.Exit(1)
     display.success(f"Session #{session_id} closed.")

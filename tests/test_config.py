@@ -152,6 +152,21 @@ def test_write_default_config_includes_llm_fields(tmp_path, monkeypatch):
     assert isinstance(data["llm_max_tokens"], int)
 
 
+def test_write_default_config_covers_every_settings_field(tmp_path, monkeypatch):
+    """The generated TOML must contain EVERY Settings field — no hidden keys.
+
+    Regression guard: the starter config is derived from Settings.model_fields,
+    so adding a new setting must automatically appear in `config init` output.
+    Previously `data_dir` (and any future field) was silently omitted, forcing
+    users to discover and add keys by hand.
+    """
+    data, _ = _write_config_to(tmp_path, monkeypatch)
+    assert set(data.keys()) == set(Settings.model_fields.keys())
+    # data_dir is a Path field — must be serialised as a string, not dropped.
+    assert "data_dir" in data
+    assert isinstance(data["data_dir"], str)
+
+
 def test_write_default_config_skips_existing_file(tmp_path, monkeypatch):
     """write_default_config returns early without overwriting an existing config."""
     from valocoach.core.config import write_default_config

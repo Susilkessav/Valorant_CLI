@@ -89,7 +89,7 @@ def run_profile(
     # Suppressed for --json so machine-readable output stays clean.
     if not json_output:
         try:
-            from valocoach.cli.commands.coach import warn_stale_meta_once
+            from valocoach.coach.staleness import warn_stale_meta_once
 
             warn_stale_meta_once(settings)
         except Exception:

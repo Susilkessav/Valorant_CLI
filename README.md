@@ -483,7 +483,6 @@ valocoach meta-refresh
 |------|-------------|
 | `--force`, `-f` | Run the full sync even when no new patch is detected |
 | `--dry-run` | Simulate all steps but skip writing `meta.json` and re-ingesting |
-| `--watch` | Keep running: check daily, sync on each new patch detected |
 | `--install-cron` | Add a daily crontab entry that runs `meta-refresh` automatically |
 | `--youtube`, `-y URL` | YouTube video to ingest as supplemental context (repeatable) |
 
@@ -504,7 +503,6 @@ valocoach meta-refresh
 valocoach meta-refresh                                  # one-shot, only on new patch
 valocoach meta-refresh --force                          # force full re-run now
 valocoach meta-refresh --dry-run                        # preview without writing
-valocoach meta-refresh --watch                          # keep running, sync on each patch
 valocoach meta-refresh --install-cron                   # schedule daily via crontab
 valocoach meta-refresh -y "https://youtu.be/VIDEO_ID"   # ingest a guide video with refresh
 ```

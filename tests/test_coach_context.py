@@ -12,14 +12,41 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
+
 from valocoach.cli.commands.coach import (
     _build_system_prompt,
     run_coach,
 )
 from valocoach.coach.context import _format_context
 from valocoach.core.config import Settings
+from valocoach.core.preflight import CheckResult
 from valocoach.data.orm_models import Match, MatchPlayer, Player
 from valocoach.stats.round_analyzer import RoundAnalysis
+
+# ---------------------------------------------------------------------------
+# Auto-mock the Ollama preflight for the whole module.
+#
+# run_coach now calls check_ollama() after intent classification on every
+# non-meta intent (so deterministic meta answers work with Ollama down, but
+# real coaching fails fast).  These tests mock stream_completion but were
+# written before the gate existed — they don't have Ollama running in CI,
+# so the unmocked check would short-circuit every run_coach call with
+# typer.Exit(1).  The tests in this module are about prompt assembly and
+# context injection, not infrastructure availability, so we treat Ollama as
+# "up" for all of them and override on the rare test that needs the failure
+# path.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _ollama_up():
+    with patch(
+        "valocoach.core.preflight.check_ollama",
+        return_value=CheckResult(ok=True, message="ollama ok", hint=""),
+    ):
+        yield
+
 
 # ---------------------------------------------------------------------------
 # Fixture builders

@@ -27,6 +27,9 @@ def run_patch(*, check: bool = False) -> None:
 
 
 def _check_and_refresh(settings) -> None:
+    import typer
+
+    from valocoach.core.exceptions import ConfigError
     from valocoach.retrieval.patch_tracker import check_patch_update
 
     try:
@@ -35,6 +38,15 @@ def _check_and_refresh(settings) -> None:
             display.success(f"New patch detected: {version}")
         else:
             display.info(f"Patch unchanged: {version}")
+    except ConfigError as exc:
+        # Missing/invalid API key is a hard configuration error, not a
+        # transient network blip — surface it with a nonzero exit so scripts
+        # and CI don't mistake "couldn't check" for "up to date".
+        display.error_with_hint(
+            str(exc),
+            "Add henrikdev_api_key to ~/.valocoach/config.toml (run: valocoach config init).",
+        )
+        raise typer.Exit(1) from exc
     except Exception as exc:
         log.debug("Patch check failed: %s", exc)
         display.warn(f"Could not check for patch update: {exc}")

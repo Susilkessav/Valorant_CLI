@@ -22,20 +22,6 @@ def _version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
-def _require_llm() -> None:
-    """Check Ollama is reachable and exit with an actionable error if not."""
-    from valocoach.core.config import load_settings
-    from valocoach.core.preflight import check_ollama
-
-    result = check_ollama(load_settings())
-    if not result.ok:
-        display.error_with_hint(
-            result.message,
-            result.hint or "Start Ollama with: ollama serve",
-        )
-        raise typer.Exit(1)
-
-
 @app.callback(invoke_without_command=True)
 def main(
     ctx: typer.Context,
@@ -91,10 +77,10 @@ def coach(
     """
     import sys
 
-    _require_llm()
-
     if situation is None:
         # No situation provided — launch the REPL on TTY, show help on pipes.
+        # run_interactive() runs its own Ollama preflight, so we don't gate
+        # here (and the REPL can answer LLM-free meta questions too).
         if sys.stdin.isatty():
             from valocoach.cli.commands.interactive import run_interactive
 

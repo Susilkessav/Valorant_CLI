@@ -251,21 +251,29 @@ def open_coaching_session(
         return None
 
 
-def close_coaching_session(settings, session_id: int) -> None:
-    """End an open coaching session (set ``ended_at``)."""
+def close_coaching_session(settings, session_id: int) -> bool:
+    """End an open coaching session (set ``ended_at``).
 
-    async def _run() -> None:
+    Returns ``True`` when a session with ``session_id`` existed and was closed
+    (or was already closed), ``False`` when no such session exists or the
+    operation failed.  Callers rely on this to avoid falsely reporting success
+    for a non-existent id.
+    """
+
+    async def _run() -> bool:
         from valocoach.data.database import ensure_db, session_scope
         from valocoach.data.repository import end_coaching_session
 
         await ensure_db(_db_path(settings))
         async with session_scope() as db:
-            await end_coaching_session(db, session_id)
+            cs = await end_coaching_session(db, session_id)
+            return cs is not None
 
     try:
-        asyncio.run(_run())
+        return asyncio.run(_run())
     except Exception as exc:
         logger.debug("close_coaching_session failed: %s", exc)
+        return False
 
 
 def reap_stale_sessions(settings, puuid: str, max_age_minutes: int = 60) -> int:

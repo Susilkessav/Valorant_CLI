@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from unittest.mock import patch as mock_patch
 
+import pytest
 from typer.testing import CliRunner
 
 from valocoach.cli.app import app
@@ -55,7 +56,7 @@ def test_version():
 def test_help_shows_all_commands():
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
-    for cmd in ["coach", "stats", "sync", "profile", "meta", "patch", "interactive", "config"]:
+    for cmd in ["coach", "stats", "sync", "profile", "meta", "patch", "lineup", "config"]:
         assert cmd in result.stdout
 
 
@@ -248,26 +249,38 @@ def test_config_init_creates_file():
 
 
 # ---------------------------------------------------------------------------
-# index command (lines 220-229)
+# ingest --corpus command
 # ---------------------------------------------------------------------------
 
 
-def test_index_corpus_dir_missing(tmp_path, monkeypatch):
-    """corpus/ absent → error + exit 1 (lines 222-223)."""
-    monkeypatch.chdir(tmp_path)  # no corpus/ dir here
-    result = runner.invoke(app, ["index"])
-    assert result.exit_code == 1
-    assert "corpus/" in result.stdout or "corpus" in result.stdout
+def test_ingest_corpus_dir_missing(tmp_path):
+    """corpus/ absent → error + exit 1.
+
+    Exercises _do_corpus directly with an explicit, non-existent corpus_root
+    (the CLI resolves corpus/ relative to the repo, not cwd, so chdir can't
+    simulate "missing" here).
+    """
+    import typer
+
+    from valocoach.cli.commands.ingest import _do_corpus
+
+    missing = tmp_path / "no_such_corpus"
+    with (
+        mock_patch("valocoach.retrieval.embedder.is_available", return_value=True),
+        pytest.raises(typer.Exit) as exc_info,
+    ):
+        _do_corpus(tmp_path, corpus_root=missing)
+    assert exc_info.value.exit_code == 1
 
 
-def test_index_corpus_dir_present(tmp_path, monkeypatch):
-    """corpus/ present → run_ingest called (line 229)."""
+def test_ingest_corpus_dir_present(tmp_path, monkeypatch):
+    """corpus/ present → run_ingest called."""
     corpus = tmp_path / "corpus"
     corpus.mkdir()
     monkeypatch.chdir(tmp_path)
 
     with mock_patch("valocoach.cli.commands.ingest.run_ingest") as ingest_mock:
-        result = runner.invoke(app, ["index"])
+        result = runner.invoke(app, ["ingest", "--corpus"])
 
     assert result.exit_code == 0
     ingest_mock.assert_called_once()

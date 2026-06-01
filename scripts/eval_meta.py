@@ -221,7 +221,9 @@ def print_results(result: EvalResult, threshold: float) -> None:
             print(f"    {YELLOW}Predicted but not in reference: {', '.join(sorted(wrong))}{RESET}")
         missing = tr.reference - tr.predicted
         if missing:
-            print(f"    {YELLOW}In reference but not predicted: {', '.join(sorted(missing))}{RESET}")
+            print(
+                f"    {YELLOW}In reference but not predicted: {', '.join(sorted(missing))}{RESET}"
+            )
         print()
 
     verdict = f"{GREEN}ALL PASS{RESET}" if result.passed else f"{RED}FAIL — below threshold{RESET}"
@@ -247,7 +249,7 @@ def main() -> None:
         "--meta",
         metavar="FILE",
         default=str(DEFAULT_META),
-        help=f"Path to meta.json (default: auto-detected).",
+        help="Path to meta.json (default: auto-detected).",
     )
     parser.add_argument(
         "--threshold",

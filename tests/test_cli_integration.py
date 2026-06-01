@@ -59,10 +59,13 @@ class TestCoachCommand:
         for flag in ["--agent", "--map", "--side", "--with-stats"]:
             assert flag in result.stdout
 
-    def test_missing_situation_arg_is_error(self):
+    def test_missing_situation_arg_shows_usage(self):
+        # `coach` with no situation is no longer an error: on a TTY it opens the
+        # REPL, and in a non-interactive context (CliRunner) it prints a usage
+        # hint and exits cleanly.
         result = runner.invoke(app, ["coach"])
-        # Typer exits with 2 for missing required arguments.
-        assert result.exit_code != 0
+        assert result.exit_code == 0
+        assert "coach" in result.output.lower()
 
     def test_ollama_down_exits_nonzero_with_message(self):
         with (
@@ -315,23 +318,27 @@ class TestIngestCommand:
 
 
 # ---------------------------------------------------------------------------
-# interactive
+# interactive REPL (reached via `coach` with no args)
 # ---------------------------------------------------------------------------
 
 
-class TestInteractiveCommand:
-    def test_help_text_present(self):
-        result = runner.invoke(app, ["interactive", "--help"])
+class TestInteractiveRepl:
+    def test_coach_help_present(self):
+        # There is no standalone `interactive` command — the REPL is opened by
+        # running `coach` with no arguments.  Verify coach help still resolves.
+        result = runner.invoke(app, ["coach", "--help"])
         assert result.exit_code == 0
 
-    def test_ollama_down_exits_with_error_not_repl(self):
-        """When Ollama is unreachable, the REPL should abort at startup."""
+    def test_ollama_down_aborts_repl(self):
+        """When Ollama is unreachable, run_interactive aborts before the REPL."""
+        from valocoach.cli.commands import interactive as interactive_mod
+
         with (
             patch("valocoach.core.preflight.check_ollama", return_value=_fail_ollama()),
             patch("valocoach.core.config.load_settings", return_value=_fake_settings()),
+            patch.object(interactive_mod.display, "error_with_hint") as err_hint,
         ):
-            result = runner.invoke(app, ["interactive"])
-        # Should exit cleanly (return 0) but show the error message.
-        # The REPL must NOT have started (no "valocoach>" prompt).
-        assert "valocoach>" not in result.output
-        assert "not reachable" in result.output.lower() or "ollama" in result.output.lower()
+            interactive_mod.run_interactive()
+        # The REPL preflight failed → an actionable error was shown and the
+        # function returned before constructing a prompt session.
+        err_hint.assert_called_once()

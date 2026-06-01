@@ -54,7 +54,7 @@ def run_stats(
     # ``--json`` so machine-readable output stays clean.
     if not json_output:
         try:
-            from valocoach.cli.commands.coach import warn_stale_meta_once
+            from valocoach.coach.staleness import warn_stale_meta_once
             from valocoach.core.config import load_settings as _load
 
             warn_stale_meta_once(_load())
