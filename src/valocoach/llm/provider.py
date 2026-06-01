@@ -98,12 +98,22 @@ def call_llm(
     user: str,
     settings: Settings,
     max_tokens: int | None = None,
+    think: bool | None = None,
 ) -> str:
     """Non-streaming LLM call — returns the full response as a string.
 
     Convenience wrapper for cases where streaming is not needed (e.g. structured
     metadata extraction).  Pass ``max_tokens`` to cap the response length — useful
     for structured extraction calls that should never produce more than a short JSON.
+
+    Args:
+        think: Reasoning toggle for thinking models (qwen3, deepseek-r1, …)
+               served via Ollama.  Pass ``False`` for structured-output calls:
+               reasoning models otherwise spend the entire ``max_tokens``
+               budget emitting ``reasoning_content`` (the ``<think>`` block),
+               which never reaches ``message.content`` — so this function
+               returns ``""``.  Leave ``None`` for the model's default
+               (thinking on for qwen3).  Ignored for non-Ollama providers.
 
     Returns empty string on any error.
     """
@@ -127,6 +137,8 @@ def call_llm(
         }
         if is_ollama_model:
             completion_kwargs["api_base"] = settings.ollama_host
+            if think is not None:
+                completion_kwargs["think"] = think
 
         response = litellm.completion(**completion_kwargs)
         return response.choices[0].message.content or ""

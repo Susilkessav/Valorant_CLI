@@ -434,6 +434,10 @@ def summarise_chunk(settings: Settings, text: str) -> str:
             settings,
             system_prompt=_SUMMARISE_SYSTEM,
             user_message=text[:2_000],
+            # Tightly-bounded output (one sentence) — disable qwen3 reasoning so
+            # the per-chunk summary call doesn't time out / return empty and
+            # silently fall back to embedding the raw, noisier transcript text.
+            think=False,
         ):
             tokens.append(token)
         summary = "".join(tokens).strip()

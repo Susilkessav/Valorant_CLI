@@ -319,6 +319,10 @@ def _llm_extract(
             settings,
             system_prompt=_LLM_EXTRACTION_PROMPT,
             user_message=user_msg,
+            # Pure JSON extraction — same rationale as meta_generator: qwen3's
+            # <think> phase otherwise consumes the entire token budget before
+            # any JSON is emitted, leaving the patch diff empty.
+            think=False,
         ):
             tokens.append(token)
 

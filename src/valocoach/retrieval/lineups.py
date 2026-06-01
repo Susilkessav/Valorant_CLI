@@ -332,6 +332,11 @@ def extract_lineup_metadata(text: str, settings: Any, *, video_title: str | None
             user=prompt,
             settings=settings,
             max_tokens=256,
+            # Pure JSON extraction — disable qwen3's reasoning phase so it
+            # doesn't burn the 256-token budget on <think> tokens and return
+            # an empty string, which would silently drop every lineup's
+            # metadata (agent/map/site) and exclude it from filtered searches.
+            think=False,
         )
         if not raw:
             merged = dict(defaults)
