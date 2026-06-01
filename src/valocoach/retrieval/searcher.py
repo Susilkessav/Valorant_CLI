@@ -18,6 +18,7 @@ def search(
     max_distance: float = 0.5,
     collection_name: str = STATIC_COLLECTION,
     where_extra: dict | None = None,
+    query_embedding: list[float] | None = None,
 ) -> list[dict]:
     """Semantic search over a single ChromaDB collection.
 
@@ -34,13 +35,18 @@ def search(
                      hits on ``expires_at > now`` so an expired live cache row
                      can never reach the coach prompt — even if the cache
                      invalidation hook hasn't run yet.
+        query_embedding: Optional precomputed vector for ``query``.  When the
+                     caller is going to issue the same query against multiple
+                     collections (e.g. ``retrieve_static`` searching both
+                     STATIC and LIVE), embedding once and reusing the vector
+                     halves the Ollama round-trips.
     """
     collection = get_collection(data_dir, collection_name)
     count = collection.count()
     if count == 0:
         return []
 
-    embedding = embed_one(query)
+    embedding = query_embedding if query_embedding is not None else embed_one(query)
 
     # Merge doc_types filter with any caller-supplied where clause.  ChromaDB
     # requires a single top-level operator, so two filters need ``$and``.

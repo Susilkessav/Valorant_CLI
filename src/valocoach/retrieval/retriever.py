@@ -106,11 +106,31 @@ def retrieve_static(
     #    Each query targets a different semantic angle; results are deduplicated
     #    across queries and collections before being appended.
     try:
+        from valocoach.retrieval.embedder import embed
         from valocoach.retrieval.searcher import search
         from valocoach.retrieval.vector_store import LIVE_COLLECTION, STATIC_COLLECTION
 
         agents_list = [agent] if agent else None
         queries = build_retrieval_queries(situation, map_name=map_, agents=agents_list, side=side)
+
+        # Embed every unique query exactly once and reuse the vector across
+        # both collections.  Without this, ``search()`` called the embedder
+        # ``len(queries) * 2`` times per coach turn — same text embedded once
+        # per (query, collection) pair — and each call was a serial Ollama
+        # round-trip.  Batching collapses the network cost from 2N serial
+        # calls to a single batch call.
+        unique_queries = list(dict.fromkeys(queries))  # dedup, preserve order
+        try:
+            vectors = embed(unique_queries)
+            embedding_by_query: dict[str, list[float]] = dict(
+                zip(unique_queries, vectors, strict=False)
+            )
+        except Exception:
+            # Falling back to per-call embedding inside ``search()`` keeps the
+            # path resilient if the batch call fails (e.g. transient Ollama
+            # hiccup) — individual searches will retry on their own.
+            log.debug("batch query embedding failed; falling back to per-search", exc_info=True)
+            embedding_by_query = {}
 
         seen: set[str] = set()
         vector_parts: list[str] = []
@@ -126,6 +146,7 @@ def retrieve_static(
         now_unix = _now_unix()
 
         for query in queries:
+            qvec = embedding_by_query.get(query)
             for cname in (STATIC_COLLECTION, LIVE_COLLECTION):
                 where_extra: dict | None = None
                 if cname == LIVE_COLLECTION:
@@ -138,6 +159,7 @@ def retrieve_static(
                     max_distance=0.45,
                     collection_name=cname,
                     where_extra=where_extra,
+                    query_embedding=qvec,
                 )
                 for hit in hits:
                     text = hit["text"]

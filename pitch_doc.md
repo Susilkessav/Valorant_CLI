@@ -431,70 +431,64 @@ rounds, per-round players, kills, ability casts, and damage events with spatial 
 
 ---
 
-## 9. Performance Profile & Latency Roadmap
+## 9. Performance Profile & Latency Work (landed)
 
 The dominant wall-clock cost on any `coach` call is local LLM token generation
-(`qwen3:8b`), which is inherent to running a model on-device. But the **pre-LLM overhead**
-(time-to-first-token) currently carries avoidable redundancy. The identified hotspots and
-proposed fixes:
+(`qwen3:8b`), which is inherent to running a model on-device. The **pre-LLM overhead**
+(time-to-first-token) was carrying avoidable redundancy. All four hotspots below have
+been addressed; none touches the model itself, so answer quality is unchanged.
 
-### 9.1 Redundant database initialisation (highest impact)
+### 9.1 Redundant database initialisation — **done**
 
-On a single stats-enabled `coach` call the pipeline issues **~5 independent
-`asyncio.run()` boundaries** — `get_top_played_agents`, `build_stats_context`,
-`get_last_match`, `get_player_puuid`, and `list_open_notes`. Each one:
+The coach pipeline still issues ~5 independent `asyncio.run()` boundaries per turn
+(`get_top_played_agents`, `build_stats_context`, `get_last_match`, `get_player_puuid`,
+`list_open_notes`), but `ensure_db` + `init_engine` are now **idempotent for the same
+`db_path`** in the same process: the first call builds the engine and runs
+`CREATE TABLE IF NOT EXISTS` + the Alembic stamp check, and subsequent calls return the
+cached engine and skip the schema/Alembic work. Bust hook:
+`valocoach.data.database.reset_db_cache()`.
 
-- spins up a fresh event loop,
-- calls `ensure_db()`, which **recreates the async engine** (`init_engine`, `NullPool`),
-  runs `CREATE TABLE IF NOT EXISTS` for every table, and runs an Alembic stamp check
-  (importing Alembic and building a `ScriptDirectory`).
+### 9.2 ChromaDB client re-instantiation — **done**
 
-**Fix:** initialise the engine once per process and guard `ensure_db` so the
-schema-create + Alembic-stamp work runs at most once; consolidate the per-call data needs
-into a single loader pass (one event loop, one `PlayerData` bundle reused by all five
-consumers). Expected savings: several DB round-trips and repeated Alembic imports per call.
+`vector_store.get_client` is memoised by resolved `data_dir`. `retrieve_static`'s ~8
+per-turn `search()` calls now share one cached `PersistentClient`, so the HNSW index is
+loaded once. Bust hook: `valocoach.retrieval.vector_store.reset_client_cache()`.
 
-### 9.2 ChromaDB client re-instantiation
+### 9.3 Redundant query embeddings — **done**
 
-`retrieve_static` loops over `len(queries) × 2 collections` `search()` calls, and **every**
-`search()` calls `get_collection → get_client → chromadb.PersistentClient(...)`, which
-re-opens the persistent store and reloads the HNSW index. A typical map+side+agent query
-creates **~8 PersistentClient instances per coach call**.
+`search()` accepts an optional precomputed `query_embedding`. `retrieve_static` now
+embeds every unique query exactly once in a single batched `ollama.embed(input=[...])`
+call and reuses the vector across both collections — collapsing ~2N serial Ollama
+round-trips into one batch call. A per-search fallback is preserved in case the batch
+call fails.
 
-**Fix:** memoise the client per `data_dir` (module-level singleton / `lru_cache`). The
-client is reusable across queries and collections.
+### 9.4 Uncached settings load — **done**
 
-### 9.3 Redundant query embeddings
+`load_settings()` is wrapped with `lru_cache`. The ~20 call sites in the coach path stop
+re-parsing TOML/env every invocation; precedence semantics (env → .env → TOML → defaults)
+are unchanged. `write_default_config` calls `reset_settings_cache()` after writing so the
+next consumer in the same process sees the new file. Bust hook:
+`valocoach.core.config.reset_settings_cache()`.
 
-Each query string is embedded **once per collection** (static + live), so the same text
-is embedded twice; and every `embed_one` is a serial Ollama HTTP round-trip
-(~8 serial calls per coach call).
+### 9.5 Summary of what changed
 
-**Fix:** embed each unique query exactly once and reuse the vector across both
-collections; batch all unique queries into a single `ollama.embed(input=[...])` call
-(the `embed()` helper already supports batch input) to collapse N serial round-trips into
-one.
+| Hotspot | Before | After |
+|---------|--------|-------|
+| DB engine builds per coach call | ~5 fresh engines + 5 schema-creates + 5 Alembic checks | 1 cached engine, 1 schema-create + Alembic check per process |
+| Chroma client builds per call | ~8 | 1 (cached per `data_dir`) |
+| Query embed round-trips | ~2N serial, duplicated per collection | 1 batched call, deduped |
+| Settings parses | per call (~20 sites) | 1 cached per process |
 
-### 9.4 Uncached settings load
+### 9.6 Possible future work
 
-`load_settings()` re-parses `config.toml` + environment on every call and is invoked from
-~21 sites. Per-call cost is small but it compounds.
-
-**Fix:** cache the resolved `Settings` for the process lifetime (`functools.lru_cache`),
-with an explicit invalidation hook for `config init`.
-
-### 9.5 Summary of recommended changes
-
-| Hotspot | Current | Target |
-|---------|---------|--------|
-| DB inits per coach call | ~5 engines + 5 schema-creates + 5 Alembic checks | 1 engine, 1 schema-create, consolidated loader |
-| Chroma client builds per call | ~8 | 1 (cached) |
-| Query embed round-trips | ~8 serial, duplicated per collection | 1 batched call, deduped |
-| Settings parses | per call (~21 sites) | 1 cached |
-
-None of these touch the model itself, so they reduce time-to-first-token without changing
-answer quality. They are independent and can be landed incrementally; §9.1 and §9.2 carry
-the most benefit.
+- **Full DB-load consolidation.** The coach path still spins up ~5 event loops per turn;
+  collapsing them into one loader pass that fans the resulting `PlayerData` out to all
+  consumers would remove the remaining per-loop overhead. Behavioural, not just caching.
+- **Typed `EmbeddingsUnavailableError`.** The current `lineup`/`ingest` infra preflight
+  is a one-shot `is_available()` ping; a typed exception out of `search_lineups` /
+  `ingest_text` would drop the extra round-trip while keeping the same UX.
+- **Coverage gate back to 85.** `stats/post_game.py` and `stats/zones.py` ship without
+  unit tests; today's gate is at 70.
 
 ---
 
