@@ -348,10 +348,10 @@ ground truth for the debrief.
 
 The debrief is laid out as:
 
-1. **🔴 Critical Pattern** — single most damaging habit, with numbers.
-2. **📊 What this cost you** — round-outcome translation.
-3. **🎯 Priority drill** — one custom-game or DM drill that targets it.
-4. **🎮 Next-match focus** — one mindset cue + one rule.
+1. **Critical Pattern** — single most damaging habit, with numbers.
+2. **What this cost you** — round-outcome translation.
+3. **Priority drill** — one custom-game or DM drill that targets it.
+4. **Next-match focus** — one mindset cue + one rule.
 
 When a `low_utility` finding fires on a util-heavy agent (Sova, Viper,
 KAY/O, Brimstone, Omen, Fade, Cypher, Killjoy), the debrief also injects a
@@ -364,7 +364,8 @@ schema migration.
 
 ## Coaching Sessions
 
-Sessions are the saved conversation histories from `interactive` mode.
+Sessions are the saved conversation histories from the interactive REPL
+(`valocoach coach` with no arguments).
 
 ```bash
 uv run valocoach sessions list
@@ -376,7 +377,7 @@ Sub-commands:
 | Sub-command | Meaning |
 |---|---|
 | `sessions list` | Show saved sessions with date, turn count, and topic. |
-| `sessions close <id>` | Archive a session so it no longer appears in the list. |
+| `sessions close <id>` | Archive a session so it no longer appears in the list. Exits non-zero with an actionable error if `<id>` doesn't exist (no more silent "closed" on bad input). |
 
 ## Syncing Match History
 
@@ -545,6 +546,12 @@ uv run valocoach meta-refresh --install-cron
 uv run valocoach meta-refresh --youtube "https://www.youtube.com/watch?v=VIDEO_ID"
 ```
 
+Hard failures (patch check failed, tier-list LLM produced no JSON, etc.) now
+exit non-zero and print an actionable hint — they're no longer reported as
+"meta is already up to date". The dry-run path exits `0` when every step
+succeeded but no files were written; it exits non-zero if any step actually
+failed.
+
 ### Agents refresh
 
 Use `agents-refresh` to keep `agents.json` in sync with Riot's current roster.
@@ -711,6 +718,23 @@ uv run valocoach patch --check
 If `data_dir` is set in config, the database and ChromaDB paths move under that
 directory.
 
+## Exit Codes
+
+ValoCoach commands aim to be script-friendly: success is `0`, failure is
+non-zero, and "nothing matched but the command worked" stays at `0`. The
+table below documents the contract.
+
+| Exit | Meaning |
+|---|---|
+| `0` | Command succeeded. Includes "no results" cases (empty `lineup` query, no new patch detected, no open notes). |
+| `1` | A required service is unreachable (Ollama down for an LLM-driven command, embedding model down for a lineup/ingest call), config is missing (`patch --check` without `henrikdev_api_key`), the requested entity doesn't exist (`sessions close 999`), or a sub-step in a multi-step pipeline (`meta-refresh`) failed. |
+| `2` | Invalid CLI usage — Typer reports the bad flag/argument. Includes unknown agent/map/site passed to `lineup`. |
+
+Meta intent (e.g. `valocoach coach "what's the current meta"`) is
+deterministic: it runs and exits `0` even when Ollama is down, because the
+answer never calls the model. Every other coaching intent requires Ollama
+and exits `1` if the preflight check fails.
+
 ## Troubleshooting
 
 When something goes wrong, the CLI shows a plain-language error with an actionable
@@ -763,10 +787,25 @@ HenrikDev can see recent matches for the account.
 
 ### Missing HenrikDev API key
 
-`sync` and `patch --check` require `henrikdev_api_key`:
+`sync` and `patch --check` require `henrikdev_api_key`. Without it, both
+commands now exit non-zero with a hint pointing at `config init`; `patch
+--check` used to silently print a warning and exit `0`, which scripts
+mistook for "patch up to date".
 
 ```toml
 henrikdev_api_key = "hdev-..."
+```
+
+### Embedding model unavailable for `lineup` / `ingest`
+
+`lineup` and `ingest` need the embedding model (`nomic-embed-text` by
+default). When it isn't reachable they exit non-zero with a hint, instead
+of returning an empty result set that looks identical to a real "no
+matches" outcome:
+
+```bash
+ollama serve
+ollama pull nomic-embed-text
 ```
 
 ### Empty vector store
