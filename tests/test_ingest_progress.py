@@ -27,6 +27,25 @@ from valocoach.cli.app import app
 
 runner = CliRunner()
 
+
+# ---------------------------------------------------------------------------
+# Treat the embedding model as reachable for the whole module.
+#
+# `_do_seed` and `_do_corpus` now share a `_require_embeddings()` preflight
+# (added so an Ollama-down failure produces a uniform, actionable error
+# instead of a raw traceback mid-loop in the corpus path).  The tests in
+# this file exercise the *progress* + *dispatch* logic, not infrastructure
+# checks, so we treat embeddings as up and the few tests that need the
+# failure case can override.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _embeddings_up():
+    with patch("valocoach.retrieval.embedder.is_available", return_value=True):
+        yield
+
+
 # Source-module patch targets
 _EMBED = "valocoach.retrieval.ingester.embed"
 _GET_COLLECTION = "valocoach.retrieval.ingester.get_collection"
