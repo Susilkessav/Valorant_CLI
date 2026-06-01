@@ -21,21 +21,33 @@ class Base(DeclarativeBase):
 
 _engine: AsyncEngine | None = None
 _SessionLocal: async_sessionmaker[AsyncSession] | None = None
+_engine_db_path: str | None = None
+_ensured_db_paths: set[str] = set()
 
 
 def init_engine(db_path: Path) -> AsyncEngine:
-    """Initialise the async SQLite engine. Call once at startup.
+    """Initialise the async SQLite engine.  Idempotent for the same path.
 
     Uses ``NullPool`` so each ``asyncio.run()`` boundary doesn't leak
     aiosqlite worker threads bound to a now-closed event loop — which would
     otherwise spam ``RuntimeError: Event loop is closed`` between turns in
     interactive sessions.
+
+    The first call for a given ``db_path`` builds the engine; subsequent
+    calls return the cached one.  Without this, every ``asyncio.run`` +
+    ``ensure_db`` boundary in the coach path tore down and rebuilt the
+    engine, re-registering pragma listeners each time.
     """
-    global _engine, _SessionLocal
+    global _engine, _SessionLocal, _engine_db_path
+
+    resolved = str(db_path.resolve())
+    if _engine is not None and _engine_db_path == resolved:
+        return _engine
 
     db_path.parent.mkdir(parents=True, exist_ok=True)
     url = f"sqlite+aiosqlite:///{db_path}"
     _engine = create_async_engine(url, echo=False, future=True, poolclass=NullPool)
+    _engine_db_path = resolved
 
     # Enable WAL + foreign keys on every connection
     @event.listens_for(_engine.sync_engine, "connect")
@@ -109,19 +121,45 @@ def _stamp_if_needed(sync_conn) -> None:
 async def ensure_db(db_path: Path) -> AsyncEngine:
     """Initialise the engine, create all tables, and stamp the Alembic head.
 
-    Callers that need the DB ready (sync, stats, profile) should start with:
+    Idempotent for the same ``db_path`` in the same process — the first call
+    builds the engine, runs ``CREATE TABLE IF NOT EXISTS``, and stamps the
+    Alembic head; subsequent calls return the cached engine and skip the
+    schema + stamp work.  This matters because the coach path issues ~5
+    independent ``asyncio.run(ensure_db(...))`` boundaries per turn (stats
+    context, last match, open notes, top-played agents, …) — without the
+    guard, each one re-imports Alembic and reruns ``ScriptDirectory``
+    discovery to no effect.
 
-        engine = await ensure_db(settings.data_dir / "valocoach.db")
-
-    Safe to call on every command invocation — ``CREATE TABLE IF NOT EXISTS``
-    is a no-op when tables already exist, and the stamp step is guarded so
-    it only writes ``alembic_version`` on first init.
+    The guard is keyed on the resolved path string, so tests pointing at a
+    different ``tmp_path`` each pytest run still get a clean ensure cycle.
     """
     engine = init_engine(db_path)
+
+    resolved = str(db_path.resolve())
+    if resolved in _ensured_db_paths:
+        return engine
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await conn.run_sync(_stamp_if_needed)
+
+    _ensured_db_paths.add(resolved)
     return engine
+
+
+def reset_db_cache() -> None:
+    """Drop the cached engine + ensure-marker.
+
+    Tests that point at a fresh ``tmp_path`` per case and any code that
+    moves the database file (rare — currently only the test suite) should
+    call this between database swaps so the next ``ensure_db`` rebuilds
+    the engine and re-runs the schema/stamp step against the new path.
+    """
+    global _engine, _SessionLocal, _engine_db_path
+    _engine = None
+    _SessionLocal = None
+    _engine_db_path = None
+    _ensured_db_paths.clear()
 
 
 @asynccontextmanager

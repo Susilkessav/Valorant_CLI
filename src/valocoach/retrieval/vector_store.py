@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from functools import lru_cache
 from pathlib import Path
 
 import chromadb
@@ -9,7 +10,7 @@ from chromadb.config import Settings as ChromaSettings
 log = logging.getLogger(__name__)
 
 # Two separate collections so static corpus and live-scraped meta are
-# independently manageable.  ``valocoach index`` only touches STATIC;
+# independently manageable.  ``valocoach ingest --seed`` only touches STATIC;
 # per-query web scraping only touches LIVE; ``--clear`` knows which to nuke.
 STATIC_COLLECTION = "valocoach_static"
 LIVE_COLLECTION = "valocoach_live"
@@ -18,13 +19,37 @@ LIVE_COLLECTION = "valocoach_live"
 COLLECTION_NAME = STATIC_COLLECTION
 
 
+@lru_cache(maxsize=4)
+def _cached_client(chroma_dir_str: str) -> chromadb.PersistentClient:
+    """Memoised PersistentClient — keyed by absolute on-disk path.
+
+    Constructing a ``PersistentClient`` is expensive: it reopens the
+    underlying SQLite, reloads the HNSW index, and re-runs migration checks.
+    The coach retrieval path issues a multi-query, two-collection search,
+    so without caching every coaching turn paid for ~8 fresh client builds.
+    Caching by path lets tests with a ``tmp_path`` data dir get isolated
+    clients while production reuses the one client per ``data_dir``.
+    """
+    return chromadb.PersistentClient(
+        path=chroma_dir_str,
+        settings=ChromaSettings(anonymized_telemetry=False),
+    )
+
+
 def get_client(data_dir: Path) -> chromadb.PersistentClient:
     chroma_dir = data_dir / "chroma"
     chroma_dir.mkdir(parents=True, exist_ok=True)
-    return chromadb.PersistentClient(
-        path=str(chroma_dir),
-        settings=ChromaSettings(anonymized_telemetry=False),
-    )
+    return _cached_client(str(chroma_dir.resolve()))
+
+
+def reset_client_cache() -> None:
+    """Drop the memoised clients.
+
+    Tests that mutate the on-disk store across runs (clear + reseed) and
+    explicit ``ingest --clear`` paths can call this to ensure subsequent
+    callers see a freshly-opened store.
+    """
+    _cached_client.cache_clear()
 
 
 def get_collection(

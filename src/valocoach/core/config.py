@@ -14,6 +14,7 @@ works as users expect. Without this, the TOML written by
 
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
@@ -90,11 +91,38 @@ class Settings(BaseSettings):
         )
 
 
+@lru_cache(maxsize=1)
+def _cached_settings() -> Settings:
+    """Build the Settings object once per process.
+
+    ``Settings()`` re-reads TOML, .env, and environment on every construction.
+    ``load_settings()`` is called from many call sites in the coach path, so
+    memoising removes redundant filesystem reads without changing precedence
+    semantics (env → .env → TOML → defaults still holds; just computed once).
+    """
+    return Settings()
+
+
 def load_settings() -> Settings:
-    """Load settings, ensuring data dir exists."""
-    settings = Settings()
+    """Load settings, ensuring data dir exists.
+
+    Cached for the process lifetime.  Call :func:`reset_settings_cache` after
+    rewriting ``config.toml`` (e.g. via ``valocoach config init``) so the
+    next consumer sees the new file.
+    """
+    settings = _cached_settings()
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     return settings
+
+
+def reset_settings_cache() -> None:
+    """Drop the memoised ``Settings`` instance.
+
+    Tests that mutate env / .env / TOML between assertions and any code path
+    that writes ``config.toml`` from the same process should call this so
+    the next ``load_settings()`` reflects the change.
+    """
+    _cached_settings.cache_clear()
 
 
 # Fields the starter config always leaves blank for the user to fill in.
@@ -155,4 +183,8 @@ def write_default_config() -> Path:
         return CONFIG_PATH
     with CONFIG_PATH.open("wb") as f:
         tomli_w.dump(default_config_values(), f)
+    # Bust the Settings cache so the next ``load_settings()`` reads the file
+    # we just wrote (e.g. a subsequent ``valocoach config show`` in the same
+    # process).
+    reset_settings_cache()
     return CONFIG_PATH
